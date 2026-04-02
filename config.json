@@ -3,13 +3,43 @@
     "cz1": {
       "enabled": false,
       "max_oslabeni": 100,
-      "window": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+      "window": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
       "regions": {
-        "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
-        "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "oslabeni":      {"x": 0, "y": 0, "w": 0, "h": 0},
-        "attack_button": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "click_target":  {"x": 0, "y": 0, "w": 1, "h": 1}
+        "sector_list": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "fight_counter": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "oslabeni": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "attack_button": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "click_target": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        }
       },
       "click_interval_ms": 50,
       "r_key_every_n_clicks": 5
@@ -17,13 +47,43 @@
     "cz2": {
       "enabled": false,
       "max_oslabeni": 100,
-      "window": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+      "window": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
       "regions": {
-        "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
-        "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "oslabeni":      {"x": 0, "y": 0, "w": 0, "h": 0},
-        "attack_button": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "click_target":  {"x": 0, "y": 0, "w": 1, "h": 1}
+        "sector_list": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "fight_counter": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "oslabeni": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "attack_button": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "click_target": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        }
       },
       "click_interval_ms": 50,
       "r_key_every_n_clicks": 5
@@ -31,13 +91,43 @@
     "cz3": {
       "enabled": false,
       "max_oslabeni": 100,
-      "window": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+      "window": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
       "regions": {
-        "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
-        "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "oslabeni":      {"x": 0, "y": 0, "w": 0, "h": 0},
-        "attack_button": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "click_target":  {"x": 0, "y": 0, "w": 1, "h": 1}
+        "sector_list": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "fight_counter": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "oslabeni": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "attack_button": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "click_target": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        }
       },
       "click_interval_ms": 50,
       "r_key_every_n_clicks": 5
@@ -45,13 +135,43 @@
     "cz4": {
       "enabled": false,
       "max_oslabeni": 100,
-      "window": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+      "window": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
       "regions": {
-        "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
-        "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "oslabeni":      {"x": 0, "y": 0, "w": 0, "h": 0},
-        "attack_button": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "click_target":  {"x": 0, "y": 0, "w": 1, "h": 1}
+        "sector_list": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "fight_counter": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "oslabeni": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "attack_button": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "click_target": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        }
       },
       "click_interval_ms": 50,
       "r_key_every_n_clicks": 5
@@ -59,13 +179,43 @@
     "cz5": {
       "enabled": false,
       "max_oslabeni": 100,
-      "window": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+      "window": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
       "regions": {
-        "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
-        "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "oslabeni":      {"x": 0, "y": 0, "w": 0, "h": 0},
-        "attack_button": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "click_target":  {"x": 0, "y": 0, "w": 1, "h": 1}
+        "sector_list": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "fight_counter": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "oslabeni": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "attack_button": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "click_target": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        }
       },
       "click_interval_ms": 50,
       "r_key_every_n_clicks": 5
@@ -73,13 +223,43 @@
     "cz6": {
       "enabled": false,
       "max_oslabeni": 100,
-      "window": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+      "window": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
       "regions": {
-        "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
-        "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "oslabeni":      {"x": 0, "y": 0, "w": 0, "h": 0},
-        "attack_button": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "click_target":  {"x": 0, "y": 0, "w": 1, "h": 1}
+        "sector_list": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "fight_counter": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "oslabeni": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "attack_button": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "click_target": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        }
       },
       "click_interval_ms": 50,
       "r_key_every_n_clicks": 5
@@ -87,13 +267,43 @@
     "cz7": {
       "enabled": false,
       "max_oslabeni": 100,
-      "window": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+      "window": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
       "regions": {
-        "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
-        "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "oslabeni":      {"x": 0, "y": 0, "w": 0, "h": 0},
-        "attack_button": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "click_target":  {"x": 0, "y": 0, "w": 1, "h": 1}
+        "sector_list": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "fight_counter": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "oslabeni": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "attack_button": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "click_target": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        }
       },
       "click_interval_ms": 50,
       "r_key_every_n_clicks": 5
@@ -101,13 +311,43 @@
     "cz8": {
       "enabled": false,
       "max_oslabeni": 156,
-      "window": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+      "window": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080
+      },
       "regions": {
-        "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
-        "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "oslabeni":      {"x": 0, "y": 0, "w": 0, "h": 0},
-        "attack_button": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "click_target":  {"x": 0, "y": 0, "w": 1, "h": 1}
+        "sector_list": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "fight_counter": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "oslabeni": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "attack_button": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "click_target": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        }
       },
       "click_interval_ms": 50,
       "r_key_every_n_clicks": 5
