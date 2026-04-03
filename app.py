@@ -5,9 +5,6 @@ import socket as sock
 import tempfile
 import base64
 
-import eventlet
-eventlet.monkey_patch()
-
 from flask import Flask, send_from_directory
 from flask_socketio import SocketIO, emit
 
@@ -133,7 +130,7 @@ def check_tesseract(cmd: str) -> None:
 # ---------------------------------------------------------------------------
 app = Flask(__name__, static_folder=STATIC_DIR)
 app.config["SECRET_KEY"] = "foe-automation-secret"
-socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
 # Lazily initialised after config is loaded
 manager = None
