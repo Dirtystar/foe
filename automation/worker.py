@@ -235,3 +235,57 @@ class ServerWorker(threading.Thread):
             self._wait(_DIALOG_CLOSE_WAIT)
             self._set(STATE_SCANNING)
             return   # cycle done
+
+
+# ---------------------------------------------------------------------------
+class WorkerManager:
+    def __init__(self, config: dict, socketio):
+        self._config   = config
+        self._socketio = socketio
+        self._workers: dict[str, ServerWorker] = {}
+        self._lock     = threading.Lock()
+
+        broadcast = threading.Thread(target=self._broadcast_loop, daemon=True, name="status-broadcast")
+        broadcast.start()
+
+    def _broadcast_loop(self) -> None:
+        while True:
+            with self._lock:
+                snapshots = [{**w.get_stats(), "server": sid}
+                             for sid, w in self._workers.items()]
+            for s in snapshots:
+                self._socketio.emit("status_update", s)
+            time.sleep(0.5)
+
+    def start(self, server_id: str) -> None:
+        with self._lock:
+            existing = self._workers.get(server_id)
+            if existing and existing.is_alive():
+                return
+            w = ServerWorker(server_id, self._config, self._socketio)
+            self._workers[server_id] = w
+            w.start()
+
+    def stop(self, server_id: str) -> None:
+        with self._lock:
+            w = self._workers.get(server_id)
+        if w:
+            w.stop()
+
+    def start_all(self) -> None:
+        for sid in SERVER_IDS:
+            if self._config["servers"].get(sid, {}).get("enabled"):
+                self.start(sid)
+
+    def stop_all(self) -> None:
+        with self._lock:
+            workers = list(self._workers.values())
+        for w in workers:
+            w.stop()
+
+    def reload_config(self, new_config: dict) -> None:
+        self._config = new_config
+        with self._lock:
+            for w in self._workers.values():
+                if w.is_alive():
+                    w.update_config(new_config)
