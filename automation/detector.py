@@ -27,15 +27,17 @@ except ImportError:
     print("WARNING: pytesseract not installed. OCR unavailable.")
 
 
-# 20% sector — light blue/cyan
-_BLUE_LOWER   = np.array([85,  80,  80], dtype=np.uint8)
-_BLUE_UPPER   = np.array([110, 255, 255], dtype=np.uint8)
+# 20% sector badge — bright saturated cyan-blue
+# Narrow hue + high saturation + high brightness to avoid map background blues
+_BLUE_LOWER   = np.array([95,  160, 160], dtype=np.uint8)
+_BLUE_UPPER   = np.array([108, 255, 255], dtype=np.uint8)
 
 # 60% sector — orange
 _ORANGE_LOWER = np.array([8,  150, 150], dtype=np.uint8)
 _ORANGE_UPPER = np.array([25, 255, 255], dtype=np.uint8)
 
-_MIN_BADGE_AREA = 80   # px² — ignore tiny noise blobs
+_MIN_BADGE_AREA = 150   # px² — badge must be reasonably sized
+_MAX_BADGE_AREA = 5000  # px² — ignore large blue map areas
 
 _PSM7_DIGITS = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/"
 _PSM7_INT    = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789"
@@ -128,11 +130,13 @@ class Detector:
         best_cnt, best_area = None, 0
         for cnt in contours:
             area = cv2.contourArea(cnt)
+            if area < _MIN_BADGE_AREA or area > _MAX_BADGE_AREA:
+                continue   # too small (noise) or too large (map background)
             if area > best_area:
                 best_area = area
                 best_cnt  = cnt
 
-        if best_cnt is None or best_area < _MIN_BADGE_AREA:
+        if best_cnt is None:
             return None
 
         M = cv2.moments(best_cnt)
