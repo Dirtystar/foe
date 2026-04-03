@@ -27,18 +27,18 @@ except ImportError:
     print("WARNING: pytesseract not installed. OCR unavailable.")
 
 
-# 20% sector badge — WHITE pentagon (low saturation, very bright)
-_WHITE_LOWER  = np.array([0,   0,  210], dtype=np.uint8)
-_WHITE_UPPER  = np.array([180, 45, 255], dtype=np.uint8)
+# Wide debug range — will be narrowed once we know exact badge color
+_WHITE_LOWER  = np.array([0,   0,  150], dtype=np.uint8)
+_WHITE_UPPER  = np.array([180, 80, 255], dtype=np.uint8)
 
-# 60% sector badge — RED (dark red pentagon)
+# 60% sector badge — RED
 _RED_LOWER1   = np.array([0,   140, 120], dtype=np.uint8)
 _RED_UPPER1   = np.array([8,   255, 255], dtype=np.uint8)
 _RED_LOWER2   = np.array([172, 140, 120], dtype=np.uint8)
 _RED_UPPER2   = np.array([180, 255, 255], dtype=np.uint8)
 
-_MIN_BADGE_AREA =  300   # px²
-_MAX_BADGE_AREA = 4000   # px²
+_MIN_BADGE_AREA =  300
+_MAX_BADGE_AREA = 4000
 
 _PSM7_DIGITS = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/"
 _PSM7_INT    = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789"
@@ -159,7 +159,16 @@ class Detector:
             results.append((area, region["x"] + lx, region["y"] + ly))
 
         results.sort(key=lambda r: r[0], reverse=True)
-        print(f"[{self.server_id}] badges found: {[(x,y) for _,x,y in results]}")
+        if results:
+            # Sample HSV at each badge center for color tuning
+            for area, vx, vy in results[:5]:
+                lx2 = vx - region["x"]
+                ly2 = vy - region["y"]
+                if 0 <= ly2 < img.shape[0] and 0 <= lx2 < img.shape[1]:
+                    hsv_px = hsv[ly2, lx2]
+                    print(f"[{self.server_id}] badge area={int(area)} pos=({vx},{vy}) HSV={hsv_px}")
+        else:
+            print(f"[{self.server_id}] badges found: []")
         return [(x, y) for _, x, y in results]
 
     def find_sector_badge(self, attack_60: bool = False) -> "tuple[int, int] | None":
