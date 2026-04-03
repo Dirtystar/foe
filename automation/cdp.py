@@ -64,7 +64,7 @@ class CdpSession:
     # ------------------------------------------------------------------
     def connect(self) -> None:
         self._ws = websocket.WebSocket()
-        self._ws.connect(self._ws_url)
+        self._ws.connect(self._ws_url, origin="http://localhost")
         self._send("Page.enable")
         result = self._send("Runtime.evaluate", {"expression": "window.devicePixelRatio"})
         self.dpr = float(result.get("result", {}).get("value", 1.0) or 1.0)
