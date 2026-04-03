@@ -27,17 +27,18 @@ except ImportError:
     print("WARNING: pytesseract not installed. OCR unavailable.")
 
 
-# 20% sector badge — bright saturated cyan-blue
-# Narrow hue + high saturation + high brightness to avoid map background blues
-_BLUE_LOWER   = np.array([95,  160, 160], dtype=np.uint8)
-_BLUE_UPPER   = np.array([108, 255, 255], dtype=np.uint8)
+# 20% sector badge — WHITE pentagon (low saturation, very bright)
+_WHITE_LOWER  = np.array([0,   0,  210], dtype=np.uint8)
+_WHITE_UPPER  = np.array([180, 45, 255], dtype=np.uint8)
 
-# 60% sector — orange
-_ORANGE_LOWER = np.array([8,  150, 150], dtype=np.uint8)
-_ORANGE_UPPER = np.array([25, 255, 255], dtype=np.uint8)
+# 60% sector badge — RED (dark red pentagon)
+_RED_LOWER1   = np.array([0,   140, 120], dtype=np.uint8)
+_RED_UPPER1   = np.array([8,   255, 255], dtype=np.uint8)
+_RED_LOWER2   = np.array([172, 140, 120], dtype=np.uint8)
+_RED_UPPER2   = np.array([180, 255, 255], dtype=np.uint8)
 
-_MIN_BADGE_AREA = 150   # px² — badge must be reasonably sized
-_MAX_BADGE_AREA = 5000  # px² — ignore large blue map areas
+_MIN_BADGE_AREA =  300   # px²
+_MAX_BADGE_AREA = 4000   # px²
 
 _PSM7_DIGITS = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/"
 _PSM7_INT    = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789"
@@ -121,9 +122,15 @@ class Detector:
             return []
 
         hsv  = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, _BLUE_LOWER, _BLUE_UPPER)
+        # 20% badge = white pentagon
+        mask = cv2.inRange(hsv, _WHITE_LOWER, _WHITE_UPPER)
         if attack_60:
-            mask = cv2.bitwise_or(mask, cv2.inRange(hsv, _ORANGE_LOWER, _ORANGE_UPPER))
+            # 60% badge = red pentagon
+            red = cv2.bitwise_or(
+                cv2.inRange(hsv, _RED_LOWER1, _RED_UPPER1),
+                cv2.inRange(hsv, _RED_LOWER2, _RED_UPPER2),
+            )
+            mask = cv2.bitwise_or(mask, red)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
