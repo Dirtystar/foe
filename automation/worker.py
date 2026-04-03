@@ -26,7 +26,7 @@ _DIALOG_OPEN_WAIT  = 1.2   # s — wait for sector dialog to open
 _DIALOG_CLOSE_WAIT = 0.6   # s — wait after Escape
 _SKIP_RADIUS       = 35    # px — positions within this radius share a skip slot
 _SKIP_TTL          = 60.0  # s — how long to skip a no-fight sector
-_FIGHT_TIMEOUT     = 35.0  # s — max fight duration before watchdog kicks in
+_FIGHT_TIMEOUT     = 7.0   # s — max fight duration before watchdog kicks in
 
 
 class ServerWorker(threading.Thread):
