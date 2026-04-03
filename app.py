@@ -277,7 +277,25 @@ def on_request_screenshot(data):
             emit("error", {"message": "Screenshot selhal.", "fatal": False})
             return
 
-        pil_img = Image.open(BytesIO(png))
+        # Annotate detected badge positions onto the screenshot
+        try:
+            import cv2, numpy as np_
+            from automation.detector import Detector
+            det = Detector(sid, config_state["servers"][sid],
+                           config_state.get("global", {}).get("tesseract_cmd", ""))
+            img_np = np_.array(Image.open(BytesIO(png)).convert("RGB"))[:, :, ::-1]
+            det._frame = img_np
+            badges = det.find_all_sector_badges(
+                attack_60=config_state["servers"][sid].get("attack_60_percent", False)
+            )
+            det.end_capture()
+            for bx, by in badges:
+                cv2.circle(img_np, (bx, by), 20, (0, 255, 0), 3)
+                cv2.circle(img_np, (bx, by), 4,  (0, 255, 0), -1)
+            pil_img = Image.fromarray(img_np[:, :, ::-1])
+        except Exception:
+            pil_img = Image.open(BytesIO(png))
+
         buf = BytesIO()
         pil_img.save(buf, format="PNG")
         b64 = base64.b64encode(buf.getvalue()).decode("ascii")
