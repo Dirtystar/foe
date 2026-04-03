@@ -126,78 +126,79 @@ class ServerWorker(threading.Thread):
         max_oslabeni = cfg.get("max_oslabeni", 100)
         attack_60   = cfg.get("attack_60_percent", False)
 
-        # --- 1. Take one screenshot and scan for sector badge ---
+        # --- 1. Take one screenshot and find all sector badges ---
         if not self.detector.begin_capture():
             self._set(STATE_SCANNING, sector_found=False)
             return
 
-        pos = self.detector.find_sector_badge(attack_60=attack_60)
+        badges = self.detector.find_all_sector_badges(attack_60=attack_60)
         self.detector.end_capture()
 
-        if pos is None:
+        if not badges:
             self._set(STATE_SCANNING, sector_found=False, last_error=None)
             return
 
-        # --- 2. Click the sector to open the dialog ---
-        self._set(STATE_SCANNING, sector_found=True)
-        click_once(session, *pos)
+        # --- 2. Try each badge until we find one worth fighting ---
+        for pos in badges:
+            if self._stop_event.is_set():
+                return
 
-        # Wait for dialog to open
-        if not self._wait(_DIALOG_OPEN_WAIT):
-            return
+            self._set(STATE_SCANNING, sector_found=True)
+            click_once(session, *pos)
 
-        # --- 3. Fresh screenshot to read dialog state ---
-        if not self.detector.begin_capture():
-            session.key_press("Escape")
+            if not self._wait(_DIALOG_OPEN_WAIT):
+                return
+
+            # Fresh screenshot to read dialog state
+            if not self.detector.begin_capture():
+                session.key_press("Escape")
+                self.detector.end_capture()
+                return
+
+            oslabeni  = self.detector.read_oslabeni()
+            counter   = self.detector.read_fight_counter()
+            fight_cur = counter[0] if counter else None
+            fight_tot = counter[1] if counter else None
             self.detector.end_capture()
-            return
 
-        oslabeni  = self.detector.read_oslabeni()
-        counter   = self.detector.read_fight_counter()
-        fight_cur = counter[0] if counter else None
-        fight_tot = counter[1] if counter else None
-        self.detector.end_capture()
+            # Skip if over oslabení limit
+            if oslabeni is not None and oslabeni >= max_oslabeni:
+                session.key_press("Escape")
+                self._set(STATE_SCANNING, oslabeni=oslabeni, sector_found=False)
+                self._wait(_DIALOG_CLOSE_WAIT)
+                continue
 
-        # --- 4. Skip if over oslabení limit ---
-        if oslabeni is not None and oslabeni >= max_oslabeni:
+            # Skip if no fights left
+            if counter is not None and fight_cur >= fight_tot - 3:
+                session.key_press("Escape")
+                self._set(STATE_SCANNING, oslabeni=oslabeni,
+                          fight_current=fight_cur, fight_total=fight_tot, sector_found=False)
+                self._wait(_DIALOG_CLOSE_WAIT)
+                continue
+
+            # --- Fight! ---
+            self._set(STATE_FIGHTING, oslabeni=oslabeni,
+                      fight_current=fight_cur, fight_total=fight_tot,
+                      sector_found=True, last_error=None)
+
+            atk_x, atk_y = self.detector.find_attack_button()
+            click_once(session, atk_x, atk_y)
+            if not self._wait(0.1):
+                return
+
+            tx, ty = self.detector.get_click_target()
+            fast_click_loop(
+                session=session, x=tx, y=ty,
+                interval_ms=cfg.get("click_interval_ms", 50),
+                r_every_n=cfg.get("r_key_every_n_clicks", 5),
+                stop_event=self._stop_event,
+                max_duration_s=30.0,
+            )
+
             session.key_press("Escape")
-            self._set(STATE_SCANNING,
-                      oslabeni=oslabeni, sector_found=False, last_error=None)
             self._wait(_DIALOG_CLOSE_WAIT)
-            return
-
-        # --- 5. Skip if no fights left ---
-        if counter is not None and fight_cur >= fight_tot - 3:
-            session.key_press("Escape")
-            self._set(STATE_SCANNING,
-                      oslabeni=oslabeni, fight_current=fight_cur,
-                      fight_total=fight_tot, sector_found=False, last_error=None)
-            self._wait(_DIALOG_CLOSE_WAIT)
-            return
-
-        # --- 6. Fight! ---
-        self._set(STATE_FIGHTING,
-                  oslabeni=oslabeni, fight_current=fight_cur,
-                  fight_total=fight_tot, sector_found=True, last_error=None)
-
-        atk_x, atk_y = self.detector.find_attack_button()
-        click_once(session, atk_x, atk_y)
-        if not self._wait(0.1):
-            return
-
-        tx, ty = self.detector.get_click_target()
-        fast_click_loop(
-            session=session, x=tx, y=ty,
-            interval_ms=cfg.get("click_interval_ms", 50),
-            r_every_n=cfg.get("r_key_every_n_clicks", 5),
-            stop_event=self._stop_event,
-            max_duration_s=30.0,
-        )
-
-        # Close dialog after fight
-        session.key_press("Escape")
-        self._wait(_DIALOG_CLOSE_WAIT)
-        self._set(STATE_SCANNING)
+            self._set(STATE_SCANNING)
+            return   # fought successfully, done for this cycle
 
 
 # ---------------------------------------------------------------------------

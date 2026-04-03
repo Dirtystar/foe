@@ -112,13 +112,13 @@ class Detector:
         return self._crop(region)
 
     # ------------------------------------------------------------------
-    # Find a 20% (blue) sector badge on the map
-    # Returns (x, y) in VIEWPORT pixel coords, or None
+    # Find all 20% (blue) sector badges on the map
+    # Returns list of (x, y) in VIEWPORT pixel coords, sorted by area desc
     # ------------------------------------------------------------------
-    def find_sector_badge(self, attack_60: bool = False) -> "tuple[int, int] | None":
+    def find_all_sector_badges(self, attack_60: bool = False) -> "list[tuple[int, int]]":
         img = self._crop(self._cfg["regions"]["sector_list"])
         if img is None:
-            return None
+            return []
 
         hsv  = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, _BLUE_LOWER, _BLUE_UPPER)
@@ -127,29 +127,37 @@ class Detector:
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        best_cnt, best_area = None, 0
+        region = self._cfg["regions"]["sector_list"]
+        results = []
+
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if area < _MIN_BADGE_AREA or area > _MAX_BADGE_AREA:
-                continue   # too small (noise) or too large (map background)
-            if area > best_area:
-                best_area = area
-                best_cnt  = cnt
+                continue
 
-        if best_cnt is None:
-            return None
+            # Aspect ratio filter: badge is wider than tall (ratio 1.3 – 5.0)
+            x, y, w, h = cv2.boundingRect(cnt)
+            if h == 0:
+                continue
+            ratio = w / h
+            if ratio < 1.3 or ratio > 5.0:
+                continue
 
-        M = cv2.moments(best_cnt)
-        if M["m00"] == 0:
-            return None
+            M = cv2.moments(cnt)
+            if M["m00"] == 0:
+                continue
+            lx = int(M["m10"] / M["m00"])
+            ly = int(M["m01"] / M["m00"])
 
-        # Local coords within the cropped region
-        lx = int(M["m10"] / M["m00"])
-        ly = int(M["m01"] / M["m00"])
+            results.append((area, region["x"] + lx, region["y"] + ly))
 
-        # Translate to viewport coords
-        region = self._cfg["regions"]["sector_list"]
-        return (region["x"] + lx, region["y"] + ly)
+        results.sort(key=lambda r: r[0], reverse=True)
+        print(f"[{self.server_id}] badges found: {[(x,y) for _,x,y in results]}")
+        return [(x, y) for _, x, y in results]
+
+    def find_sector_badge(self, attack_60: bool = False) -> "tuple[int, int] | None":
+        badges = self.find_all_sector_badges(attack_60)
+        return badges[0] if badges else None
 
     # ------------------------------------------------------------------
     # OCR helpers
