@@ -31,6 +31,10 @@ except ImportError:
 _BLUE_LOWER = np.array([85,  80,  80], dtype=np.uint8)
 _BLUE_UPPER = np.array([110, 255, 255], dtype=np.uint8)
 
+# Orange strip for 60% sectors
+_ORANGE_LOWER = np.array([8,  150, 150], dtype=np.uint8)
+_ORANGE_UPPER = np.array([25, 255, 255], dtype=np.uint8)
+
 _ROW_COVERAGE_THRESH = 0.55
 _STRIP_MIN_HEIGHT    = 4
 _STRIP_MAX_HEIGHT    = 70
@@ -101,8 +105,12 @@ class Detector:
         img = self.capture_region(self._cfg["regions"]["sector_list"])
         if img is None:
             return False
-        hsv  = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, _BLUE_LOWER, _BLUE_UPPER)
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        # Detect blue (20%) or orange (60%) sector strips
+        mask = cv2.bitwise_or(
+            cv2.inRange(hsv, _BLUE_LOWER,   _BLUE_UPPER),
+            cv2.inRange(hsv, _ORANGE_LOWER, _ORANGE_UPPER),
+        )
         row_coverage = np.sum(mask, axis=1) / (mask.shape[1] * 255.0)
         strip_rows   = np.where(row_coverage >= _ROW_COVERAGE_THRESH)[0]
         if len(strip_rows) < _STRIP_MIN_HEIGHT:
