@@ -93,6 +93,10 @@ function buildCard(srv) {
           Max oslabení
           <input type="number" class="cfg-max-oslabeni" min="0" max="999" value="100">
         </label>
+        <label class="cfg-checkbox-wrap">
+          <input type="checkbox" class="cfg-attack-60">
+          Útočit i na 60%
+        </label>
         <label>
           Interval klikání (ms)
           <input type="number" class="cfg-click-interval" min="10" max="500" value="50">
@@ -244,6 +248,7 @@ function saveCfg(sid, card, enabledOverride) {
     server:               sid,
     enabled,
     max_oslabeni:         parseInt($('.cfg-max-oslabeni').value)  || 100,
+    attack_60_percent:    $('.cfg-attack-60').checked,
     click_interval_ms:    parseInt($('.cfg-click-interval').value) || 50,
     r_key_every_n_clicks: parseInt($('.cfg-r-every').value)       || 5,
   });
@@ -402,6 +407,7 @@ function applyFullConfig(cfg) {
     const $ = sel => card.querySelector(sel);
     $('.enable-toggle').checked       = !!srv.enabled;
     $('.cfg-max-oslabeni').value       = srv.max_oslabeni        ?? 100;
+    $('.cfg-attack-60').checked        = !!srv.attack_60_percent;
     $('.cfg-click-interval').value     = srv.click_interval_ms   ?? 50;
     $('.cfg-r-every').value            = srv.r_key_every_n_clicks ?? 5;
     $('.win-title-input').value        = srv.tab_url               ?? '';

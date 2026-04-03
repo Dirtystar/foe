@@ -212,6 +212,16 @@ header h1 {
   display: flex; gap: 6px; flex-wrap: wrap;
 }
 
+.cfg-checkbox-wrap {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-muted);
+  grid-column: span 2;
+  cursor: pointer;
+}
+.cfg-checkbox-wrap input[type=checkbox] {
+  width: 14px; height: 14px; cursor: pointer; accent-color: var(--amber);
+}
+
 /* calibration section */
 .calib-title {
   font-size: 12px; font-weight: 600; color: var(--text-muted);

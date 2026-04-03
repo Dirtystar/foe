@@ -18,6 +18,7 @@ DEFAULT_MAX_OSLABENI = {"cz8": 156}
 DEFAULT_SERVER = {
     "enabled": False,
     "max_oslabeni": 100,
+    "attack_60_percent": False,
     "tab_url": "",        # URL fragment to identify the tab, e.g. "cz1.forgeofempires"
     "regions": {
         "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
@@ -168,6 +169,7 @@ def on_save_config(data):
     try:
         config_state["servers"][sid]["enabled"]              = bool(data.get("enabled", False))
         config_state["servers"][sid]["max_oslabeni"]         = int(data.get("max_oslabeni", 100))
+        config_state["servers"][sid]["attack_60_percent"]    = bool(data.get("attack_60_percent", False))
         config_state["servers"][sid]["click_interval_ms"]    = int(data.get("click_interval_ms", 50))
         config_state["servers"][sid]["r_key_every_n_clicks"] = int(data.get("r_key_every_n_clicks", 5))
         save_config(config_state)

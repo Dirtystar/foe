@@ -1,6 +1,9 @@
 """
-ServerWorker thread and WorkerManager for FoE Guild Battle automation.
-Each worker connects to its tab via CDP (identified by URL fragment).
+ServerWorker — full auto mode:
+  1. Scan map for blue (20%) sector badge
+  2. Click it → dialog opens
+  3. Check conditions (oslabení, fight counter)
+  4. Fight or press Escape and scan again
 """
 import threading
 import time
@@ -16,6 +19,11 @@ STATE_STOPPED  = "stopped"
 STATE_SCANNING = "scanning"
 STATE_FIGHTING = "fighting"
 STATE_ERROR    = "error"
+
+# How long to wait after clicking a sector for the dialog to appear
+_DIALOG_OPEN_WAIT  = 1.0   # seconds
+# How long to wait after pressing Escape for the dialog to close
+_DIALOG_CLOSE_WAIT = 0.5
 
 
 class ServerWorker(threading.Thread):
@@ -34,8 +42,8 @@ class ServerWorker(threading.Thread):
             "sector_found":  False,
             "last_error":    None,
         }
-        srv_cfg   = config["servers"][server_id]
-        tess_cmd  = config.get("global", {}).get("tesseract_cmd", "")
+        srv_cfg  = config["servers"][server_id]
+        tess_cmd = config.get("global", {}).get("tesseract_cmd", "")
         self.detector = Detector(server_id, srv_cfg, tess_cmd)
 
     # ------------------------------------------------------------------
@@ -48,8 +56,7 @@ class ServerWorker(threading.Thread):
 
     def update_config(self, config: dict) -> None:
         self._full_config = config
-        srv_cfg = config["servers"].get(self.server_id, {})
-        self.detector.update_config(srv_cfg)
+        self.detector.update_config(config["servers"].get(self.server_id, {}))
 
     def _set(self, state: str = None, **kwargs) -> None:
         with self._lock:
@@ -63,6 +70,10 @@ class ServerWorker(threading.Thread):
     def _global_cfg(self) -> dict:
         return self._full_config.get("global", {})
 
+    def _wait(self, seconds: float) -> bool:
+        """Sleep for `seconds`, return False if stop was requested."""
+        return not self._stop_event.wait(timeout=seconds)
+
     # ------------------------------------------------------------------
     # CDP connection
     # ------------------------------------------------------------------
@@ -72,7 +83,7 @@ class ServerWorker(threading.Thread):
         tab = find_tab(tab_url, cdp_port)
         if tab is None:
             raise RuntimeError(
-                f"Tab matching '{tab_url}' not found. "
+                f"Tab '{tab_url}' not found. "
                 f"Is Chrome running with --remote-debugging-port={cdp_port}?"
             )
         session = CdpSession(tab)
@@ -83,9 +94,6 @@ class ServerWorker(threading.Thread):
     # Main loop
     # ------------------------------------------------------------------
     def run(self) -> None:
-        capture_interval = self._global_cfg().get("capture_interval_ms", 300) / 1000.0
-
-        # Connect to CDP tab
         try:
             session = self._connect()
         except Exception as exc:
@@ -95,6 +103,8 @@ class ServerWorker(threading.Thread):
         self.detector.set_session(session)
         self._set(STATE_SCANNING, last_error=None)
 
+        capture_interval = self._global_cfg().get("capture_interval_ms", 300) / 1000.0
+
         try:
             while not self._stop_event.is_set():
                 try:
@@ -102,65 +112,101 @@ class ServerWorker(threading.Thread):
                 except Exception as exc:
                     self._set(STATE_ERROR, last_error=str(exc))
                     print(f"[{self.server_id}] Error: {exc}")
-                self._stop_event.wait(timeout=capture_interval)
+                if not self._wait(capture_interval):
+                    break
         finally:
             session.close()
             self._set(STATE_STOPPED)
 
+    # ------------------------------------------------------------------
+    # One scan cycle
+    # ------------------------------------------------------------------
     def _scan_cycle(self, session: CdpSession) -> None:
         cfg         = self._server_cfg()
         max_oslabeni = cfg.get("max_oslabeni", 100)
+        attack_60   = cfg.get("attack_60_percent", False)
 
-        oslabeni = self.detector.read_oslabeni()
-        if oslabeni is not None and oslabeni >= max_oslabeni:
-            self._set(STATE_SCANNING, oslabeni=oslabeni, sector_found=False, last_error=None)
+        # --- 1. Take one screenshot and scan for sector badge ---
+        if not self.detector.begin_capture():
+            self._set(STATE_SCANNING, sector_found=False)
             return
 
+        pos = self.detector.find_sector_badge(attack_60=attack_60)
+        self.detector.end_capture()
+
+        if pos is None:
+            self._set(STATE_SCANNING, sector_found=False, last_error=None)
+            return
+
+        # --- 2. Click the sector to open the dialog ---
+        self._set(STATE_SCANNING, sector_found=True)
+        click_once(session, *pos)
+
+        # Wait for dialog to open
+        if not self._wait(_DIALOG_OPEN_WAIT):
+            return
+
+        # --- 3. Fresh screenshot to read dialog state ---
+        if not self.detector.begin_capture():
+            session.key_press("Escape")
+            self.detector.end_capture()
+            return
+
+        oslabeni  = self.detector.read_oslabeni()
         counter   = self.detector.read_fight_counter()
         fight_cur = counter[0] if counter else None
         fight_tot = counter[1] if counter else None
+        self.detector.end_capture()
+
+        # --- 4. Skip if over oslabení limit ---
+        if oslabeni is not None and oslabeni >= max_oslabeni:
+            session.key_press("Escape")
+            self._set(STATE_SCANNING,
+                      oslabeni=oslabeni, sector_found=False, last_error=None)
+            self._wait(_DIALOG_CLOSE_WAIT)
+            return
+
+        # --- 5. Skip if no fights left ---
         if counter is not None and fight_cur >= fight_tot - 3:
+            session.key_press("Escape")
             self._set(STATE_SCANNING,
                       oslabeni=oslabeni, fight_current=fight_cur,
                       fight_total=fight_tot, sector_found=False, last_error=None)
+            self._wait(_DIALOG_CLOSE_WAIT)
             return
 
-        if not self.detector.detect_blue_strip():
-            self._set(STATE_SCANNING,
-                      oslabeni=oslabeni, fight_current=fight_cur,
-                      fight_total=fight_tot, sector_found=False, last_error=None)
-            return
-
-        # All conditions met → fight
+        # --- 6. Fight! ---
         self._set(STATE_FIGHTING,
                   oslabeni=oslabeni, fight_current=fight_cur,
                   fight_total=fight_tot, sector_found=True, last_error=None)
 
         atk_x, atk_y = self.detector.find_attack_button()
         click_once(session, atk_x, atk_y)
-        time.sleep(0.05)
+        if not self._wait(0.1):
+            return
 
         tx, ty = self.detector.get_click_target()
         fast_click_loop(
-            session=session,
-            x=tx, y=ty,
+            session=session, x=tx, y=ty,
             interval_ms=cfg.get("click_interval_ms", 50),
             r_every_n=cfg.get("r_key_every_n_clicks", 5),
             stop_event=self._stop_event,
             max_duration_s=30.0,
         )
+
+        # Close dialog after fight
+        session.key_press("Escape")
+        self._wait(_DIALOG_CLOSE_WAIT)
         self._set(STATE_SCANNING)
 
 
 # ---------------------------------------------------------------------------
-# WorkerManager
-# ---------------------------------------------------------------------------
 class WorkerManager:
     def __init__(self, config: dict, socketio):
-        self._config  = config
+        self._config   = config
         self._socketio = socketio
         self._workers: dict[str, ServerWorker] = {}
-        self._lock    = threading.Lock()
+        self._lock     = threading.Lock()
 
         broadcast = threading.Thread(target=self._broadcast_loop, daemon=True, name="status-broadcast")
         broadcast.start()
@@ -168,10 +214,8 @@ class WorkerManager:
     def _broadcast_loop(self) -> None:
         while True:
             with self._lock:
-                snapshots = [
-                    {**w.get_stats(), "server": sid}
-                    for sid, w in self._workers.items()
-                ]
+                snapshots = [{**w.get_stats(), "server": sid}
+                             for sid, w in self._workers.items()]
             for s in snapshots:
                 self._socketio.emit("status_update", s)
             time.sleep(0.5)

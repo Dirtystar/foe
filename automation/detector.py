@@ -11,7 +11,6 @@ try:
     _PIL_OK = True
 except ImportError:
     _PIL_OK = False
-    print("WARNING: Pillow not installed.")
 
 try:
     import cv2
@@ -28,16 +27,15 @@ except ImportError:
     print("WARNING: pytesseract not installed. OCR unavailable.")
 
 
-_BLUE_LOWER = np.array([85,  80,  80], dtype=np.uint8)
-_BLUE_UPPER = np.array([110, 255, 255], dtype=np.uint8)
+# 20% sector — light blue/cyan
+_BLUE_LOWER   = np.array([85,  80,  80], dtype=np.uint8)
+_BLUE_UPPER   = np.array([110, 255, 255], dtype=np.uint8)
 
-# Orange strip for 60% sectors
+# 60% sector — orange
 _ORANGE_LOWER = np.array([8,  150, 150], dtype=np.uint8)
 _ORANGE_UPPER = np.array([25, 255, 255], dtype=np.uint8)
 
-_ROW_COVERAGE_THRESH = 0.55
-_STRIP_MIN_HEIGHT    = 4
-_STRIP_MAX_HEIGHT    = 70
+_MIN_BADGE_AREA = 80   # px² — ignore tiny noise blobs
 
 _PSM7_DIGITS = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/"
 _PSM7_INT    = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789"
@@ -49,17 +47,18 @@ def _png_to_bgr(png_bytes: bytes) -> "np.ndarray | None":
     try:
         img = _PILImage.open(BytesIO(png_bytes)).convert("RGB")
         arr = np.array(img, dtype=np.uint8)
-        return arr[:, :, ::-1]   # RGB → BGR
+        return arr[:, :, ::-1]
     except Exception:
         return None
 
 
 class Detector:
     def __init__(self, server_id: str, server_config: dict, tesseract_cmd: str = ""):
-        self.server_id  = server_id
-        self._cfg       = server_config
-        self._tess_cmd  = tesseract_cmd
-        self._session   = None   # CdpSession, injected by worker
+        self.server_id   = server_id
+        self._cfg        = server_config
+        self._tess_cmd   = tesseract_cmd
+        self._session    = None
+        self._frame: "np.ndarray | None" = None   # cached screenshot for current cycle
 
     def set_session(self, session) -> None:
         self._session = session
@@ -68,57 +67,88 @@ class Detector:
         self._cfg = server_config
 
     # ------------------------------------------------------------------
-    # Full-window capture (returns BGR numpy array)
+    # Screenshot cache — call begin_capture() once per scan cycle
     # ------------------------------------------------------------------
-    def _grab_full(self) -> "np.ndarray | None":
+    def begin_capture(self) -> bool:
+        """Take a fresh screenshot and cache it. Returns False on failure."""
+        if self._session is None:
+            return False
+        png = self._session.screenshot_png()
+        if png is None:
+            return False
+        self._frame = _png_to_bgr(png)
+        return self._frame is not None
+
+    def end_capture(self) -> None:
+        self._frame = None
+
+    def capture_full_window(self) -> "np.ndarray | None":
+        """For calibration screenshot — always fresh."""
         if self._session is None:
             return None
         png = self._session.screenshot_png()
-        if png is None:
-            return None
-        return _png_to_bgr(png)
-
-    def capture_full_window(self) -> "np.ndarray | None":
-        return self._grab_full()
+        return _png_to_bgr(png) if png else None
 
     # ------------------------------------------------------------------
-    # Region crop from full screenshot
+    # Region crop from cached frame
     # ------------------------------------------------------------------
-    def capture_region(self, region: dict) -> "np.ndarray | None":
-        w, h = region.get("w", 0), region.get("h", 0)
-        if w <= 0 or h <= 0:
-            return None
-        full = self._grab_full()
-        if full is None:
+    def _crop(self, region: dict) -> "np.ndarray | None":
+        if self._frame is None:
             return None
         x, y = int(region["x"]), int(region["y"])
-        img_h, img_w = full.shape[:2]
-        x2, y2 = min(x + int(w), img_w), min(y + int(h), img_h)
+        w, h = int(region.get("w", 0)), int(region.get("h", 0))
+        if w <= 0 or h <= 0:
+            return None
+        img_h, img_w = self._frame.shape[:2]
+        x2 = min(x + w, img_w)
+        y2 = min(y + h, img_h)
         if x2 <= x or y2 <= y:
             return None
-        return full[y:y2, x:x2]
+        return self._frame[y:y2, x:x2]
+
+    def capture_region(self, region: dict) -> "np.ndarray | None":
+        return self._crop(region)
 
     # ------------------------------------------------------------------
-    # Blue-strip sector detection
+    # Find a 20% (blue) sector badge on the map
+    # Returns (x, y) in VIEWPORT pixel coords, or None
     # ------------------------------------------------------------------
-    def detect_blue_strip(self) -> bool:
-        img = self.capture_region(self._cfg["regions"]["sector_list"])
+    def find_sector_badge(self, attack_60: bool = False) -> "tuple[int, int] | None":
+        img = self._crop(self._cfg["regions"]["sector_list"])
         if img is None:
-            return False
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        # Detect blue (20%) or orange (60%) sector strips
-        mask = cv2.bitwise_or(
-            cv2.inRange(hsv, _BLUE_LOWER,   _BLUE_UPPER),
-            cv2.inRange(hsv, _ORANGE_LOWER, _ORANGE_UPPER),
-        )
-        row_coverage = np.sum(mask, axis=1) / (mask.shape[1] * 255.0)
-        strip_rows   = np.where(row_coverage >= _ROW_COVERAGE_THRESH)[0]
-        if len(strip_rows) < _STRIP_MIN_HEIGHT:
-            return False
-        return (int(strip_rows[-1]) - int(strip_rows[0])) <= _STRIP_MAX_HEIGHT
+            return None
+
+        hsv  = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, _BLUE_LOWER, _BLUE_UPPER)
+        if attack_60:
+            mask = cv2.bitwise_or(mask, cv2.inRange(hsv, _ORANGE_LOWER, _ORANGE_UPPER))
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        best_cnt, best_area = None, 0
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area > best_area:
+                best_area = area
+                best_cnt  = cnt
+
+        if best_cnt is None or best_area < _MIN_BADGE_AREA:
+            return None
+
+        M = cv2.moments(best_cnt)
+        if M["m00"] == 0:
+            return None
+
+        # Local coords within the cropped region
+        lx = int(M["m10"] / M["m00"])
+        ly = int(M["m01"] / M["m00"])
+
+        # Translate to viewport coords
+        region = self._cfg["regions"]["sector_list"]
+        return (region["x"] + lx, region["y"] + ly)
 
     # ------------------------------------------------------------------
-    # OCR
+    # OCR helpers
     # ------------------------------------------------------------------
     @staticmethod
     def _preprocess(img_bgr: np.ndarray) -> np.ndarray:
@@ -145,21 +175,21 @@ class Detector:
             return ""
 
     def read_fight_counter(self) -> "tuple[int, int] | None":
-        img = self.capture_region(self._cfg["regions"]["fight_counter"])
+        img = self._crop(self._cfg["regions"]["fight_counter"])
         if img is None:
             return None
         m = re.search(r"(\d+)/(\d+)", self._ocr(img, _PSM7_DIGITS))
         return (int(m.group(1)), int(m.group(2))) if m else None
 
     def read_oslabeni(self) -> "int | None":
-        img = self.capture_region(self._cfg["regions"]["oslabeni"])
+        img = self._crop(self._cfg["regions"]["oslabeni"])
         if img is None:
             return None
         m = re.search(r"\d+", self._ocr(img, _PSM7_INT))
         return int(m.group(0)) if m else None
 
     # ------------------------------------------------------------------
-    # Click targets — in screenshot-pixel coordinates
+    # Click targets — in screenshot-pixel (viewport) coordinates
     # ------------------------------------------------------------------
     def find_attack_button(self) -> tuple[int, int]:
         r = self._cfg["regions"]["attack_button"]
