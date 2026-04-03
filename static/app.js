@@ -24,7 +24,6 @@ const REGION_DEFS = [
   { key: 'click_target',  label: 'Cíl klikání' },
 ];
 
-// Region overlay colours
 const REGION_COLORS = {
   sector_list:   'rgba(88,166,255,0.5)',
   fight_counter: 'rgba(63,185,80,0.5)',
@@ -35,8 +34,8 @@ const REGION_COLORS = {
 
 // ---- State ----------------------------------------------------------
 let socket;
-let serverConfig = {};       // full config from server
-let calibState = {};         // per-server calibration state
+let serverConfig = {};
+let calibState   = {};
 
 // ---- Init -----------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
@@ -57,8 +56,6 @@ function buildGrid() {
       regions: {},
       dragging: false,
       dragStart: null,
-      winX: 0, winY: 0,
-      scaleX: 1, scaleY: 1,
     };
   }
 }
@@ -116,15 +113,18 @@ function buildCard(srv) {
     <div class="card-calibration">
       <div class="calib-title">Kalibrace oblastí</div>
 
-      <!-- Window coords -->
-      <div class="win-coords-grid">
-        <label>Win X<input type="number" class="win-x" value="0"></label>
-        <label>Win Y<input type="number" class="win-y" value="0"></label>
-        <label>Win W<input type="number" class="win-w" value="1920"></label>
-        <label>Win H<input type="number" class="win-h" value="1080"></label>
+      <!-- Window title -->
+      <div class="win-title-row">
+        <label class="win-title-label">
+          Název okna
+          <input type="text" class="win-title-input" placeholder="např. cz1 nebo Forge of Empires">
+        </label>
+        <button class="btn btn-find-windows" title="Najít okna">🔍</button>
+        <button class="btn btn-save-win-title">💾</button>
       </div>
-      <div class="card-btn-row" style="margin-bottom:8px">
-        <button class="btn btn-save-win">💾 Uložit okno</button>
+      <div class="windows-list" style="display:none"></div>
+
+      <div class="card-btn-row" style="margin-top:6px;margin-bottom:8px">
         <button class="btn btn-screenshot">📷 Screenshot</button>
       </div>
 
@@ -155,28 +155,44 @@ function buildCard(srv) {
 function bindCardEvents(card, sid) {
   const $ = sel => card.querySelector(sel);
 
-  // Enable toggle
-  $('.enable-toggle').addEventListener('change', e => {
-    saveCfg(sid, card, e.target.checked);
-  });
-
-  // Save config
+  $('.enable-toggle').addEventListener('change', e => saveCfg(sid, card, e.target.checked));
   $('.btn-save-cfg').addEventListener('click', () => saveCfg(sid, card));
-
-  // Start / Stop
   $('.btn-start').addEventListener('click', () => socket.emit('start_server', { server: sid }));
   $('.btn-stop').addEventListener('click',  () => socket.emit('stop_server',  { server: sid }));
 
-  // Save window coords
-  $('.btn-save-win').addEventListener('click', () => {
-    socket.emit('save_window', {
-      server: sid,
-      window: {
-        x: parseInt($('.win-x').value) || 0,
-        y: parseInt($('.win-y').value) || 0,
-        w: parseInt($('.win-w').value) || 1920,
-        h: parseInt($('.win-h').value) || 1080,
-      },
+  // Save window title
+  $('.btn-save-win-title').addEventListener('click', () => {
+    const title = $('.win-title-input').value.trim();
+    socket.emit('save_window_title', { server: sid, window_title: title });
+  });
+
+  // Find windows button — lists all windows matching typed text
+  $('.btn-find-windows').addEventListener('click', () => {
+    const search = $('.win-title-input').value.trim();
+    const listEl = $('.windows-list');
+    listEl.innerHTML = '<em>Hledám…</em>';
+    listEl.style.display = '';
+    socket.emit('list_windows', { search });
+
+    // One-time listener scoped to this card
+    socket.once('windows_list', (data) => {
+      if (data.error) {
+        listEl.innerHTML = `<span class="err">${data.error}</span>`;
+        return;
+      }
+      if (!data.windows.length) {
+        listEl.innerHTML = '<em>Žádná okna nenalezena.</em>';
+        return;
+      }
+      listEl.innerHTML = data.windows.map(w =>
+        `<div class="win-item" data-title="${escHtml(w.title)}">${escHtml(w.title)}</div>`
+      ).join('');
+      listEl.querySelectorAll('.win-item').forEach(item => {
+        item.addEventListener('click', () => {
+          $('.win-title-input').value = item.dataset.title;
+          listEl.style.display = 'none';
+        });
+      });
     });
   });
 
@@ -196,23 +212,20 @@ function bindCardEvents(card, sid) {
 
   // Canvas drawing
   const canvasWrap = $('.calib-canvas-wrap');
-  const canvas = $('.calib-canvas');
-  const overlay = $('.overlay');
+  const canvas     = $('.calib-canvas');
+  const overlay    = $('.overlay');
 
-  canvasWrap.addEventListener('mousedown', e => startDrag(e, sid, canvas, canvasWrap));
-  canvasWrap.addEventListener('mousemove', e => duringDrag(e, sid, canvas, canvasWrap, overlay));
-  canvasWrap.addEventListener('mouseup',   e => endDrag(e, sid, canvas, canvasWrap, overlay, card));
+  canvasWrap.addEventListener('mousedown',  e => startDrag(e, sid, canvas));
+  canvasWrap.addEventListener('mousemove',  e => duringDrag(e, sid, canvas, overlay));
+  canvasWrap.addEventListener('mouseup',    e => endDrag(e, sid, canvas, overlay, card));
   canvasWrap.addEventListener('mouseleave', () => { calibState[sid].dragging = false; });
 
-  // Touch support
-  canvasWrap.addEventListener('touchstart',  e => { e.preventDefault(); startDrag(e.touches[0], sid, canvas, canvasWrap); });
-  canvasWrap.addEventListener('touchmove',   e => { e.preventDefault(); duringDrag(e.touches[0], sid, canvas, canvasWrap, overlay); });
-  canvasWrap.addEventListener('touchend',    e => { e.preventDefault(); endDrag(e.changedTouches[0], sid, canvas, canvasWrap, overlay, card); });
+  canvasWrap.addEventListener('touchstart',  e => { e.preventDefault(); startDrag(e.touches[0], sid, canvas); });
+  canvasWrap.addEventListener('touchmove',   e => { e.preventDefault(); duringDrag(e.touches[0], sid, canvas, overlay); });
+  canvasWrap.addEventListener('touchend',    e => { e.preventDefault(); endDrag(e.changedTouches[0], sid, canvas, overlay, card); });
 
-  // Save regions
   $('.btn-save-regions').addEventListener('click', () => saveRegions(sid, card));
 
-  // Clear regions
   $('.btn-clear-regions').addEventListener('click', () => {
     calibState[sid].regions = {};
     redrawOverlay(sid, overlay, canvas);
@@ -225,29 +238,32 @@ function bindCardEvents(card, sid) {
 // ---- Config save ----------------------------------------------------
 function saveCfg(sid, card, enabledOverride) {
   const $ = sel => card.querySelector(sel);
-  const enabled = enabledOverride !== undefined
-    ? enabledOverride
-    : $('.enable-toggle').checked;
+  const enabled = enabledOverride !== undefined ? enabledOverride : $('.enable-toggle').checked;
   socket.emit('save_config', {
-    server:            sid,
-    enabled:           enabled,
-    max_oslabeni:      parseInt($('.cfg-max-oslabeni').value)  || 100,
-    click_interval_ms: parseInt($('.cfg-click-interval').value) || 50,
-    r_key_every_n_clicks: parseInt($('.cfg-r-every').value)    || 5,
+    server:               sid,
+    enabled,
+    max_oslabeni:         parseInt($('.cfg-max-oslabeni').value)  || 100,
+    click_interval_ms:    parseInt($('.cfg-click-interval').value) || 50,
+    r_key_every_n_clicks: parseInt($('.cfg-r-every').value)       || 5,
   });
 }
 
-// ---- Region save ----------------------------------------------------
+// ---- Region save — coords are relative to window client area --------
 function saveRegions(sid, card) {
-  const cs = calibState[sid];
+  const cs      = calibState[sid];
+  const canvas  = card.querySelector('.calib-canvas');
   const payload = {};
+
   for (const [key, rect] of Object.entries(cs.regions)) {
-    // rect is in canvas pixels; convert to absolute screen coords
-    const absX = Math.round(cs.winX + rect.x / cs.scaleX);
-    const absY = Math.round(cs.winY + rect.y / cs.scaleY);
-    const absW = Math.round(rect.w / cs.scaleX);
-    const absH = Math.round(rect.h / cs.scaleY);
-    payload[key] = { x: absX, y: absY, w: Math.abs(absW), h: Math.abs(absH) };
+    // rect is in canvas display pixels; convert to actual image pixels
+    const scaleX = canvas.width  / canvas.getBoundingClientRect().width;
+    const scaleY = canvas.height / canvas.getBoundingClientRect().height;
+    payload[key] = {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      w: Math.round(Math.abs(rect.w)),
+      h: Math.round(Math.abs(rect.h)),
+    };
   }
   socket.emit('save_regions', { server: sid, regions: payload });
 }
@@ -256,48 +272,43 @@ function saveRegions(sid, card) {
 function canvasPos(evt, canvas) {
   const rect = canvas.getBoundingClientRect();
   return {
-    x: (evt.clientX - rect.left) * (canvas.width / rect.width),
+    x: (evt.clientX - rect.left) * (canvas.width  / rect.width),
     y: (evt.clientY - rect.top)  * (canvas.height / rect.height),
   };
 }
 
-function startDrag(evt, sid, canvas, wrap) {
+function startDrag(evt, sid, canvas) {
   const cs = calibState[sid];
   if (!cs.activeRegion) return;
-  cs.dragging = true;
-  cs.dragStart = canvasPos(evt, canvas);
+  cs.dragging   = true;
+  cs.dragStart  = canvasPos(evt, canvas);
 }
 
-function duringDrag(evt, sid, canvas, wrap, overlay) {
+function duringDrag(evt, sid, canvas, overlay) {
   const cs = calibState[sid];
   if (!cs.dragging || !cs.dragStart) return;
   const cur = canvasPos(evt, canvas);
-  const preview = overlay.querySelector('.preview-rect');
   const x = Math.min(cs.dragStart.x, cur.x);
   const y = Math.min(cs.dragStart.y, cur.y);
   const w = Math.abs(cur.x - cs.dragStart.x);
   const h = Math.abs(cur.y - cs.dragStart.y);
-  if (preview) {
-    preview.setAttribute('x', x / canvas.width * 100 + '%');
-    preview.setAttribute('y', y / canvas.height * 100 + '%');
-    preview.setAttribute('width',  w / canvas.width * 100 + '%');
-    preview.setAttribute('height', h / canvas.height * 100 + '%');
-  } else {
-    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.classList.add('preview-rect');
-    rect.setAttribute('x', x / canvas.width * 100 + '%');
-    rect.setAttribute('y', y / canvas.height * 100 + '%');
-    rect.setAttribute('width',  w / canvas.width * 100 + '%');
-    rect.setAttribute('height', h / canvas.height * 100 + '%');
-    rect.setAttribute('fill', 'rgba(255,255,255,0.15)');
-    rect.setAttribute('stroke', '#fff');
-    rect.setAttribute('stroke-width', '1');
-    rect.setAttribute('stroke-dasharray', '4');
-    overlay.appendChild(rect);
+  let preview = overlay.querySelector('.preview-rect');
+  if (!preview) {
+    preview = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    preview.classList.add('preview-rect');
+    preview.setAttribute('fill', 'rgba(255,255,255,0.15)');
+    preview.setAttribute('stroke', '#fff');
+    preview.setAttribute('stroke-width', '1');
+    preview.setAttribute('stroke-dasharray', '4');
+    overlay.appendChild(preview);
   }
+  preview.setAttribute('x',      x / canvas.width  * 100 + '%');
+  preview.setAttribute('y',      y / canvas.height * 100 + '%');
+  preview.setAttribute('width',  w / canvas.width  * 100 + '%');
+  preview.setAttribute('height', h / canvas.height * 100 + '%');
 }
 
-function endDrag(evt, sid, canvas, wrap, overlay, card) {
+function endDrag(evt, sid, canvas, overlay, card) {
   const cs = calibState[sid];
   if (!cs.dragging || !cs.dragStart) return;
   cs.dragging = false;
@@ -308,58 +319,47 @@ function endDrag(evt, sid, canvas, wrap, overlay, card) {
   const w = Math.abs(cur.x - cs.dragStart.x);
   const h = Math.abs(cur.y - cs.dragStart.y);
 
-  // Remove preview
-  const prev = overlay.querySelector('.preview-rect');
-  if (prev) prev.remove();
+  overlay.querySelector('.preview-rect')?.remove();
+  if (w < 3 || h < 3) return;
 
-  if (w < 3 || h < 3) return;   // too small, ignore
-
-  // Save region in canvas pixels
   cs.regions[cs.activeRegion] = { x, y, w, h };
 
-  // Mark button as set
-  const regionKey = cs.activeRegion;
   card.querySelectorAll('.region-btn').forEach(b => {
-    if (b.dataset.region === regionKey) {
+    if (b.dataset.region === cs.activeRegion) {
       b.classList.remove('active');
       b.classList.add('set');
     }
   });
   cs.activeRegion = null;
 
-  // Enable save if at least click_target defined
   if (cs.regions.click_target) {
     card.querySelector('.btn-save-regions').disabled = false;
   }
-
   redrawOverlay(sid, overlay, canvas);
 }
 
 function redrawOverlay(sid, overlay, canvas) {
-  // Remove all drawn rects (keep nothing)
-  overlay.querySelectorAll('rect:not(.preview-rect)').forEach(r => r.remove());
-  overlay.querySelectorAll('text').forEach(t => t.remove());
-
+  overlay.querySelectorAll('rect:not(.preview-rect), text').forEach(el => el.remove());
   const cs = calibState[sid];
   for (const [key, rect] of Object.entries(cs.regions)) {
     const color = REGION_COLORS[key] || 'rgba(200,200,200,0.4)';
     const label = REGION_DEFS.find(r => r.key === key)?.label || key;
 
     const svgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    svgRect.setAttribute('x', rect.x / canvas.width * 100 + '%');
-    svgRect.setAttribute('y', rect.y / canvas.height * 100 + '%');
-    svgRect.setAttribute('width',  rect.w / canvas.width * 100 + '%');
+    svgRect.setAttribute('x',      rect.x / canvas.width  * 100 + '%');
+    svgRect.setAttribute('y',      rect.y / canvas.height * 100 + '%');
+    svgRect.setAttribute('width',  rect.w / canvas.width  * 100 + '%');
     svgRect.setAttribute('height', rect.h / canvas.height * 100 + '%');
-    svgRect.setAttribute('fill', color);
-    svgRect.setAttribute('stroke', color.replace('0.5', '1').replace('0.4', '1'));
+    svgRect.setAttribute('fill',   color);
+    svgRect.setAttribute('stroke', color.replace(/[\d.]+\)$/, '1)'));
     svgRect.setAttribute('stroke-width', '1.5');
     overlay.appendChild(svgRect);
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', (rect.x + 4) / canvas.width * 100 + '%');
-    text.setAttribute('y', (rect.y + 13) / canvas.height * 100 + '%');
-    text.setAttribute('fill', '#fff');
-    text.setAttribute('font-size', '10');
+    text.setAttribute('x',           (rect.x + 4) / canvas.width  * 100 + '%');
+    text.setAttribute('y',           (rect.y + 13) / canvas.height * 100 + '%');
+    text.setAttribute('fill',        '#fff');
+    text.setAttribute('font-size',   '10');
     text.setAttribute('font-family', 'sans-serif');
     text.textContent = label;
     overlay.appendChild(text);
@@ -369,61 +369,41 @@ function redrawOverlay(sid, overlay, canvas) {
 // ---- Socket.IO ------------------------------------------------------
 function connectSocket() {
   socket = io('http://localhost:9000', { transports: ['websocket', 'polling'] });
+  socket.on('connect',    () => setConnStatus(true));
+  socket.on('disconnect', () => setConnStatus(false));
 
-  socket.on('connect', () => {
-    setConnStatus(true);
-  });
-
-  socket.on('disconnect', () => {
-    setConnStatus(false);
-  });
-
-  socket.on('full_config', (cfg) => {
+  socket.on('full_config', cfg => {
     serverConfig = cfg;
     applyFullConfig(cfg);
   });
 
-  socket.on('status_update', (data) => {
-    updateCard(data);
-  });
+  socket.on('status_update',  data => updateCard(data));
+  socket.on('config_saved',   data => { if (data.ok) flashSaved(data.server); });
+  socket.on('calibration_screenshot', data => showCalibScreenshot(data));
 
-  socket.on('config_saved', (data) => {
-    if (data.ok) flashSaved(data.server);
-  });
-
-  socket.on('calibration_screenshot', (data) => {
-    showCalibScreenshot(data);
-  });
-
-  socket.on('error', (data) => {
+  socket.on('error', data => {
     console.error(`[${data.server || 'global'}] ${data.message}`);
     if (data.server) showCardError(data.server, data.message);
   });
 }
 
 function setConnStatus(ok) {
-  const dot = document.getElementById('conn-dot');
-  const label = document.getElementById('conn-label');
-  dot.className = 'conn-dot' + (ok ? ' ok' : '');
-  label.textContent = ok ? 'Připojeno' : 'Odpojeno';
+  document.getElementById('conn-dot').className   = 'conn-dot' + (ok ? ' ok' : '');
+  document.getElementById('conn-label').textContent = ok ? 'Připojeno' : 'Odpojeno';
 }
 
 // ---- Apply full config to all cards ---------------------------------
 function applyFullConfig(cfg) {
-  if (!cfg || !cfg.servers) return;
+  if (!cfg?.servers) return;
   for (const [sid, srv] of Object.entries(cfg.servers)) {
     const card = document.querySelector(`[data-server="${sid}"]`);
     if (!card) continue;
     const $ = sel => card.querySelector(sel);
-    $('.enable-toggle').checked = !!srv.enabled;
-    $('.cfg-max-oslabeni').value = srv.max_oslabeni ?? 100;
-    $('.cfg-click-interval').value = srv.click_interval_ms ?? 50;
-    $('.cfg-r-every').value = srv.r_key_every_n_clicks ?? 5;
-    const win = srv.window || {};
-    $('.win-x').value = win.x ?? 0;
-    $('.win-y').value = win.y ?? 0;
-    $('.win-w').value = win.w ?? 1920;
-    $('.win-h').value = win.h ?? 1080;
+    $('.enable-toggle').checked       = !!srv.enabled;
+    $('.cfg-max-oslabeni').value       = srv.max_oslabeni        ?? 100;
+    $('.cfg-click-interval').value     = srv.click_interval_ms   ?? 50;
+    $('.cfg-r-every').value            = srv.r_key_every_n_clicks ?? 5;
+    $('.win-title-input').value        = srv.window_title         ?? '';
   }
 }
 
@@ -433,48 +413,40 @@ function updateCard(data) {
   const card = document.querySelector(`[data-server="${sid}"]`);
   if (!card) return;
 
-  // Card border state class
   card.className = `server-card state-${state}`;
 
-  // Badge
   const badge = card.querySelector('.status-badge');
-  badge.className = `status-badge state-${state}`;
+  badge.className   = `status-badge state-${state}`;
   const LABELS = { stopped: 'Stopped', scanning: 'Skenuje', fighting: 'Bojuje!', error: 'Chyba' };
   badge.textContent = LABELS[state] || state;
 
-  // Stats
-  const cfg = serverConfig?.servers?.[sid] || {};
+  const cfg    = serverConfig?.servers?.[sid] || {};
   const maxOsl = cfg.max_oslabeni ?? 100;
 
   const vOsl = card.querySelector('.v-oslabeni');
   if (oslabeni != null) {
     vOsl.textContent = oslabeni;
-    vOsl.className = oslabeni >= maxOsl * 0.9
-      ? (oslabeni >= maxOsl ? 'danger' : 'warn')
-      : '';
+    vOsl.className   = oslabeni >= maxOsl ? 'danger' : oslabeni >= maxOsl * 0.9 ? 'warn' : '';
   } else {
     vOsl.textContent = '–';
-    vOsl.className = '';
+    vOsl.className   = '';
   }
 
   const vFights = card.querySelector('.v-fights');
   if (fight_current != null && fight_total != null) {
     vFights.textContent = `${fight_current}/${fight_total}`;
-    const remaining = fight_total - fight_current;
-    vFights.className = remaining <= 5 ? 'warn' : '';
+    vFights.className   = (fight_total - fight_current) <= 5 ? 'warn' : '';
   } else {
     vFights.textContent = '–/–';
-    vFights.className = '';
+    vFights.className   = '';
   }
 
   const vSector = card.querySelector('.v-sector');
   vSector.textContent = sector_found ? '✓ Nalezen' : '–';
-  vSector.className = sector_found ? '' : '';
 
-  // Error message
   const errEl = card.querySelector('.error-msg');
   if (last_error) {
-    errEl.textContent = last_error;
+    errEl.textContent  = last_error;
     errEl.style.display = '';
   } else {
     errEl.style.display = 'none';
@@ -483,34 +455,25 @@ function updateCard(data) {
 
 // ---- Calibration screenshot -----------------------------------------
 function showCalibScreenshot(data) {
-  const { server: sid, image_b64, width, height, win_x, win_y } = data;
+  const { server: sid, image_b64, width, height } = data;
   const card = document.querySelector(`[data-server="${sid}"]`);
   if (!card) return;
 
-  const panel = card.querySelector('.calib-panel');
+  const panel  = card.querySelector('.calib-panel');
   const canvas = card.querySelector('.calib-canvas');
   const overlay = card.querySelector('.overlay');
 
   panel.classList.add('open');
 
-  const img = new Image();
+  const img  = new Image();
   img.onload = () => {
     canvas.width  = img.width;
     canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
+    canvas.getContext('2d').drawImage(img, 0, 0);
 
-    // Store scale for coordinate conversion (visual size vs actual pixels)
-    const cs = calibState[sid];
-    cs.winX   = win_x;
-    cs.winY   = win_y;
-    // scaleX/Y: actual image pixels → absolute screen coords = 1 (already pixel-matched)
-    cs.scaleX = 1;
-    cs.scaleY = 1;
-
-    // Clear existing overlay drawings
     overlay.querySelectorAll('rect, text').forEach(el => el.remove());
-    cs.regions = {};
+    const cs = calibState[sid];
+    cs.regions     = {};
     cs.activeRegion = null;
     card.querySelectorAll('.region-btn').forEach(b => b.classList.remove('set', 'active'));
     card.querySelector('.btn-save-regions').disabled = true;
@@ -522,14 +485,11 @@ function showCalibScreenshot(data) {
 function flashSaved(sid) {
   const card = document.querySelector(`[data-server="${sid}"]`);
   if (!card) return;
-  const btn = card.querySelector('.btn-save-cfg');
+  const btn  = card.querySelector('.btn-save-cfg');
   const orig = btn.textContent;
   btn.textContent = '✓ Uloženo';
   btn.classList.add('saved-anim');
-  setTimeout(() => {
-    btn.textContent = orig;
-    btn.classList.remove('saved-anim');
-  }, 1200);
+  setTimeout(() => { btn.textContent = orig; btn.classList.remove('saved-anim'); }, 1200);
 }
 
 // ---- Show card error ------------------------------------------------
@@ -537,6 +497,11 @@ function showCardError(sid, msg) {
   const card = document.querySelector(`[data-server="${sid}"]`);
   if (!card) return;
   const errEl = card.querySelector('.error-msg');
-  errEl.textContent = msg;
+  errEl.textContent  = msg;
   errEl.style.display = '';
+}
+
+// ---- HTML escape helper ---------------------------------------------
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

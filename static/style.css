@@ -269,20 +269,47 @@ header h1 {
   color: var(--green);
 }
 
-/* window coords form */
-.win-coords-grid {
-  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px;
-  margin-bottom: 8px;
+/* window title row */
+.win-title-row {
+  display: flex; align-items: flex-end; gap: 6px;
+  margin-bottom: 6px;
 }
-.win-coords-grid label {
-  display: flex; flex-direction: column; gap: 2px;
-  font-size: 11px; color: var(--text-muted);
+.win-title-label {
+  flex: 1;
+  display: flex; flex-direction: column; gap: 3px;
+  font-size: 12px; color: var(--text-muted);
 }
-.win-coords-grid input {
-  padding: 4px 6px;
+.win-title-input {
+  padding: 5px 8px;
   background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 4px; color: var(--text); font-size: 12px;
+  border-radius: 4px; color: var(--text); font-size: 13px;
+  width: 100%;
 }
+.win-title-input:focus { outline: none; border-color: var(--accent); }
+
+/* windows dropdown list */
+.windows-list {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.windows-list em, .windows-list .err {
+  display: block; padding: 6px 10px; color: var(--text-muted);
+}
+.windows-list .err { color: var(--red); }
+.win-item {
+  padding: 5px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background .1s;
+}
+.win-item:last-child { border-bottom: none; }
+.win-item:hover { background: var(--border); }
 
 /* last error */
 .error-msg {

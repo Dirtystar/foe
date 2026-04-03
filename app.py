@@ -11,9 +11,9 @@ from flask_socketio import SocketIO, emit
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
-STATIC_DIR = os.path.join(BASE_DIR, "static")
+STATIC_DIR  = os.path.join(BASE_DIR, "static")
 
 # ---------------------------------------------------------------------------
 # Default config
@@ -24,13 +24,13 @@ DEFAULT_MAX_OSLABENI = {"cz8": 156}
 DEFAULT_SERVER = {
     "enabled": False,
     "max_oslabeni": 100,
-    "window": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+    "window_title": "",          # search string to find the browser window
     "regions": {
         "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
         "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
         "oslabeni":      {"x": 0, "y": 0, "w": 0, "h": 0},
         "attack_button": {"x": 0, "y": 0, "w": 0, "h": 0},
-        "click_target":  {"x": 0, "y": 0, "w": 1,  "h": 1},
+        "click_target":  {"x": 0, "y": 0, "w": 1, "h": 1},
     },
     "click_interval_ms": 50,
     "r_key_every_n_clicks": 5,
@@ -39,7 +39,6 @@ DEFAULT_SERVER = {
 DEFAULT_GLOBAL = {
     "capture_interval_ms": 300,
     "tesseract_cmd": r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-    "failsafe": False,
 }
 
 
@@ -48,12 +47,12 @@ def create_default_config() -> dict:
     for sid in SERVER_IDS:
         srv = json.loads(json.dumps(DEFAULT_SERVER))
         srv["max_oslabeni"] = DEFAULT_MAX_OSLABENI.get(sid, 100)
+        srv["window_title"] = sid   # default: search by server id e.g. "cz1"
         servers[sid] = srv
     return {"servers": servers, "global": dict(DEFAULT_GLOBAL)}
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
-    """Merge override into base recursively, returning new dict."""
     result = dict(base)
     for k, v in override.items():
         if k in result and isinstance(result[k], dict) and isinstance(v, dict):
@@ -111,13 +110,12 @@ def check_tesseract(cmd: str) -> None:
         import pytesseract
         if cmd:
             pytesseract.pytesseract.tesseract_cmd = cmd
-        ver = pytesseract.get_tesseract_version()
+        ver   = pytesseract.get_tesseract_version()
         langs = pytesseract.get_languages(config="")
         if "ces" not in langs:
             print(
                 "WARNING: Czech (ces) Tesseract language pack not found.\n"
-                "Download ces.traineddata from https://github.com/tesseract-ocr/tessdata\n"
-                "and place it in your Tesseract tessdata directory."
+                "Download ces.traineddata and place it in your Tesseract tessdata directory."
             )
         else:
             print(f"Tesseract {ver} OK, Czech pack present.")
@@ -132,8 +130,7 @@ app = Flask(__name__, static_folder=STATIC_DIR)
 app.config["SECRET_KEY"] = "foe-automation-secret"
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
-# Lazily initialised after config is loaded
-manager = None
+manager      = None
 config_state: dict = {}
 
 
@@ -143,7 +140,6 @@ config_state: dict = {}
 @app.route("/")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
-
 
 @app.route("/<path:filename>")
 def static_files(filename):
@@ -155,7 +151,6 @@ def static_files(filename):
 # ---------------------------------------------------------------------------
 @socketio.on("connect")
 def on_connect():
-    # Send current config snapshot to newly connected client
     emit("full_config", config_state)
 
 
@@ -187,23 +182,14 @@ def on_stop_all(_data):
 
 @socketio.on("save_config")
 def on_save_config(data):
-    """
-    data = {
-        server: "cz1",
-        enabled: bool,
-        max_oslabeni: int,
-        click_interval_ms: int,
-        r_key_every_n_clicks: int
-    }
-    """
     sid = data.get("server")
     if not sid or sid not in SERVER_IDS:
         emit("error", {"message": f"Unknown server: {sid}", "fatal": False})
         return
     try:
-        config_state["servers"][sid]["enabled"] = bool(data.get("enabled", False))
-        config_state["servers"][sid]["max_oslabeni"] = int(data.get("max_oslabeni", 100))
-        config_state["servers"][sid]["click_interval_ms"] = int(data.get("click_interval_ms", 50))
+        config_state["servers"][sid]["enabled"]            = bool(data.get("enabled", False))
+        config_state["servers"][sid]["max_oslabeni"]       = int(data.get("max_oslabeni", 100))
+        config_state["servers"][sid]["click_interval_ms"]  = int(data.get("click_interval_ms", 50))
         config_state["servers"][sid]["r_key_every_n_clicks"] = int(data.get("r_key_every_n_clicks", 5))
         save_config(config_state)
         if manager:
@@ -213,22 +199,14 @@ def on_save_config(data):
         emit("error", {"message": str(e), "fatal": False})
 
 
-@socketio.on("save_window")
-def on_save_window(data):
-    """
-    data = {server, window: {x,y,w,h}}
-    """
+@socketio.on("save_window_title")
+def on_save_window_title(data):
+    """data = {server: "cz1", window_title: "Forge of Empires"}"""
     sid = data.get("server")
     if not sid or sid not in SERVER_IDS:
         return
     try:
-        win = data.get("window", {})
-        config_state["servers"][sid]["window"] = {
-            "x": int(win.get("x", 0)),
-            "y": int(win.get("y", 0)),
-            "w": int(win.get("w", 1920)),
-            "h": int(win.get("h", 1080)),
-        }
+        config_state["servers"][sid]["window_title"] = str(data.get("window_title", "")).strip()
         save_config(config_state)
         if manager:
             manager.reload_config(config_state)
@@ -237,20 +215,23 @@ def on_save_window(data):
         emit("error", {"message": str(e), "fatal": False})
 
 
+@socketio.on("list_windows")
+def on_list_windows(data):
+    """Return all visible windows whose title matches the search string."""
+    search = data.get("search", "")
+    try:
+        from automation.capture import list_windows
+        windows = list_windows(search)
+        emit("windows_list", {"windows": windows})
+    except Exception as e:
+        emit("windows_list", {"windows": [], "error": str(e)})
+
+
 @socketio.on("save_regions")
 def on_save_regions(data):
     """
-    data = {
-        server: "cz1",
-        regions: {
-            sector_list: {x,y,w,h},
-            fight_counter: {x,y,w,h},
-            oslabeni: {x,y,w,h},
-            attack_button: {x,y,w,h},
-            click_target: {x,y,w,h}
-        }
-    }
-    All coordinates are absolute screen coords.
+    Regions are now in window client-area coordinates (relative to top-left of the window).
+    data = {server, regions: {key: {x,y,w,h}, ...}}
     """
     sid = data.get("server")
     if not sid or sid not in SERVER_IDS:
@@ -278,32 +259,32 @@ def on_save_regions(data):
 
 @socketio.on("request_screenshot")
 def on_request_screenshot(data):
-    """
-    Capture the configured window region (or full screen) and send as base64 PNG.
-    """
+    """Capture the game window using PrintWindow (works in background)."""
     sid = data.get("server")
     if not sid or sid not in SERVER_IDS:
         return
     try:
-        import mss
+        from automation.capture import find_window, capture_window
         import numpy as np
         from PIL import Image
         import io
 
-        win = config_state["servers"][sid].get("window", {})
-        x, y, w, h = win.get("x", 0), win.get("y", 0), win.get("w", 0), win.get("h", 0)
+        window_title = config_state["servers"][sid].get("window_title", "")
+        if not window_title:
+            emit("error", {"message": "Nastav název okna a ulož ho před pořízením screenshotu.", "fatal": False})
+            return
 
-        with mss.mss() as sct:
-            if w > 0 and h > 0:
-                monitor = {"top": y, "left": x, "width": w, "height": h}
-            else:
-                # Full primary screen
-                monitor = sct.monitors[1]
-            raw = sct.grab(monitor)
-            img_np = np.array(raw)[:, :, :3]  # BGR, drop alpha
+        hwnd = find_window(window_title)
+        if hwnd is None:
+            emit("error", {"message": f"Okno '{window_title}' nenalezeno. Zkontroluj název.", "fatal": False})
+            return
 
-        # Convert BGR → RGB for PIL
-        img_rgb = img_np[:, :, ::-1]
+        img_bgr = capture_window(hwnd)
+        if img_bgr is None:
+            emit("error", {"message": "Zachycení okna selhalo.", "fatal": False})
+            return
+
+        img_rgb = img_bgr[:, :, ::-1]
         pil_img = Image.fromarray(img_rgb)
 
         buf = io.BytesIO()
@@ -311,15 +292,13 @@ def on_request_screenshot(data):
         b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
         emit("calibration_screenshot", {
-            "server": sid,
+            "server":    sid,
             "image_b64": b64,
-            "width": pil_img.width,
-            "height": pil_img.height,
-            "win_x": x if w > 0 else monitor.get("left", 0),
-            "win_y": y if h > 0 else monitor.get("top", 0),
+            "width":     pil_img.width,
+            "height":    pil_img.height,
         })
     except Exception as e:
-        emit("error", {"message": f"Screenshot failed: {e}", "fatal": False})
+        emit("error", {"message": f"Screenshot selhal: {e}", "fatal": False})
 
 
 # ---------------------------------------------------------------------------
@@ -330,17 +309,14 @@ if __name__ == "__main__":
 
     if not check_port(PORT):
         print(f"ERROR: Port {PORT} is already in use.")
-        print("Kill the process using that port or change PORT in app.py.")
         sys.exit(1)
 
     config_state = load_config()
-    save_config(config_state)  # write defaults if first run
+    save_config(config_state)
 
-    # Configure pytesseract path from config
     tess_cmd = config_state.get("global", {}).get("tesseract_cmd", "")
     check_tesseract(tess_cmd)
 
-    # Import and initialise WorkerManager
     from automation.worker import WorkerManager
     manager = WorkerManager(config_state, socketio)
 

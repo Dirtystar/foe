@@ -1,9 +1,8 @@
 flask>=3.0
 flask-socketio>=5.3
-eventlet>=0.35
-mss>=9.0
 opencv-python>=4.9
 pytesseract>=0.3.10
 pyautogui>=0.9.54
 Pillow>=10.0
 numpy>=1.26
+pywin32>=306
