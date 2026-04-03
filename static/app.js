@@ -460,8 +460,8 @@ function showCalibScreenshot(data) {
   const card = document.querySelector(`[data-server="${sid}"]`);
   if (!card) return;
 
-  const panel  = card.querySelector('.calib-panel');
-  const canvas = card.querySelector('.calib-canvas');
+  const panel   = card.querySelector('.calib-panel');
+  const canvas  = card.querySelector('.calib-canvas');
   const overlay = card.querySelector('.overlay');
 
   panel.classList.add('open');
@@ -471,13 +471,8 @@ function showCalibScreenshot(data) {
     canvas.width  = img.width;
     canvas.height = img.height;
     canvas.getContext('2d').drawImage(img, 0, 0);
-
-    overlay.querySelectorAll('rect, text').forEach(el => el.remove());
-    const cs = calibState[sid];
-    cs.regions     = {};
-    cs.activeRegion = null;
-    card.querySelectorAll('.region-btn').forEach(b => b.classList.remove('set', 'active'));
-    card.querySelector('.btn-save-regions').disabled = true;
+    // Redraw existing regions on top of new screenshot (don't clear them)
+    redrawOverlay(sid, overlay, canvas);
   };
   img.src = 'data:image/png;base64,' + image_b64;
 }
