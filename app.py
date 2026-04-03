@@ -8,23 +8,17 @@ import base64
 from flask import Flask, send_from_directory
 from flask_socketio import SocketIO, emit
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 STATIC_DIR  = os.path.join(BASE_DIR, "static")
 
-# ---------------------------------------------------------------------------
-# Default config
-# ---------------------------------------------------------------------------
 SERVER_IDS = ["cz1", "cz2", "cz3", "cz4", "cz5", "cz6", "cz7", "cz8"]
 DEFAULT_MAX_OSLABENI = {"cz8": 156}
 
 DEFAULT_SERVER = {
     "enabled": False,
     "max_oslabeni": 100,
-    "window_title": "",          # search string to find the browser window
+    "tab_url": "",        # URL fragment to identify the tab, e.g. "cz1.forgeofempires"
     "regions": {
         "sector_list":   {"x": 0, "y": 0, "w": 0, "h": 0},
         "fight_counter": {"x": 0, "y": 0, "w": 0, "h": 0},
@@ -39,6 +33,7 @@ DEFAULT_SERVER = {
 DEFAULT_GLOBAL = {
     "capture_interval_ms": 300,
     "tesseract_cmd": r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    "cdp_port": 9222,
 }
 
 
@@ -47,7 +42,7 @@ def create_default_config() -> dict:
     for sid in SERVER_IDS:
         srv = json.loads(json.dumps(DEFAULT_SERVER))
         srv["max_oslabeni"] = DEFAULT_MAX_OSLABENI.get(sid, 100)
-        srv["window_title"] = sid   # default: search by server id e.g. "cz1"
+        srv["tab_url"] = f"{sid}.forgeofempires"
         servers[sid] = srv
     return {"servers": servers, "global": dict(DEFAULT_GLOBAL)}
 
@@ -89,9 +84,6 @@ def save_config(config: dict) -> None:
         raise
 
 
-# ---------------------------------------------------------------------------
-# Port check
-# ---------------------------------------------------------------------------
 def check_port(port: int) -> bool:
     with sock.socket(sock.AF_INET, sock.SOCK_STREAM) as s:
         try:
@@ -102,9 +94,6 @@ def check_port(port: int) -> bool:
             return False
 
 
-# ---------------------------------------------------------------------------
-# Tesseract check
-# ---------------------------------------------------------------------------
 def check_tesseract(cmd: str) -> None:
     try:
         import pytesseract
@@ -113,18 +102,13 @@ def check_tesseract(cmd: str) -> None:
         ver   = pytesseract.get_tesseract_version()
         langs = pytesseract.get_languages(config="")
         if "ces" not in langs:
-            print(
-                "WARNING: Czech (ces) Tesseract language pack not found.\n"
-                "Download ces.traineddata and place it in your Tesseract tessdata directory."
-            )
+            print("WARNING: Czech (ces) Tesseract language pack not found.")
         else:
             print(f"Tesseract {ver} OK, Czech pack present.")
     except Exception as e:
-        print(f"WARNING: Tesseract not available: {e}\nOCR detection will not work.")
+        print(f"WARNING: Tesseract not available: {e}")
 
 
-# ---------------------------------------------------------------------------
-# Flask + SocketIO app
 # ---------------------------------------------------------------------------
 app = Flask(__name__, static_folder=STATIC_DIR)
 app.config["SECRET_KEY"] = "foe-automation-secret"
@@ -134,9 +118,6 @@ manager      = None
 config_state: dict = {}
 
 
-# ---------------------------------------------------------------------------
-# Static file serving
-# ---------------------------------------------------------------------------
 @app.route("/")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
@@ -146,8 +127,6 @@ def static_files(filename):
     return send_from_directory(STATIC_DIR, filename)
 
 
-# ---------------------------------------------------------------------------
-# SocketIO events
 # ---------------------------------------------------------------------------
 @socketio.on("connect")
 def on_connect():
@@ -187,9 +166,9 @@ def on_save_config(data):
         emit("error", {"message": f"Unknown server: {sid}", "fatal": False})
         return
     try:
-        config_state["servers"][sid]["enabled"]            = bool(data.get("enabled", False))
-        config_state["servers"][sid]["max_oslabeni"]       = int(data.get("max_oslabeni", 100))
-        config_state["servers"][sid]["click_interval_ms"]  = int(data.get("click_interval_ms", 50))
+        config_state["servers"][sid]["enabled"]              = bool(data.get("enabled", False))
+        config_state["servers"][sid]["max_oslabeni"]         = int(data.get("max_oslabeni", 100))
+        config_state["servers"][sid]["click_interval_ms"]    = int(data.get("click_interval_ms", 50))
         config_state["servers"][sid]["r_key_every_n_clicks"] = int(data.get("r_key_every_n_clicks", 5))
         save_config(config_state)
         if manager:
@@ -199,14 +178,14 @@ def on_save_config(data):
         emit("error", {"message": str(e), "fatal": False})
 
 
-@socketio.on("save_window_title")
-def on_save_window_title(data):
-    """data = {server: "cz1", window_title: "Forge of Empires"}"""
+@socketio.on("save_tab_url")
+def on_save_tab_url(data):
+    """data = {server: "cz1", tab_url: "cz1.forgeofempires"}"""
     sid = data.get("server")
     if not sid or sid not in SERVER_IDS:
         return
     try:
-        config_state["servers"][sid]["window_title"] = str(data.get("window_title", "")).strip()
+        config_state["servers"][sid]["tab_url"] = str(data.get("tab_url", "")).strip()
         save_config(config_state)
         if manager:
             manager.reload_config(config_state)
@@ -215,24 +194,20 @@ def on_save_window_title(data):
         emit("error", {"message": str(e), "fatal": False})
 
 
-@socketio.on("list_windows")
-def on_list_windows(data):
-    """Return all visible windows whose title matches the search string."""
-    search = data.get("search", "")
+@socketio.on("list_tabs")
+def on_list_tabs(data):
+    """Return open browser tabs from CDP."""
+    cdp_port = config_state.get("global", {}).get("cdp_port", 9222)
     try:
-        from automation.capture import list_windows
-        windows = list_windows(search)
-        emit("windows_list", {"windows": windows})
+        from automation.cdp import list_tabs
+        tabs = list_tabs(cdp_port)
+        emit("tabs_list", {"tabs": [{"url": t.get("url",""), "title": t.get("title","")} for t in tabs]})
     except Exception as e:
-        emit("windows_list", {"windows": [], "error": str(e)})
+        emit("tabs_list", {"tabs": [], "error": str(e)})
 
 
 @socketio.on("save_regions")
 def on_save_regions(data):
-    """
-    Regions are now in window client-area coordinates (relative to top-left of the window).
-    data = {server, regions: {key: {x,y,w,h}, ...}}
-    """
     sid = data.get("server")
     if not sid or sid not in SERVER_IDS:
         emit("error", {"message": f"Unknown server: {sid}", "fatal": False})
@@ -259,35 +234,46 @@ def on_save_regions(data):
 
 @socketio.on("request_screenshot")
 def on_request_screenshot(data):
-    """Capture the game window using PrintWindow (works in background)."""
+    """Screenshot via CDP — works even on background tabs."""
     sid = data.get("server")
     if not sid or sid not in SERVER_IDS:
         return
     try:
-        from automation.capture import find_window, capture_window
-        import numpy as np
+        from automation.cdp import find_tab, CdpSession
         from PIL import Image
-        import io
+        from io import BytesIO
+        import numpy as np
 
-        window_title = config_state["servers"][sid].get("window_title", "")
-        if not window_title:
-            emit("error", {"message": "Nastav název okna a ulož ho před pořízením screenshotu.", "fatal": False})
+        cdp_port = config_state.get("global", {}).get("cdp_port", 9222)
+        tab_url  = config_state["servers"][sid].get("tab_url", "")
+
+        if not tab_url:
+            emit("error", {"message": "Nastav URL tabu a ulož ho před screenshotem.", "fatal": False})
             return
 
-        hwnd = find_window(window_title)
-        if hwnd is None:
-            emit("error", {"message": f"Okno '{window_title}' nenalezeno. Zkontroluj název.", "fatal": False})
+        tab = find_tab(tab_url, cdp_port)
+        if tab is None:
+            emit("error", {
+                "message": (
+                    f"Tab s URL '{tab_url}' nenalezen.\n"
+                    f"Spusť Chrome s přepínačem:\n"
+                    f"--remote-debugging-port={cdp_port}"
+                ),
+                "fatal": False,
+            })
             return
 
-        img_bgr = capture_window(hwnd)
-        if img_bgr is None:
-            emit("error", {"message": "Zachycení okna selhalo.", "fatal": False})
+        session = CdpSession(tab)
+        session.connect()
+        png = session.screenshot_png()
+        session.close()
+
+        if png is None:
+            emit("error", {"message": "Screenshot selhal.", "fatal": False})
             return
 
-        img_rgb = img_bgr[:, :, ::-1]
-        pil_img = Image.fromarray(img_rgb)
-
-        buf = io.BytesIO()
+        pil_img = Image.open(BytesIO(png))
+        buf = BytesIO()
         pil_img.save(buf, format="PNG")
         b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
@@ -301,8 +287,6 @@ def on_request_screenshot(data):
         emit("error", {"message": f"Screenshot selhal: {e}", "fatal": False})
 
 
-# ---------------------------------------------------------------------------
-# Main
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     PORT = 9000

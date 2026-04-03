@@ -310,6 +310,8 @@ header h1 {
 }
 .win-item:last-child { border-bottom: none; }
 .win-item:hover { background: var(--border); }
+.tab-title { display: block; font-weight: 600; color: var(--text); }
+.tab-url   { display: block; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* last error */
 .error-msg {

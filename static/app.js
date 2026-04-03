@@ -113,13 +113,13 @@ function buildCard(srv) {
     <div class="card-calibration">
       <div class="calib-title">Kalibrace oblastí</div>
 
-      <!-- Window title -->
+      <!-- Tab URL -->
       <div class="win-title-row">
         <label class="win-title-label">
-          Název okna
-          <input type="text" class="win-title-input" placeholder="např. cz1 nebo Forge of Empires">
+          URL tabu
+          <input type="text" class="win-title-input" placeholder="např. cz1.forgeofempires">
         </label>
-        <button class="btn btn-find-windows" title="Najít okna">🔍</button>
+        <button class="btn btn-find-windows" title="Zobrazit otevřené taby">🔍</button>
         <button class="btn btn-save-win-title">💾</button>
       </div>
       <div class="windows-list" style="display:none"></div>
@@ -160,36 +160,37 @@ function bindCardEvents(card, sid) {
   $('.btn-start').addEventListener('click', () => socket.emit('start_server', { server: sid }));
   $('.btn-stop').addEventListener('click',  () => socket.emit('stop_server',  { server: sid }));
 
-  // Save window title
+  // Save tab URL
   $('.btn-save-win-title').addEventListener('click', () => {
-    const title = $('.win-title-input').value.trim();
-    socket.emit('save_window_title', { server: sid, window_title: title });
+    const url = $('.win-title-input').value.trim();
+    socket.emit('save_tab_url', { server: sid, tab_url: url });
   });
 
-  // Find windows button — lists all windows matching typed text
+  // List open tabs from CDP
   $('.btn-find-windows').addEventListener('click', () => {
-    const search = $('.win-title-input').value.trim();
     const listEl = $('.windows-list');
-    listEl.innerHTML = '<em>Hledám…</em>';
+    listEl.innerHTML = '<em>Načítám taby z Chrome…</em>';
     listEl.style.display = '';
-    socket.emit('list_windows', { search });
+    socket.emit('list_tabs', {});
 
-    // One-time listener scoped to this card
-    socket.once('windows_list', (data) => {
+    socket.once('tabs_list', (data) => {
       if (data.error) {
-        listEl.innerHTML = `<span class="err">${data.error}</span>`;
+        listEl.innerHTML = `<span class="err">${data.error}<br>Spusť Chrome s: --remote-debugging-port=9222</span>`;
         return;
       }
-      if (!data.windows.length) {
-        listEl.innerHTML = '<em>Žádná okna nenalezena.</em>';
+      if (!data.tabs.length) {
+        listEl.innerHTML = '<em>Žádné taby nenalezeny. Spusť Chrome s --remote-debugging-port=9222</em>';
         return;
       }
-      listEl.innerHTML = data.windows.map(w =>
-        `<div class="win-item" data-title="${escHtml(w.title)}">${escHtml(w.title)}</div>`
+      listEl.innerHTML = data.tabs.map(t =>
+        `<div class="win-item" data-url="${escHtml(t.url)}">
+          <span class="tab-title">${escHtml(t.title)}</span>
+          <span class="tab-url">${escHtml(t.url)}</span>
+        </div>`
       ).join('');
       listEl.querySelectorAll('.win-item').forEach(item => {
         item.addEventListener('click', () => {
-          $('.win-title-input').value = item.dataset.title;
+          $('.win-title-input').value = item.dataset.url;
           listEl.style.display = 'none';
         });
       });
@@ -403,7 +404,7 @@ function applyFullConfig(cfg) {
     $('.cfg-max-oslabeni').value       = srv.max_oslabeni        ?? 100;
     $('.cfg-click-interval').value     = srv.click_interval_ms   ?? 50;
     $('.cfg-r-every').value            = srv.r_key_every_n_clicks ?? 5;
-    $('.win-title-input').value        = srv.window_title         ?? '';
+    $('.win-title-input').value        = srv.tab_url               ?? '';
   }
 }
 
