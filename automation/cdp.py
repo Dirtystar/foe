@@ -130,6 +130,14 @@ class CdpSession:
             })
 
     def key_press(self, key: str) -> None:
-        """Press and release a key (e.g. 'r', 'Enter')."""
-        for event_type in ("keyDown", "keyUp"):
-            self._send("Input.dispatchKeyEvent", {"type": event_type, "key": key})
+        """
+        Press and release a key in the tab via CDP.
+        For printable characters also sends a 'char' event so the game registers it.
+        """
+        code = f"Key{key.upper()}" if len(key) == 1 else key
+        base = {"key": key, "code": code}
+        self._send("Input.dispatchKeyEvent", {"type": "keyDown", **base})
+        if len(key) == 1:
+            # Printable character — game needs the char event to register keystrokes
+            self._send("Input.dispatchKeyEvent", {"type": "char", "text": key})
+        self._send("Input.dispatchKeyEvent", {"type": "keyUp", **base})
