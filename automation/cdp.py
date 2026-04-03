@@ -22,8 +22,11 @@ import websocket   # websocket-client
 def list_tabs(cdp_port: int = 9222) -> list[dict]:
     """Return all open tabs from the CDP JSON endpoint."""
     try:
-        resp = requests.get(f"http://localhost:{cdp_port}/json", timeout=3)
-        return [t for t in resp.json() if t.get("type") == "page"]
+        # Use 127.0.0.1 explicitly — on Windows 'localhost' may resolve to ::1
+        resp = requests.get(f"http://127.0.0.1:{cdp_port}/json", timeout=3)
+        tabs = [t for t in resp.json() if t.get("type") == "page"]
+        print(f"CDP list_tabs: found {len(tabs)} tabs on port {cdp_port}")
+        return tabs
     except Exception as e:
         print(f"CDP list_tabs error: {e}")
         return []
@@ -31,9 +34,11 @@ def list_tabs(cdp_port: int = 9222) -> list[dict]:
 
 def find_tab(url_fragment: str, cdp_port: int = 9222) -> dict | None:
     """Find the first tab whose URL contains url_fragment (case-insensitive)."""
-    for tab in list_tabs(cdp_port):
+    tabs = list_tabs(cdp_port)
+    for tab in tabs:
         if url_fragment.lower() in tab.get("url", "").lower():
             return tab
+    print(f"CDP find_tab: no tab matching '{url_fragment}' among {[t.get('url') for t in tabs]}")
     return None
 
 

@@ -198,11 +198,14 @@ def on_save_tab_url(data):
 def on_list_tabs(data):
     """Return open browser tabs from CDP."""
     cdp_port = config_state.get("global", {}).get("cdp_port", 9222)
+    print(f"[list_tabs] called, cdp_port={cdp_port}")
     try:
         from automation.cdp import list_tabs
         tabs = list_tabs(cdp_port)
+        print(f"[list_tabs] emitting {len(tabs)} tabs")
         emit("tabs_list", {"tabs": [{"url": t.get("url",""), "title": t.get("title","")} for t in tabs]})
     except Exception as e:
+        print(f"[list_tabs] exception: {e}")
         emit("tabs_list", {"tabs": [], "error": str(e)})
 
 
