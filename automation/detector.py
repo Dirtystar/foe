@@ -27,21 +27,22 @@ except ImportError:
     print("WARNING: pytesseract not installed. OCR unavailable.")
 
 
-# Wide debug range — will be narrowed once we know exact badge color
-_WHITE_LOWER  = np.array([0,   0,  150], dtype=np.uint8)
-_WHITE_UPPER  = np.array([180, 80, 255], dtype=np.uint8)
+# 20% badge — white/near-white pentagon
+_W_LOWER = np.array([0,   0,  170], dtype=np.uint8)
+_W_UPPER = np.array([180, 60, 255], dtype=np.uint8)
 
-# 60% sector badge — RED
-_RED_LOWER1   = np.array([0,   140, 120], dtype=np.uint8)
-_RED_UPPER1   = np.array([8,   255, 255], dtype=np.uint8)
-_RED_LOWER2   = np.array([172, 140, 120], dtype=np.uint8)
-_RED_UPPER2   = np.array([180, 255, 255], dtype=np.uint8)
+# 60% badge — dark orange/amber (measured HSV H≈21, S≈70, V≈130)
+_O_LOWER = np.array([14,  40,  70], dtype=np.uint8)
+_O_UPPER = np.array([30, 160, 210], dtype=np.uint8)
 
-_MIN_BADGE_AREA =  200   # px²
-_MAX_BADGE_AREA = 8000   # px²
-_MIN_SOLIDITY   = 0.50   # relaxed — pentagon contour isn't always perfect
-_ASPECT_MIN     = 0.8
-_ASPECT_MAX     = 3.0
+_MIN_BADGE_AREA =  200
+_MAX_BADGE_AREA = 8000
+_MIN_SOLIDITY   = 0.45
+_ASPECT_MIN     = 0.7
+_ASPECT_MAX     = 3.5
+
+# Morphological closing fills holes caused by dark text inside badge
+_MORPH_K = np.ones((9, 9), np.uint8)
 
 _PSM7_DIGITS = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/"
 _PSM7_INT    = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789"
@@ -125,15 +126,14 @@ class Detector:
             return []
 
         hsv  = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        # 20% badge = white pentagon
-        mask = cv2.inRange(hsv, _WHITE_LOWER, _WHITE_UPPER)
+        # 20% badge — white pentagon
+        mask = cv2.inRange(hsv, _W_LOWER, _W_UPPER)
         if attack_60:
-            # 60% badge = red pentagon
-            red = cv2.bitwise_or(
-                cv2.inRange(hsv, _RED_LOWER1, _RED_UPPER1),
-                cv2.inRange(hsv, _RED_LOWER2, _RED_UPPER2),
-            )
-            mask = cv2.bitwise_or(mask, red)
+            # 60% badge — dark orange/amber pentagon
+            mask = cv2.bitwise_or(mask, cv2.inRange(hsv, _O_LOWER, _O_UPPER))
+
+        # Morphological closing: fill holes left by dark text inside badge
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, _MORPH_K)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
