@@ -31,9 +31,13 @@ except ImportError:
 _W_LOWER = np.array([0,   0,  170], dtype=np.uint8)
 _W_UPPER = np.array([180, 60, 255], dtype=np.uint8)
 
-# 60% badge — dark orange/amber (measured HSV H≈21, S≈70, V≈130)
-_O_LOWER = np.array([14,  40,  70], dtype=np.uint8)
-_O_UPPER = np.array([30, 160, 210], dtype=np.uint8)
+# 60% badge — dark orange/amber (measured HSV H≈21, S≈66, V≈125)
+# False positives at V≈78, S≈43 are filtered by raising minimums
+_O_LOWER = np.array([14,  55, 100], dtype=np.uint8)
+_O_UPPER = np.array([30, 180, 220], dtype=np.uint8)
+
+# Deduplication radius — two badge centres closer than this are the same badge
+_DEDUP_RADIUS = 40
 
 _MIN_BADGE_AREA =  200
 _MAX_BADGE_AREA = 8000
@@ -173,6 +177,16 @@ class Detector:
             results.append((area, region["x"] + lx, region["y"] + ly))
 
         results.sort(key=lambda r: r[0], reverse=True)
+
+        # Deduplicate: if two centres are within _DEDUP_RADIUS px, keep only the larger
+        deduped: list[tuple[int, int, int]] = []
+        for entry in results:
+            _, ex, ey = entry
+            if not any(abs(ex - dx) < _DEDUP_RADIUS and abs(ey - dy) < _DEDUP_RADIUS
+                       for _, dx, dy in deduped):
+                deduped.append(entry)
+        results = deduped
+
         print(f"[{self.server_id}] contours={dbg_total} rejected: area={dbg_area} ratio={dbg_ratio} solid={dbg_solid} passed={len(results)}")
         if results:
             for area, vx, vy in results[:5]:
@@ -193,6 +207,8 @@ class Detector:
     @staticmethod
     def _preprocess(img_bgr: np.ndarray) -> np.ndarray:
         h, w  = img_bgr.shape[:2]
+        if h == 0 or w == 0:
+            return np.ones((20, 20), np.uint8) * 255
         img   = cv2.resize(img_bgr, (w * 4, h * 4), interpolation=cv2.INTER_CUBIC)
         gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
