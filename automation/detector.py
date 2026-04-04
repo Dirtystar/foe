@@ -37,8 +37,11 @@ _RED_UPPER1   = np.array([8,   255, 255], dtype=np.uint8)
 _RED_LOWER2   = np.array([172, 140, 120], dtype=np.uint8)
 _RED_UPPER2   = np.array([180, 255, 255], dtype=np.uint8)
 
-_MIN_BADGE_AREA =  300
-_MAX_BADGE_AREA = 4000
+_MIN_BADGE_AREA =  600   # px² — must be larger than individual text characters
+_MAX_BADGE_AREA = 6000   # px²
+_MIN_SOLIDITY   = 0.65   # convexHull fill ratio — pentagon is solid, text is not
+_ASPECT_MIN     = 1.0    # badge is roughly square to 1.5:1
+_ASPECT_MAX     = 2.2
 
 _PSM7_DIGITS = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/"
 _PSM7_INT    = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789"
@@ -142,12 +145,19 @@ class Detector:
             if area < _MIN_BADGE_AREA or area > _MAX_BADGE_AREA:
                 continue
 
-            # Aspect ratio filter: badge is wider than tall (ratio 1.3 – 5.0)
+            # Aspect ratio: pentagon badge is roughly 1:1 to 2.2:1
             x, y, w, h = cv2.boundingRect(cnt)
             if h == 0:
                 continue
             ratio = w / h
-            if ratio < 1.3 or ratio > 5.0:
+            if ratio < _ASPECT_MIN or ratio > _ASPECT_MAX:
+                continue
+
+            # Solidity: badge is a solid filled shape; text blobs are hollow/sparse
+            hull_area = cv2.contourArea(cv2.convexHull(cnt))
+            if hull_area < 1:
+                continue
+            if (area / hull_area) < _MIN_SOLIDITY:
                 continue
 
             M = cv2.moments(cnt)
