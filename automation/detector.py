@@ -37,11 +37,11 @@ _RED_UPPER1   = np.array([8,   255, 255], dtype=np.uint8)
 _RED_LOWER2   = np.array([172, 140, 120], dtype=np.uint8)
 _RED_UPPER2   = np.array([180, 255, 255], dtype=np.uint8)
 
-_MIN_BADGE_AREA =  600   # px² — must be larger than individual text characters
-_MAX_BADGE_AREA = 6000   # px²
-_MIN_SOLIDITY   = 0.65   # convexHull fill ratio — pentagon is solid, text is not
-_ASPECT_MIN     = 1.0    # badge is roughly square to 1.5:1
-_ASPECT_MAX     = 2.2
+_MIN_BADGE_AREA =  200   # px²
+_MAX_BADGE_AREA = 8000   # px²
+_MIN_SOLIDITY   = 0.50   # relaxed — pentagon contour isn't always perfect
+_ASPECT_MIN     = 0.8
+_ASPECT_MAX     = 3.0
 
 _PSM7_DIGITS = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/"
 _PSM7_INT    = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789"
@@ -139,25 +139,29 @@ class Detector:
 
         region = self._cfg["regions"]["sector_list"]
         results = []
+        dbg_total = len(contours)
+        dbg_area = dbg_ratio = dbg_solid = 0
 
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if area < _MIN_BADGE_AREA or area > _MAX_BADGE_AREA:
+                dbg_area += 1
                 continue
 
-            # Aspect ratio: pentagon badge is roughly 1:1 to 2.2:1
             x, y, w, h = cv2.boundingRect(cnt)
             if h == 0:
                 continue
             ratio = w / h
             if ratio < _ASPECT_MIN or ratio > _ASPECT_MAX:
+                dbg_ratio += 1
                 continue
 
-            # Solidity: badge is a solid filled shape; text blobs are hollow/sparse
             hull_area = cv2.contourArea(cv2.convexHull(cnt))
             if hull_area < 1:
                 continue
-            if (area / hull_area) < _MIN_SOLIDITY:
+            solidity = area / hull_area
+            if solidity < _MIN_SOLIDITY:
+                dbg_solid += 1
                 continue
 
             M = cv2.moments(cnt)
@@ -169,16 +173,14 @@ class Detector:
             results.append((area, region["x"] + lx, region["y"] + ly))
 
         results.sort(key=lambda r: r[0], reverse=True)
+        print(f"[{self.server_id}] contours={dbg_total} rejected: area={dbg_area} ratio={dbg_ratio} solid={dbg_solid} passed={len(results)}")
         if results:
-            # Sample HSV at each badge center for color tuning
             for area, vx, vy in results[:5]:
                 lx2 = vx - region["x"]
                 ly2 = vy - region["y"]
                 if 0 <= ly2 < img.shape[0] and 0 <= lx2 < img.shape[1]:
                     hsv_px = hsv[ly2, lx2]
-                    print(f"[{self.server_id}] badge area={int(area)} pos=({vx},{vy}) HSV={hsv_px}")
-        else:
-            print(f"[{self.server_id}] badges found: []")
+                    print(f"[{self.server_id}]  badge area={int(area)} pos=({vx},{vy}) HSV={hsv_px}")
         return [(x, y) for _, x, y in results]
 
     def find_sector_badge(self, attack_60: bool = False) -> "tuple[int, int] | None":
