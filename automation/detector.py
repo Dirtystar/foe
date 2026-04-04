@@ -29,24 +29,28 @@ except ImportError:
 
 # 20% badge — white/near-white pentagon
 _W_LOWER = np.array([0,   0,  170], dtype=np.uint8)
-_W_UPPER = np.array([180, 60, 255], dtype=np.uint8)
+_W_UPPER = np.array([180, 50, 255], dtype=np.uint8)
 
-# 60% badge — dark orange/amber (measured real samples: H 18-25, S 65-76, V 122-157)
-# False positives all had V≤107 and/or H<15 — tighten both to exclude them
+# 60% badge — orange/amber pentagon
+# Real samples: H 18-25, S 61-76, V 122-242 (varies with brightness/zoom)
+# False positives filtered by: H<15, S>100, V<110
 _O_LOWER = np.array([15,  55, 110], dtype=np.uint8)
-_O_UPPER = np.array([28, 100, 180], dtype=np.uint8)
+_O_UPPER = np.array([28, 100, 255], dtype=np.uint8)
 
 # Deduplication radius — two badge centres closer than this are the same badge
 _DEDUP_RADIUS = 40
 
-_MIN_BADGE_AREA =  200
-_MAX_BADGE_AREA = 8000
+_MIN_BADGE_AREA =  180
+_MAX_BADGE_AREA = 1500   # 9x9 closing can inflate ~500px² badge to ~1500; rejects giant UI panels
 _MIN_SOLIDITY   = 0.45
-_ASPECT_MIN     = 0.7
+_ASPECT_MIN     = 0.6
 _ASPECT_MAX     = 3.5
 
-# Morphological closing fills holes caused by dark text inside badge
-_MORPH_K = np.ones((9, 9), np.uint8)
+# Separate morphological kernels:
+#   white badge has dark text inside → needs larger closing to fill holes
+#   orange badge is solid → small closing only to merge split pixels
+_MORPH_W = np.ones((5, 5), np.uint8)
+_MORPH_O = np.ones((3, 3), np.uint8)
 
 _PSM7_DIGITS = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/"
 _PSM7_INT    = "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789"
@@ -130,14 +134,18 @@ class Detector:
             return []
 
         hsv  = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        # 20% badge — white pentagon
-        mask = cv2.inRange(hsv, _W_LOWER, _W_UPPER)
-        if attack_60:
-            # 60% badge — dark orange/amber pentagon
-            mask = cv2.bitwise_or(mask, cv2.inRange(hsv, _O_LOWER, _O_UPPER))
 
-        # Morphological closing: fill holes left by dark text inside badge
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, _MORPH_K)
+        # 20% badge — white pentagon (dark text inside → larger closing kernel)
+        w_mask = cv2.inRange(hsv, _W_LOWER, _W_UPPER)
+        w_mask = cv2.morphologyEx(w_mask, cv2.MORPH_CLOSE, _MORPH_W)
+
+        if attack_60:
+            # 60% badge — solid orange pentagon (small closing to merge split pixels)
+            o_mask = cv2.inRange(hsv, _O_LOWER, _O_UPPER)
+            o_mask = cv2.morphologyEx(o_mask, cv2.MORPH_CLOSE, _MORPH_O)
+            mask = cv2.bitwise_or(w_mask, o_mask)
+        else:
+            mask = w_mask
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
