@@ -31,10 +31,10 @@ except ImportError:
 _W_LOWER = np.array([0,   0,  170], dtype=np.uint8)
 _W_UPPER = np.array([180, 60, 255], dtype=np.uint8)
 
-# 60% badge — dark orange/amber (measured HSV H≈21, S≈66, V≈125)
-# False positives at V≈78, S≈43 are filtered by raising minimums
-_O_LOWER = np.array([14,  55, 100], dtype=np.uint8)
-_O_UPPER = np.array([30, 180, 220], dtype=np.uint8)
+# 60% badge — dark orange/amber (measured real samples: H 18-25, S 65-76, V 122-157)
+# False positives all had V≤107 and/or H<15 — tighten both to exclude them
+_O_LOWER = np.array([15,  55, 110], dtype=np.uint8)
+_O_UPPER = np.array([28, 100, 180], dtype=np.uint8)
 
 # Deduplication radius — two badge centres closer than this are the same badge
 _DEDUP_RADIUS = 40
