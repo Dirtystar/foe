@@ -39,6 +39,8 @@ _O_UPPER = np.array([28, 100, 255], dtype=np.uint8)
 
 # Deduplication radius — two badge centres closer than this are the same badge
 _DEDUP_RADIUS = 40
+# Centroid validation radius — centroid must have a raw-mask pixel within this many px
+_VAL_R = 15
 
 _MIN_BADGE_AREA =  180
 _MAX_BADGE_AREA = 1500   # 9x9 closing can inflate ~500px² badge to ~1500; rejects giant UI panels
@@ -125,85 +127,94 @@ class Detector:
         return self._crop(region)
 
     # ------------------------------------------------------------------
-    # Find all 20% (blue) sector badges on the map
-    # Returns list of (x, y) in VIEWPORT pixel coords, sorted by area desc
+    # Find sector badges on the map.
+    # When attack_60=True: orange (60%) badges are returned FIRST, then white (20%).
+    # Returns list of (x, y) in VIEWPORT pixel coords.
     # ------------------------------------------------------------------
     def find_all_sector_badges(self, attack_60: bool = False) -> "list[tuple[int, int]]":
         img = self._crop(self._cfg["regions"]["sector_list"])
         if img is None:
             return []
 
-        hsv  = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-        # 20% badge — white pentagon (dark text inside → larger closing kernel)
-        w_mask = cv2.inRange(hsv, _W_LOWER, _W_UPPER)
-        w_mask = cv2.morphologyEx(w_mask, cv2.MORPH_CLOSE, _MORPH_W)
+        # Raw (pre-closing) masks for centroid validation
+        w_raw = cv2.inRange(hsv, _W_LOWER, _W_UPPER)
+        o_raw = cv2.inRange(hsv, _O_LOWER, _O_UPPER) if attack_60 else None
 
+        # Closed masks for contour finding
+        w_closed = cv2.morphologyEx(w_raw, cv2.MORPH_CLOSE, _MORPH_W)
         if attack_60:
-            # 60% badge — solid orange pentagon (small closing to merge split pixels)
-            o_mask = cv2.inRange(hsv, _O_LOWER, _O_UPPER)
-            o_mask = cv2.morphologyEx(o_mask, cv2.MORPH_CLOSE, _MORPH_O)
-            mask = cv2.bitwise_or(w_mask, o_mask)
-        else:
-            mask = w_mask
-
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            o_closed = cv2.morphologyEx(o_raw, cv2.MORPH_CLOSE, _MORPH_O)
 
         region = self._cfg["regions"]["sector_list"]
-        results = []
-        dbg_total = len(contours)
-        dbg_area = dbg_ratio = dbg_solid = 0
+        dbg_total = dbg_area = dbg_ratio = dbg_solid = dbg_val = 0
 
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if area < _MIN_BADGE_AREA or area > _MAX_BADGE_AREA:
-                dbg_area += 1
-                continue
+        def _extract(closed_mask, raw_mask, tag: str) -> list:
+            nonlocal dbg_total, dbg_area, dbg_ratio, dbg_solid, dbg_val
+            contours, _ = cv2.findContours(closed_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            dbg_total += len(contours)
+            hits = []
+            for cnt in contours:
+                area = cv2.contourArea(cnt)
+                if area < _MIN_BADGE_AREA or area > _MAX_BADGE_AREA:
+                    dbg_area += 1
+                    continue
+                bx, by, bw, bh = cv2.boundingRect(cnt)
+                if bh == 0:
+                    continue
+                ratio = bw / bh
+                if ratio < _ASPECT_MIN or ratio > _ASPECT_MAX:
+                    dbg_ratio += 1
+                    continue
+                hull_area = cv2.contourArea(cv2.convexHull(cnt))
+                if hull_area < 1:
+                    continue
+                if area / hull_area < _MIN_SOLIDITY:
+                    dbg_solid += 1
+                    continue
+                M = cv2.moments(cnt)
+                if M["m00"] == 0:
+                    continue
+                lx = int(M["m10"] / M["m00"])
+                ly = int(M["m01"] / M["m00"])
+                # Centroid validation: reject if no raw-mask pixel within _VAL_R
+                r = _VAL_R
+                if not raw_mask[max(0,ly-r):ly+r+1, max(0,lx-r):lx+r+1].any():
+                    dbg_val += 1
+                    continue
+                hits.append((area, region["x"] + lx, region["y"] + ly, tag))
+            return hits
 
-            x, y, w, h = cv2.boundingRect(cnt)
-            if h == 0:
-                continue
-            ratio = w / h
-            if ratio < _ASPECT_MIN or ratio > _ASPECT_MAX:
-                dbg_ratio += 1
-                continue
+        # Orange badges first (higher priority), then white
+        all_hits: list[tuple[int, int, int, str]] = []
+        if attack_60:
+            all_hits += _extract(o_closed, o_raw, "60%")
+        all_hits += _extract(w_closed, w_raw, "20%")
 
-            hull_area = cv2.contourArea(cv2.convexHull(cnt))
-            if hull_area < 1:
-                continue
-            solidity = area / hull_area
-            if solidity < _MIN_SOLIDITY:
-                dbg_solid += 1
-                continue
+        # Sort each colour group by area desc, orange group already in front
+        # (stable sort keeps orange before white when areas differ)
+        orange = sorted([h for h in all_hits if h[3] == "60%"], key=lambda h: h[0], reverse=True)
+        white  = sorted([h for h in all_hits if h[3] == "20%"], key=lambda h: h[0], reverse=True)
+        results_tagged = orange + white
 
-            M = cv2.moments(cnt)
-            if M["m00"] == 0:
-                continue
-            lx = int(M["m10"] / M["m00"])
-            ly = int(M["m01"] / M["m00"])
-
-            results.append((area, region["x"] + lx, region["y"] + ly))
-
-        results.sort(key=lambda r: r[0], reverse=True)
-
-        # Deduplicate: if two centres are within _DEDUP_RADIUS px, keep only the larger
-        deduped: list[tuple[int, int, int]] = []
-        for entry in results:
-            _, ex, ey = entry
+        # Deduplicate across both groups
+        deduped: list[tuple[int, int, int, str]] = []
+        for entry in results_tagged:
+            _, ex, ey, _ = entry
             if not any(abs(ex - dx) < _DEDUP_RADIUS and abs(ey - dy) < _DEDUP_RADIUS
-                       for _, dx, dy in deduped):
+                       for _, dx, dy, _ in deduped):
                 deduped.append(entry)
-        results = deduped
 
-        print(f"[{self.server_id}] contours={dbg_total} rejected: area={dbg_area} ratio={dbg_ratio} solid={dbg_solid} passed={len(results)}")
-        if results:
-            for area, vx, vy in results[:5]:
-                lx2 = vx - region["x"]
-                ly2 = vy - region["y"]
-                if 0 <= ly2 < img.shape[0] and 0 <= lx2 < img.shape[1]:
-                    hsv_px = hsv[ly2, lx2]
-                    print(f"[{self.server_id}]  badge area={int(area)} pos=({vx},{vy}) HSV={hsv_px}")
-        return [(x, y) for _, x, y in results]
+        print(f"[{self.server_id}] contours={dbg_total} rejected: area={dbg_area} "
+              f"ratio={dbg_ratio} solid={dbg_solid} centroid={dbg_val} passed={len(deduped)}")
+        for area, vx, vy, tag in deduped[:5]:
+            lx2 = vx - region["x"]
+            ly2 = vy - region["y"]
+            if 0 <= ly2 < img.shape[0] and 0 <= lx2 < img.shape[1]:
+                hsv_px = hsv[ly2, lx2]
+                print(f"[{self.server_id}]  {tag} badge area={int(area)} pos=({vx},{vy}) HSV={hsv_px}")
+        return [(x, y) for _, x, y, _ in deduped]
 
     def find_sector_badge(self, attack_60: bool = False) -> "tuple[int, int] | None":
         badges = self.find_all_sector_badges(attack_60)
