@@ -111,6 +111,9 @@ function buildCard(srv) {
         <button class="btn success btn-start">▶ Start</button>
         <button class="btn danger  btn-stop">■ Stop</button>
       </div>
+      <div class="card-btn-row manual-fight-row">
+        <button class="btn warning btn-manual-fight" title="Bojuj na ručně otevřeném sektoru">⚔ Bojovat zde</button>
+      </div>
     </div>
 
     <!-- Calibration -->
@@ -163,6 +166,7 @@ function bindCardEvents(card, sid) {
   $('.btn-save-cfg').addEventListener('click', () => saveCfg(sid, card));
   $('.btn-start').addEventListener('click', () => socket.emit('start_server', { server: sid }));
   $('.btn-stop').addEventListener('click',  () => socket.emit('stop_server',  { server: sid }));
+  $('.btn-manual-fight').addEventListener('click', () => socket.emit('manual_fight', { server: sid }));
 
   // Save tab URL
   $('.btn-save-win-title').addEventListener('click', () => {

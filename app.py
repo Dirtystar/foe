@@ -160,6 +160,14 @@ def on_stop_all(_data):
         manager.stop_all()
 
 
+@socketio.on("manual_fight")
+def on_manual_fight(data):
+    """Start a one-shot fight on the sector dialog currently open in the tab."""
+    sid = data.get("server")
+    if sid and manager:
+        manager.manual_fight(sid)
+
+
 @socketio.on("save_config")
 def on_save_config(data):
     sid = data.get("server")

@@ -79,7 +79,10 @@ header h1 {
 .btn.danger:hover { opacity: .9; }
 .btn.success { background: var(--green); border-color: var(--green); color: #000; }
 .btn.success:hover { opacity: .9; }
+.btn.warning { background: #d97706; border-color: #d97706; color: #fff; font-weight: 600; }
+.btn.warning:hover { opacity: .9; }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
+.manual-fight-row { margin-top: 4px; }
 
 /* ---- Server grid ---- */
 #server-grid {

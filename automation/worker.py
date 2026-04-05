@@ -244,6 +244,8 @@ class WorkerManager:
         self._socketio = socketio
         self._workers: dict[str, ServerWorker] = {}
         self._lock     = threading.Lock()
+        # manual fight stop events (one per server)
+        self._manual_stops: dict[str, threading.Event] = {}
 
         broadcast = threading.Thread(target=self._broadcast_loop, daemon=True, name="status-broadcast")
         broadcast.start()
@@ -269,8 +271,68 @@ class WorkerManager:
     def stop(self, server_id: str) -> None:
         with self._lock:
             w = self._workers.get(server_id)
+            stop_ev = self._manual_stops.get(server_id)
         if w:
             w.stop()
+        if stop_ev:
+            stop_ev.set()
+
+    def manual_fight(self, server_id: str) -> None:
+        """One-shot fight on whatever sector dialog is currently open in the tab."""
+        cfg        = self._config["servers"].get(server_id, {})
+        global_cfg = self._config.get("global", {})
+        if not cfg:
+            return
+
+        # Cancel any in-progress manual fight for this server
+        with self._lock:
+            old = self._manual_stops.get(server_id)
+            if old:
+                old.set()
+            stop_ev = threading.Event()
+            self._manual_stops[server_id] = stop_ev
+
+        def _run():
+            try:
+                from .cdp import find_tab, CdpSession
+                from .clicker import click_once, fast_click_loop
+                from .detector import Detector
+
+                tab_url  = cfg.get("tab_url", server_id)
+                cdp_port = global_cfg.get("cdp_port", 9222)
+                tab = find_tab(tab_url, cdp_port)
+                if tab is None:
+                    print(f"[{server_id}] manual_fight: tab not found")
+                    return
+
+                session = CdpSession(tab)
+                session.connect()
+                det = Detector(server_id, cfg, global_cfg.get("tesseract_cmd", ""))
+                det.set_session(session)
+
+                # Click the attack button
+                atk_x, atk_y = det.find_attack_button()
+                click_once(session, atk_x, atk_y)
+                time.sleep(0.15)
+
+                # Fight loop
+                tx, ty = det.get_click_target()
+                fast_click_loop(
+                    session=session, x=tx, y=ty,
+                    interval_ms=cfg.get("click_interval_ms", 50),
+                    r_every_n=cfg.get("r_key_every_n_clicks", 5),
+                    stop_event=stop_ev,
+                    max_duration_s=_FIGHT_TIMEOUT,
+                )
+
+                session.key_press("Escape")
+                session.close()
+                print(f"[{server_id}] manual_fight: done")
+            except Exception as exc:
+                print(f"[{server_id}] manual_fight error: {exc}")
+
+        t = threading.Thread(target=_run, daemon=True, name=f"manual-{server_id}")
+        t.start()
 
     def start_all(self) -> None:
         for sid in SERVER_IDS:
@@ -280,8 +342,11 @@ class WorkerManager:
     def stop_all(self) -> None:
         with self._lock:
             workers = list(self._workers.values())
+            stops   = list(self._manual_stops.values())
         for w in workers:
             w.stop()
+        for ev in stops:
+            ev.set()
 
     def reload_config(self, new_config: dict) -> None:
         self._config = new_config
