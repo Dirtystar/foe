@@ -318,25 +318,32 @@ class WorkerManager:
 
                 det = Detector(server_id, cfg, global_cfg.get("tesseract_cmd", ""))
                 det.set_session(session)
-
-                # Click the attack button
+                tx, ty   = det.get_click_target()
                 atk_x, atk_y = det.find_attack_button()
-                click_once(session, atk_x, atk_y)
-                time.sleep(0.15)
+                interval_ms  = cfg.get("click_interval_ms", 50)
+                r_every_n    = cfg.get("r_key_every_n_clicks", 5)
 
-                # Fight loop
-                tx, ty = det.get_click_target()
-                fast_click_loop(
-                    session=session, x=tx, y=ty,
-                    interval_ms=cfg.get("click_interval_ms", 50),
-                    r_every_n=cfg.get("r_key_every_n_clicks", 5),
-                    stop_event=stop_ev,
-                    max_duration_s=_FIGHT_TIMEOUT,
-                )
+                # Loop: attack → fight → attack → fight … until Stop is pressed
+                while not stop_ev.is_set():
+                    click_once(session, atk_x, atk_y)
+                    if stop_ev.wait(timeout=0.15):
+                        break
+
+                    fast_click_loop(
+                        session=session, x=tx, y=ty,
+                        interval_ms=interval_ms,
+                        r_every_n=r_every_n,
+                        stop_event=stop_ev,
+                        max_duration_s=_FIGHT_TIMEOUT,
+                    )
+
+                    # Brief pause between fights — lets the dialog settle
+                    if stop_ev.wait(timeout=0.5):
+                        break
 
                 session.key_press("Escape")
                 session.close()
-                print(f"[{server_id}] manual_fight: done")
+                print(f"[{server_id}] manual_fight: stopped")
             except Exception as exc:
                 print(f"[{server_id}] manual_fight error: {exc}")
 
