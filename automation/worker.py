@@ -307,6 +307,15 @@ class WorkerManager:
 
                 session = CdpSession(tab)
                 session.connect()
+                # Bring Chrome to front — Chrome throttles JS in background windows,
+                # so the game won't process clicks unless it's the active window.
+                # For fully background operation start Chrome with:
+                #   --disable-background-timer-throttling
+                #   --disable-renderer-backgrounding
+                #   --disable-backgrounding-occluded-windows
+                session.bring_to_front()
+                time.sleep(0.3)   # let the window settle before clicking
+
                 det = Detector(server_id, cfg, global_cfg.get("tesseract_cmd", ""))
                 det.set_session(session)
 

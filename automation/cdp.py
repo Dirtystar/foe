@@ -141,3 +141,20 @@ class CdpSession:
             # Printable character — game needs the char event to register keystrokes
             self._send("Input.dispatchKeyEvent", {"type": "char", "text": key})
         self._send("Input.dispatchKeyEvent", {"type": "keyUp", **base})
+
+    def bring_to_front(self) -> None:
+        """
+        Bring this tab (and the Chrome window) to the foreground.
+
+        Needed because Chrome throttles JavaScript execution in background windows,
+        which prevents the game from processing CDP mouse/keyboard events.
+
+        For fully background operation without this call, start Chrome with:
+            --disable-background-timer-throttling
+            --disable-renderer-backgrounding
+            --disable-backgrounding-occluded-windows
+        """
+        try:
+            self._send("Page.bringToFront")
+        except Exception:
+            pass
