@@ -109,6 +109,14 @@ class Scheduler:
         self._jobs[profile_id] = job
         self._runs[profile_id] = 0
 
+    def remove_job(self, profile_id: str) -> None:
+        if self.running:
+            raise RuntimeError("Cannot remove jobs while the scheduler is running.")
+        if profile_id not in self._jobs:
+            raise ValueError(f"No job registered for profile '{profile_id}'.")
+        del self._jobs[profile_id]
+        del self._runs[profile_id]
+
     @property
     def profile_ids(self) -> tuple[str, ...]:
         return tuple(self._jobs)

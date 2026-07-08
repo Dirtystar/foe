@@ -133,6 +133,32 @@ def test_duplicate_profile_rejected():
         scheduler.add_job(job(FakeSession("p1")))
 
 
+def test_remove_job_deregisters_profile():
+    scheduler = Scheduler()
+    scheduler.add_job(job(FakeSession("p1")))
+    scheduler.add_job(job(FakeSession("p2")))
+
+    scheduler.remove_job("p1")
+
+    assert scheduler.profile_ids == ("p2",)
+
+
+def test_remove_unknown_job_raises():
+    with pytest.raises(ValueError, match="No job registered"):
+        Scheduler().remove_job("ghost")
+
+
+async def test_remove_job_while_running_is_rejected():
+    scheduler = Scheduler(sleep=RecordingSleep())
+    scheduler.add_job(job(FakeSession("p1")))
+    await scheduler.start()
+    try:
+        with pytest.raises(RuntimeError, match="while the scheduler is running"):
+            scheduler.remove_job("p1")
+    finally:
+        await scheduler.stop()
+
+
 @pytest.mark.parametrize("interval_ms,jitter_ms", [(0, 0), (-5, 0), (100, -1)])
 def test_job_timing_configuration_is_validated(interval_ms, jitter_ms):
     with pytest.raises(ValueError):
