@@ -58,6 +58,25 @@ async def test_start_launches_browser_and_is_idempotent(fake_playwright):
     fake_playwright.chromium.launch.assert_awaited_once_with(headless=False)
 
 
+async def test_executable_path_is_forwarded_to_launch_when_set(fake_playwright):
+    manager = PlaywrightBrowserManager(executable_path="/opt/pw/chrome")
+
+    await manager.start()
+
+    fake_playwright.chromium.launch.assert_awaited_once_with(
+        headless=False, executable_path="/opt/pw/chrome"
+    )
+
+
+async def test_executable_path_omitted_when_not_set(fake_playwright):
+    manager = PlaywrightBrowserManager()
+
+    await manager.start()
+
+    _, kwargs = fake_playwright.chromium.launch.await_args
+    assert "executable_path" not in kwargs
+
+
 async def test_open_tab_before_start_raises(fake_playwright):
     manager = PlaywrightBrowserManager()
 

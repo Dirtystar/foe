@@ -46,11 +46,16 @@ class PlaywrightBrowserManager(BrowserPort):
         max_tabs: int = 8,
         isolate_contexts_per_tab: bool = True,
         browser_engine: str = "chromium",
+        executable_path: str | None = None,
     ) -> None:
         self._headless = headless
         self._max_tabs = max_tabs
         self._isolate_contexts_per_tab = isolate_contexts_per_tab
         self._browser_engine = browser_engine
+        # Optional override for the browser binary. Needed in environments
+        # where the binary lives outside Playwright's default lookup path;
+        # None uses Playwright's own resolution.
+        self._executable_path = executable_path
 
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
@@ -65,7 +70,10 @@ class PlaywrightBrowserManager(BrowserPort):
 
         self._playwright = await async_playwright().start()
         engine = getattr(self._playwright, self._browser_engine)
-        self._browser = await engine.launch(headless=self._headless)
+        launch_kwargs: dict = {"headless": self._headless}
+        if self._executable_path:
+            launch_kwargs["executable_path"] = self._executable_path
+        self._browser = await engine.launch(**launch_kwargs)
 
         if not self._isolate_contexts_per_tab:
             self._shared_context = await self._browser.new_context()

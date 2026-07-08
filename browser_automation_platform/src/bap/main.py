@@ -16,13 +16,39 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 from pathlib import Path
 
 from bap.app.composition import create_application
 from bap.config.config_loader import load_config
+from bap.config.config_models import ApplicationConfig
 from bap.core.engine.tab_session import TickReport
 
 logger = logging.getLogger("bap")
+
+
+def _playwright_kwargs(config: ApplicationConfig) -> dict:
+    """Build create_application kwargs backed by real Playwright adapters.
+
+    Imported lazily so stub runs never require Playwright at import time.
+    """
+    from bap.adapters.actions.playwright_action_handlers import playwright_action_registry
+    from bap.adapters.browser.playwright_adapter import PlaywrightBrowserManager
+    from bap.adapters.capture.playwright_capture import PlaywrightCaptureAdapter
+
+    settings = config.settings
+    browser = PlaywrightBrowserManager(
+        headless=settings.headless,
+        max_tabs=settings.max_sessions,
+        isolate_contexts_per_tab=settings.isolate_contexts_per_tab,
+        browser_engine=settings.browser_engine,
+        executable_path=os.environ.get("PLAYWRIGHT_EXECUTABLE_PATH"),
+    )
+    return {
+        "browser": browser,
+        "capture_port": PlaywrightCaptureAdapter(),
+        "action_registry": playwright_action_registry(),
+    }
 
 
 def _log_report(report: TickReport) -> None:
@@ -35,9 +61,10 @@ def _log_report(report: TickReport) -> None:
     )
 
 
-async def run(config_path: Path, *, seconds: float | None) -> None:
+async def run(config_path: Path, *, seconds: float | None, real: bool) -> None:
     config = load_config(config_path)
-    app = create_application(config, on_report=_log_report)
+    extra = _playwright_kwargs(config) if real else {}
+    app = create_application(config, on_report=_log_report, **extra)
     profile_ids = tuple(spec.profile_id for spec in app.session_specs)
     logger.info("Starting %d profile(s): %s", len(profile_ids), profile_ids)
     await app.start()
@@ -62,12 +89,15 @@ def main() -> None:
     parser.add_argument(
         "--seconds", type=float, default=None, help="run for N seconds then stop (default: forever)"
     )
+    parser.add_argument(
+        "--real", action="store_true", help="use real Playwright adapters instead of stubs"
+    )
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
 
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
-        asyncio.run(run(Path(args.config), seconds=args.seconds))
+        asyncio.run(run(Path(args.config), seconds=args.seconds, real=args.real))
     except KeyboardInterrupt:
         logger.info("Interrupted.")
 
