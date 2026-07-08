@@ -61,9 +61,13 @@ def _log_report(report: TickReport) -> None:
     )
 
 
-async def run(config_path: Path, *, seconds: float | None, real: bool) -> None:
+async def run(config_path: Path, *, seconds: float | None, real: bool, real_vision: bool) -> None:
     config = load_config(config_path)
     extra = _playwright_kwargs(config) if real else {}
+    if real_vision:
+        from bap.adapters.vision.registry import production_analyzer_registry
+
+        extra["analyzer_registry"] = production_analyzer_registry()
     app = create_application(config, on_report=_log_report, **extra)
     profile_ids = tuple(spec.profile_id for spec in app.session_specs)
     logger.info("Starting %d profile(s): %s", len(profile_ids), profile_ids)
@@ -92,12 +96,22 @@ def main() -> None:
     parser.add_argument(
         "--real", action="store_true", help="use real Playwright adapters instead of stubs"
     )
+    parser.add_argument(
+        "--real-vision", action="store_true", help="use real OCR/template analyzers instead of stubs"
+    )
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
 
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
-        asyncio.run(run(Path(args.config), seconds=args.seconds, real=args.real))
+        asyncio.run(
+            run(
+                Path(args.config),
+                seconds=args.seconds,
+                real=args.real,
+                real_vision=args.real_vision,
+            )
+        )
     except KeyboardInterrupt:
         logger.info("Interrupted.")
 
