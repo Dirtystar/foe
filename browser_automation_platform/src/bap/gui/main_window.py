@@ -21,10 +21,12 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from bap.gui.dashboard import DashboardWidget
 from bap.gui.qt_bridge import QtReportBridge
 from bap.gui.report_view import log_line, row_for
 from bap.gui.runtime_service import RuntimeService
@@ -40,12 +42,17 @@ class MainWindow(QMainWindow):
         bridge: QtReportBridge,
         *,
         on_close: Callable[[], None] | None = None,
+        metrics_repository=None,
     ) -> None:
         super().__init__()
         self._service = service
         self._bridge = bridge
         self._on_close = on_close
         self._row_index: dict[str, int] = {}
+        # Dashboard is optional: only shown when analytics history is available.
+        self.dashboard = (
+            DashboardWidget(metrics_repository) if metrics_repository is not None else None
+        )
 
         self.setWindowTitle("Browser Automation Platform — Monitor")
         self._build_ui()
@@ -56,8 +63,9 @@ class MainWindow(QMainWindow):
     # --- construction -------------------------------------------------------
 
     def _build_ui(self) -> None:
-        central = QWidget()
-        layout = QVBoxLayout(central)
+        tabs = QTabWidget()
+        monitor = QWidget()
+        layout = QVBoxLayout(monitor)
 
         controls = QHBoxLayout()
         self.start_button = QPushButton("Start")
@@ -83,7 +91,10 @@ class MainWindow(QMainWindow):
         self.log.setMaximumBlockCount(1000)  # bounded live stream
         layout.addWidget(self.log, stretch=1)
 
-        self.setCentralWidget(central)
+        tabs.addTab(monitor, "Monitor")
+        if self.dashboard is not None:
+            tabs.addTab(self.dashboard, "Dashboard")
+        self.setCentralWidget(tabs)
 
         self.start_button.clicked.connect(self._on_start_clicked)
         self.stop_button.clicked.connect(self._on_stop_clicked)

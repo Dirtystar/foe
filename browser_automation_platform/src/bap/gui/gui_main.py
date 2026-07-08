@@ -37,8 +37,10 @@ def build_main_window(
     report_sink = bridge.on_report
     health_sink = bridge.on_health_change
     on_close = None
+    metrics_repository = None
     if store_path:
         from bap.adapters.persistence.sqlite_store import SqliteStateStore
+        from bap.app.metrics.repository import MetricsRepository
         from bap.app.persistence_sink import PersistenceSink
 
         store = SqliteStateStore(store_path)
@@ -47,7 +49,12 @@ def build_main_window(
         )
         report_sink = persistence.on_report
         health_sink = persistence.on_health
-        on_close = store.close
+        # Read-only analytics view over the same file (separate ro connection).
+        metrics_repository = MetricsRepository(store_path)
+
+        def on_close() -> None:
+            store.close()
+            metrics_repository.close()
 
     # Recovery supervisor sits in the report path: it forwards every report to
     # the (persistence ->) GUI bridge and drives recovery on transient failures.
@@ -70,7 +77,9 @@ def build_main_window(
     service.on_error = bridge.on_error
     service.start_loop()
 
-    return MainWindow(service, bridge, on_close=on_close)
+    return MainWindow(
+        service, bridge, on_close=on_close, metrics_repository=metrics_repository
+    )
 
 
 def main() -> None:
