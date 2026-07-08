@@ -118,3 +118,32 @@ class Observation:
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(f"Observation.confidence must be in [0.0, 1.0], got {self.confidence}.")
         object.__setattr__(self, "attributes", MappingProxyType(dict(self.attributes)))
+
+
+@dataclass(frozen=True)
+class PageState:
+    """Aggregated visual snapshot of one tab — the RuleEngine's sole input.
+
+    One Observation per logical field name, chosen by the Aggregator when
+    analyzers disagree. Immutable: a rule evaluation always sees a single
+    consistent snapshot, never a half-updated one.
+    """
+
+    profile_id: str
+    fields: Mapping[str, Observation] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=_utc_now)
+
+    def __post_init__(self) -> None:
+        if not self.profile_id:
+            raise ValueError("PageState.profile_id must be non-empty.")
+        object.__setattr__(self, "fields", MappingProxyType(dict(self.fields)))
+
+    def has(self, name: str) -> bool:
+        return name in self.fields
+
+    def get(self, name: str) -> Observation | None:
+        return self.fields.get(name)
+
+    def value_of(self, name: str) -> AttributeValue | None:
+        obs = self.fields.get(name)
+        return None if obs is None else obs.value
