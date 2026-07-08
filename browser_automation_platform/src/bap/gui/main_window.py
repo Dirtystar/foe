@@ -27,7 +27,7 @@ from bap.gui.qt_bridge import QtReportBridge
 from bap.gui.report_view import log_line, row_for
 from bap.gui.runtime_service import RuntimeService
 
-_COLUMNS = ["Profile", "Status", "Last tick", "Rules", "Actions", "Error"]
+_COLUMNS = ["Profile", "Status", "Last tick", "Rules", "Actions", "Error", "Timing"]
 
 
 class MainWindow(QMainWindow):
@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
         self.table.setRowCount(len(profile_ids))
         for row, profile_id in enumerate(profile_ids):
             self._row_index[profile_id] = row
-            values = [profile_id, "idle", "-", "-", "-", ""]
+            values = [profile_id, "idle", "-", "-", "-", "", "-"]
             for col, text in enumerate(values):
                 self.table.setItem(row, col, QTableWidgetItem(text))
 
@@ -123,6 +123,7 @@ class MainWindow(QMainWindow):
             row_data.rules,
             row_data.actions,
             row_data.error,
+            row_data.timing,
         ]
         for col, text in enumerate(cells):
             self.table.setItem(row, col, QTableWidgetItem(text))

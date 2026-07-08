@@ -6,7 +6,7 @@ from bap.core.engine.tab_session import TickStatus
 from bap.gui.main_window import MainWindow
 from bap.gui.qt_bridge import QtReportBridge
 
-from _reports import make_report
+from _reports import make_report, sample_metrics
 
 
 class FakeService:
@@ -101,6 +101,19 @@ def test_report_updates_the_matching_session_row(window):
     assert _cell(win, 1, 3) == "1/2 matched"
     assert _cell(win, 1, 4) == "1/1 ok"
     assert "[p2] tick #4" in win.log.toPlainText()
+
+
+def test_report_timing_is_shown_in_the_timing_column(window):
+    win, _, bridge = window
+
+    bridge.report_received.emit(
+        make_report(profile_id="p1", tick=2, metrics=sample_metrics(total=42, vision=30))
+    )
+
+    timing_col = win.table.columnCount() - 1  # Timing is the last column
+    assert win.table.horizontalHeaderItem(timing_col).text() == "Timing"
+    assert "42ms" in _cell(win, 0, timing_col)
+    assert "vis 30" in _cell(win, 0, timing_col)
 
 
 def test_report_for_unknown_profile_appends_a_new_row(window):

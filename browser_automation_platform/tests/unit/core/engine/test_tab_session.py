@@ -23,7 +23,7 @@ from bap.core.rules.models import Rule
 from bap.core.rules.rule_engine import RuleEngine, RuleStatus
 from bap.core.vision.aggregator import Aggregator
 from bap.core.vision.pipeline import AnalyzerBinding, VisionPipeline
-from bap.core.engine.tab_session import CaptureBinding, TabSession, TickStatus
+from bap.core.engine.tab_session import CaptureBinding, TabSession, TickMetrics, TickStatus
 
 TAB = TabHandle(tab_id="tab1", native=object())
 
@@ -346,3 +346,51 @@ def test_session_requires_profile_id():
             rule_engine=RuleEngine([]),
             action_executor=ActionExecutor([]),
         )
+
+
+# --- metrics (observational timing) -------------------------------------------
+
+
+async def test_completed_tick_carries_metrics_for_every_stage():
+    session = make_session(rules=[counter_rule()])
+
+    report = await session.tick()
+
+    assert report.completed
+    m = report.metrics
+    assert isinstance(m, TickMetrics)
+    for value in (m.total_ms, m.capture_ms, m.vision_ms, m.rules_ms, m.actions_ms):
+        assert value >= 0.0
+    # total covers the whole tick, so it is at least the largest single stage
+    assert m.total_ms >= max(m.capture_ms, m.vision_ms, m.rules_ms, m.actions_ms)
+
+
+async def test_metrics_present_even_when_capture_fails():
+    session = make_session(capture=FakeCapture(fail_on_call=1), rules=[counter_rule()])
+
+    report = await session.tick()
+
+    assert report.status is TickStatus.CAPTURE_FAILED
+    assert report.metrics is not None
+    # stages after capture never ran
+    assert report.metrics.rules_ms == 0.0
+    assert report.metrics.actions_ms == 0.0
+
+
+async def test_metrics_present_when_vision_fails():
+    bindings = [
+        CaptureBinding(
+            target=None,
+            pipeline=pipeline_for(
+                "header", StubAnalyzer("broken", 0, error=RuntimeError("lens cap"))
+            ),
+        )
+    ]
+    session = make_session(bindings=bindings, rules=[counter_rule()])
+
+    report = await session.tick()
+
+    assert report.status is TickStatus.VISION_FAILED
+    assert report.metrics is not None
+    assert report.metrics.capture_ms >= 0.0
+    assert report.metrics.rules_ms == 0.0  # rules never evaluated

@@ -14,6 +14,7 @@ the boundary.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -53,6 +54,23 @@ class TickStatus(Enum):
 
 
 @dataclass(frozen=True)
+class TickMetrics:
+    """Observational timing for one tick, in milliseconds.
+
+    Purely descriptive — nothing reads these to make a decision. Stage times
+    cover the stages that actually ran; a stage skipped because an earlier
+    one failed stays 0.0. `total_ms` is wall time for the whole tick, so it
+    can exceed the sum of stages (scheduling/aggregation overhead).
+    """
+
+    total_ms: float
+    capture_ms: float = 0.0
+    vision_ms: float = 0.0
+    rules_ms: float = 0.0
+    actions_ms: float = 0.0
+
+
+@dataclass(frozen=True)
 class TickReport:
     """Everything one tick produced, stage by stage.
 
@@ -74,6 +92,7 @@ class TickReport:
     evaluation: EvaluationReport | None = None
     execution: ExecutionReport | None = None
     error: Exception | None = None
+    metrics: TickMetrics | None = None
 
     @property
     def completed(self) -> bool:
@@ -122,6 +141,9 @@ class TabSession:
     async def tick(self) -> TickReport:
         self._tick_counter += 1
         started_at = _utc_now()
+        tick_start = time.perf_counter()
+        # Observational stage timers (seconds), accumulated as stages run.
+        timing = {"capture": 0.0, "vision": 0.0, "rules": 0.0, "actions": 0.0}
 
         def report(status: TickStatus, **stages) -> TickReport:
             return TickReport(
@@ -130,6 +152,13 @@ class TabSession:
                 status=status,
                 started_at=started_at,
                 finished_at=_utc_now(),
+                metrics=TickMetrics(
+                    total_ms=(time.perf_counter() - tick_start) * 1000.0,
+                    capture_ms=timing["capture"] * 1000.0,
+                    vision_ms=timing["vision"] * 1000.0,
+                    rules_ms=timing["rules"] * 1000.0,
+                    actions_ms=timing["actions"] * 1000.0,
+                ),
                 **stages,
             )
 
@@ -139,14 +168,19 @@ class TabSession:
             observations: list[Observation] = []
             failures: list[AnalyzerFailure] = []
             for binding in self._bindings:
+                t0 = time.perf_counter()
                 try:
                     image = await self._capture_port.capture(self._tab, binding.target)
                 except Exception as exc:
+                    timing["capture"] += time.perf_counter() - t0
                     return report(
                         TickStatus.CAPTURE_FAILED, captures=tuple(captures), error=exc
                     )
+                t1 = time.perf_counter()
+                timing["capture"] += t1 - t0
                 captures.append(image)
                 result = await binding.pipeline.run(image)
+                timing["vision"] += time.perf_counter() - t1
                 observations.extend(result.observations)
                 failures.extend(result.failures)
 
@@ -163,13 +197,17 @@ class TabSession:
             page_state = self._aggregator.build_page_state(self._profile_id, vision.observations)
 
             # 4. evaluate rules (engine owns cooldowns and error containment)
+            t_rules = time.perf_counter()
             evaluation = self._rule_engine.evaluate(page_state, EvaluationContext())
+            timing["rules"] += time.perf_counter() - t_rules
 
             # 5. execute matched actions (executor owns failure containment)
+            t_actions = time.perf_counter()
             execution = await self._action_executor.execute(
                 evaluation.actions,
                 ActionContext(tab=self._tab, profile_id=self._profile_id),
             )
+            timing["actions"] += time.perf_counter() - t_actions
 
             # 6. the report IS the published result; event fan-out is a
             # later adapter between the Scheduler and the EventBus.
@@ -187,4 +225,4 @@ class TabSession:
             return report(TickStatus.INTERNAL_ERROR, error=exc)
 
 
-__all__ = ["CaptureBinding", "TabSession", "TickReport", "TickStatus"]
+__all__ = ["CaptureBinding", "TabSession", "TickMetrics", "TickReport", "TickStatus"]

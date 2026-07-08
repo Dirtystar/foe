@@ -4,7 +4,7 @@ from bap.core.engine.tab_session import TickStatus
 from bap.core.vision.pipeline import AnalyzerFailure, VisionResult
 from bap.gui.report_view import log_line, row_for
 
-from _reports import make_report
+from _reports import make_report, sample_metrics
 
 
 def test_completed_report_summarizes_rules_and_actions():
@@ -56,3 +56,18 @@ def test_log_line_includes_profile_tick_and_summaries():
     assert "[tab3]" in line
     assert "tick #7" in line
     assert "rules 0/1 matched" in line
+
+
+def test_timing_summary_formats_total_and_stage_breakdown():
+    report = make_report(metrics=sample_metrics(total=42, capture=5, vision=30, rules=1, actions=6))
+
+    row = row_for(report)
+
+    assert row.timing == "42ms (cap 5/vis 30/rul 1/act 6)"
+    assert "42ms" in log_line(report)
+
+
+def test_timing_summary_is_dash_when_no_metrics():
+    report = make_report(metrics=None)
+
+    assert row_for(report).timing == "-"

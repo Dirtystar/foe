@@ -1,0 +1,54 @@
+# Realistic end-to-end profile: a "restock monitor".
+#
+# Run the full real stack with GUI monitoring:
+#   python -m bap.gui.gui_main config/demo.production.yaml --real --real-vision
+# or headless with logging:
+#   python -m bap.main config/demo.production.yaml --real --real-vision --seconds 5
+#
+# Flow: open a dashboard page -> real screenshot -> real Tesseract OCR reads
+# the stock number -> when stock is below the threshold, a real Playwright
+# click hits the restock button and the loop waits briefly. Tick timing is
+# reported through TickReport.metrics and shown in the GUI.
+#
+# The data: URL keeps it offline; point start_url at a real dashboard to use
+# it for real.
+version: 1
+
+settings:
+  max_sessions: 1
+  headless: true
+  browser_engine: chromium
+
+rule_packs:
+  restock:
+    - id: restock_when_low
+      cooldown_ms: 2000
+      condition:
+        type: all
+        conditions:
+          - type: exists
+            field: dashboard.number
+          - type: compare
+            field: dashboard.number
+            op: less_than
+            value: 20
+      actions:
+        - type: click
+          params: { selector: "#restock" }
+        - type: wait
+          params: { ms: 200 }
+
+profiles:
+  - id: warehouse
+    start_url: "data:text/html,<html><body style='font-size:48px;font-family:sans-serif'>Stock: 7 <button id='restock'>Restock</button></body></html>"
+    session:
+      interval_ms: 1000
+      jitter_ms: 200
+    rule_pack: restock
+    capture_bindings:
+      - name: dashboard
+        target: full_page
+        analyzers:
+          - type: ocr
+            settings:
+              numeric: true

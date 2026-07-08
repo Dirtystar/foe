@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from bap.core.actions.action_executor import ExecutionReport
 from bap.core.domain.models import ActionRequest
-from bap.core.engine.tab_session import TickReport, TickStatus
+from bap.core.engine.tab_session import TickMetrics, TickReport, TickStatus
 from bap.core.ports.action_handler_port import ActionResult, ActionStatus
 from bap.core.rules.rule_engine import EvaluationReport, RuleEvaluationResult, RuleStatus
 
@@ -22,6 +22,7 @@ def make_report(
     actions_total=0,
     error=None,
     vision=None,
+    metrics=None,
 ) -> TickReport:
     now = datetime.now(timezone.utc)
 
@@ -57,4 +58,11 @@ def make_report(
         execution=execution,
         error=error,
         vision=vision,
+        metrics=metrics,
+    )
+
+
+def sample_metrics(total=42.0, capture=5.0, vision=30.0, rules=1.0, actions=6.0) -> TickMetrics:
+    return TickMetrics(
+        total_ms=total, capture_ms=capture, vision_ms=vision, rules_ms=rules, actions_ms=actions
     )

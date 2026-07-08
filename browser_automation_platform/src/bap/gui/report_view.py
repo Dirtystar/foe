@@ -20,6 +20,7 @@ class SessionRow:
     rules: str
     actions: str
     error: str
+    timing: str
 
 
 def _rules_summary(report: TickReport) -> str:
@@ -49,6 +50,17 @@ def _error_summary(report: TickReport) -> str:
     return ""
 
 
+def _timing_summary(report: TickReport) -> str:
+    m = report.metrics
+    if m is None:
+        return "-"
+    return (
+        f"{m.total_ms:.0f}ms "
+        f"(cap {m.capture_ms:.0f}/vis {m.vision_ms:.0f}/"
+        f"rul {m.rules_ms:.0f}/act {m.actions_ms:.0f})"
+    )
+
+
 def row_for(report: TickReport) -> SessionRow:
     return SessionRow(
         profile_id=report.profile_id,
@@ -57,6 +69,7 @@ def row_for(report: TickReport) -> SessionRow:
         rules=_rules_summary(report),
         actions=_actions_summary(report),
         error=_error_summary(report),
+        timing=_timing_summary(report),
     )
 
 
@@ -64,7 +77,7 @@ def log_line(report: TickReport) -> str:
     row = row_for(report)
     base = (
         f"[{row.profile_id}] tick #{row.last_tick} -> {row.status} "
-        f"| rules {row.rules} | actions {row.actions}"
+        f"| rules {row.rules} | actions {row.actions} | {row.timing}"
     )
     return f"{base} | {row.error}" if row.error else base
 

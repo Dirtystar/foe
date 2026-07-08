@@ -52,12 +52,14 @@ def _playwright_kwargs(config: ApplicationConfig) -> dict:
 
 
 def _log_report(report: TickReport) -> None:
+    timing = f" {report.metrics.total_ms:.0f}ms" if report.metrics else ""
     logger.info(
-        "tick %s#%d -> %s (%d actions)",
+        "tick %s#%d -> %s (%d actions)%s",
         report.profile_id,
         report.tick_number,
         report.status.value,
         len(report.execution.results) if report.execution else 0,
+        timing,
     )
 
 
