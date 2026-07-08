@@ -27,7 +27,8 @@ from bap.gui.qt_bridge import QtReportBridge
 from bap.gui.report_view import log_line, row_for
 from bap.gui.runtime_service import RuntimeService
 
-_COLUMNS = ["Profile", "Status", "Last tick", "Rules", "Actions", "Error", "Timing"]
+_COLUMNS = ["Profile", "Status", "Last tick", "Rules", "Actions", "Error", "Timing", "Health"]
+_HEALTH_COL = _COLUMNS.index("Health")
 
 
 class MainWindow(QMainWindow):
@@ -83,7 +84,7 @@ class MainWindow(QMainWindow):
         self.table.setRowCount(len(profile_ids))
         for row, profile_id in enumerate(profile_ids):
             self._row_index[profile_id] = row
-            values = [profile_id, "idle", "-", "-", "-", "", "-"]
+            values = [profile_id, "idle", "-", "-", "-", "", "-", "healthy"]
             for col, text in enumerate(values):
                 self.table.setItem(row, col, QTableWidgetItem(text))
 
@@ -92,6 +93,7 @@ class MainWindow(QMainWindow):
         self._bridge.report_received.connect(self._on_report)
         self._bridge.state_changed.connect(self._apply_state)
         self._bridge.error_occurred.connect(self._on_error)
+        self._bridge.health_changed.connect(self._on_health)
 
     # --- control slots ------------------------------------------------------
 
@@ -127,6 +129,8 @@ class MainWindow(QMainWindow):
         ]
         for col, text in enumerate(cells):
             self.table.setItem(row, col, QTableWidgetItem(text))
+        if self.table.item(row, _HEALTH_COL) is None:  # new row: seed health, don't clobber
+            self.table.setItem(row, _HEALTH_COL, QTableWidgetItem("healthy"))
         self._append_log(log_line(report))
 
     def _apply_state(self, state: str) -> None:
@@ -135,6 +139,12 @@ class MainWindow(QMainWindow):
         self.start_button.setEnabled(not running)
         self.stop_button.setEnabled(running)
         self.tick_button.setEnabled(not running)
+
+    def _on_health(self, profile_id: str, health: str, reason: str) -> None:
+        row = self._row_index.get(profile_id)
+        if row is not None:
+            self.table.setItem(row, _HEALTH_COL, QTableWidgetItem(health))
+        self._append_log(f"HEALTH [{profile_id}] -> {health} ({reason})")
 
     def _on_error(self, message: str) -> None:
         self._append_log(f"ERROR: {message}")

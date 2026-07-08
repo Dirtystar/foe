@@ -103,6 +103,13 @@ def test_report_updates_the_matching_session_row(window):
     assert "[p2] tick #4" in win.log.toPlainText()
 
 
+def _column(win, title):
+    for col in range(win.table.columnCount()):
+        if win.table.horizontalHeaderItem(col).text() == title:
+            return col
+    raise AssertionError(f"column {title!r} not found")
+
+
 def test_report_timing_is_shown_in_the_timing_column(window):
     win, _, bridge = window
 
@@ -110,10 +117,28 @@ def test_report_timing_is_shown_in_the_timing_column(window):
         make_report(profile_id="p1", tick=2, metrics=sample_metrics(total=42, vision=30))
     )
 
-    timing_col = win.table.columnCount() - 1  # Timing is the last column
-    assert win.table.horizontalHeaderItem(timing_col).text() == "Timing"
+    timing_col = _column(win, "Timing")
     assert "42ms" in _cell(win, 0, timing_col)
     assert "vis 30" in _cell(win, 0, timing_col)
+
+
+def test_health_change_updates_health_column_and_log(window):
+    win, _, bridge = window
+
+    bridge.health_changed.emit("p2", "recovering", "recovery attempt 1 after capture_failed")
+
+    health_col = _column(win, "Health")
+    assert _cell(win, 1, health_col) == "recovering"
+    assert "HEALTH [p2] -> recovering" in win.log.toPlainText()
+
+
+def test_new_rows_seed_a_health_cell(window):
+    win, _, bridge = window
+
+    bridge.report_received.emit(make_report(profile_id="late", tick=1))
+
+    health_col = _column(win, "Health")
+    assert _cell(win, 2, health_col) == "healthy"
 
 
 def test_report_for_unknown_profile_appends_a_new_row(window):

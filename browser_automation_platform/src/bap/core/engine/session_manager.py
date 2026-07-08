@@ -138,6 +138,70 @@ class SessionManager:
         await self._with_scheduler_paused(lambda: self._scheduler.remove_job(profile_id))
         await self._browser.close_tab(entry.tab)
 
+    async def recover_session(self, profile_id: str) -> str:
+        """Recreate a session's tab and rebuild it from its stored spec.
+
+        This is the lifecycle side of recovery (the policy decision lives in
+        HealthMonitor, above this class). The flow is exactly the create flow
+        replayed on a fresh tab: deregister the old job, close the old tab
+        (best-effort — it may already be dead), open a new tab from the
+        stored spec, rebuild the session via the factory, re-register it.
+
+        Cooldowns: the factory builds a FRESH RuleEngine, so rule cooldown
+        state is intentionally reset on recovery. This is deliberate, not a
+        silent in-place reset — after a tab restart the page is in a clean
+        state, so cooldowns accumulated against the old (broken) tab no longer
+        reflect reality and must not suppress the first action on the new one.
+
+        On failure the session is dropped (so it stops ticking rather than
+        looping) and the error is raised for the caller to report.
+        """
+        entry = self._entries.get(profile_id)
+        if entry is None:
+            raise SessionNotFoundError(f"Session '{profile_id}' does not exist.")
+
+        was_running = self._scheduler.running
+        if was_running:
+            await self._scheduler.stop()
+        try:
+            try:
+                self._scheduler.remove_job(profile_id)
+            except ValueError:
+                pass  # already deregistered
+            try:
+                await self._browser.close_tab(entry.tab)
+            except Exception:
+                pass  # old tab may already be gone; recovery continues
+
+            await self._ensure_browser_started()
+            new_tab = None
+            try:
+                new_tab = await self._browser.open_tab(entry.spec.tab_profile)
+                new_session = self._session_factory(entry.spec, new_tab)
+                self._scheduler.add_job(
+                    ScheduledJob(
+                        session=new_session,
+                        interval_ms=entry.spec.interval_ms,
+                        jitter_ms=entry.spec.jitter_ms,
+                    )
+                )
+            except Exception:
+                if new_tab is not None:
+                    try:
+                        await self._browser.close_tab(new_tab)
+                    except Exception:
+                        pass
+                self._entries.pop(profile_id, None)  # drop it; do not keep ticking a broken session
+                raise
+
+            self._entries[profile_id] = _SessionEntry(
+                spec=entry.spec, tab=new_tab, session=new_session
+            )
+        finally:
+            if was_running:
+                await self._scheduler.start()
+        return profile_id
+
     async def shutdown(self) -> tuple[tuple[str, Exception], ...]:
         """Stop scheduling, close every tab, stop the browser. Best-effort:
         one session failing to close never blocks the others; failures are

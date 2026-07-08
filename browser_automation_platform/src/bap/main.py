@@ -63,14 +63,26 @@ def _log_report(report: TickReport) -> None:
     )
 
 
+def _log_health(profile_id: str, health, reason: str) -> None:
+    logger.info("health %s -> %s (%s)", profile_id, health.value, reason)
+
+
 async def run(config_path: Path, *, seconds: float | None, real: bool, real_vision: bool) -> None:
+    from bap.app.supervisor import Supervisor
+    from bap.core.engine.health import HealthMonitor
+
     config = load_config(config_path)
     extra = _playwright_kwargs(config) if real else {}
     if real_vision:
         from bap.adapters.vision.registry import production_analyzer_registry
 
         extra["analyzer_registry"] = production_analyzer_registry()
-    app = create_application(config, on_report=_log_report, **extra)
+
+    supervisor = Supervisor(
+        monitor=HealthMonitor(), sink=_log_report, on_health=_log_health
+    )
+    app = create_application(config, on_report=supervisor.on_report, **extra)
+    supervisor.session_manager = app.manager
     profile_ids = tuple(spec.profile_id for spec in app.session_specs)
     logger.info("Starting %d profile(s): %s", len(profile_ids), profile_ids)
     await app.start()

@@ -13,13 +13,15 @@ from __future__ import annotations
 
 from PySide6.QtCore import QObject, Signal
 
+from bap.core.engine.health import SessionHealth
 from bap.core.engine.tab_session import TickReport
 
 
 class QtReportBridge(QObject):
-    report_received = Signal(object)   # TickReport
-    state_changed = Signal(str)        # "running" / "stopped"
+    report_received = Signal(object)         # TickReport
+    state_changed = Signal(str)              # "running" / "stopped"
     error_occurred = Signal(str)
+    health_changed = Signal(str, str, str)   # profile_id, health, reason
 
     def on_report(self, report: TickReport) -> None:
         """Passed to create_application(on_report=...); called on the runtime
@@ -31,6 +33,11 @@ class QtReportBridge(QObject):
 
     def on_error(self, message: str) -> None:
         self.error_occurred.emit(message)
+
+    def on_health_change(self, profile_id: str, health: SessionHealth, reason: str) -> None:
+        """Wired to Supervisor.on_health; reuses the same callback->signal
+        pattern as state/error — not a new event system."""
+        self.health_changed.emit(profile_id, health.value, reason)
 
 
 __all__ = ["QtReportBridge"]

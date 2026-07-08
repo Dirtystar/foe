@@ -338,6 +338,88 @@ async def test_create_session_while_scheduler_runs_registers_and_resumes():
         await scheduler.stop()
 
 
+async def test_recover_session_recreates_tab_and_rebuilds_session():
+    manager, browser, scheduler, factory = make_manager()
+    await manager.create_session(spec("p1"))
+    original_session = factory.built["p1"]
+    original_factory_calls = len(factory.calls)
+
+    await manager.recover_session("p1")
+
+    # old tab closed, a fresh tab opened for the same profile
+    assert browser.closed_tab_ids == ["p1"]
+    assert browser.open_tab_ids == ["p1", "p1"]
+    # session rebuilt via the factory from the stored spec (fresh engine ->
+    # cooldowns reset by design)
+    assert len(factory.calls) == original_factory_calls + 1
+    assert factory.built["p1"] is not original_session
+    assert manager.profile_ids == ("p1",)
+    assert scheduler.profile_ids == ("p1",)
+
+
+async def test_recover_reuses_the_stored_spec():
+    manager, _, _, factory = make_manager()
+    s = spec("p1", interval_ms=250)
+    await manager.create_session(s)
+
+    await manager.recover_session("p1")
+
+    recover_spec, _tab = factory.calls[-1]
+    assert recover_spec is s  # same spec object reused for the rebuild
+
+
+async def test_recover_unknown_session_raises():
+    manager, _, _, _ = make_manager()
+
+    with pytest.raises(SessionNotFoundError):
+        await manager.recover_session("ghost")
+
+
+async def test_recover_does_not_disturb_other_sessions():
+    manager, _, scheduler, factory = make_manager()
+    await manager.create_session(spec("p1"))
+    await manager.create_session(spec("p2"))
+    p2_session = factory.built["p2"]
+
+    await manager.recover_session("p1")
+
+    assert manager.profile_ids == ("p1", "p2")
+    assert factory.built["p2"] is p2_session  # p2 was not rebuilt
+    # p1's job was re-registered (order may change); both remain scheduled
+    assert set(scheduler.profile_ids) == {"p1", "p2"}
+
+
+async def test_recovery_failure_drops_the_session_and_reports():
+    browser = FakeBrowser()
+    manager, _, scheduler, _ = make_manager(browser=browser)
+    await manager.create_session(spec("p1"))
+    # the recovery reopen will fail
+    browser.fail_open_for.add("p1")
+
+    with pytest.raises(BrowserManagerError):
+        await manager.recover_session("p1")
+
+    # dropped so it stops ticking rather than looping on a broken session
+    assert manager.profile_ids == ()
+    assert scheduler.profile_ids == ()
+
+
+async def test_recover_while_scheduler_running_keeps_others_ticking():
+    scheduler = Scheduler(sleep=_instant_sleep)
+    manager, _, _, factory = make_manager(scheduler=scheduler)
+    await manager.create_session(spec("p1", interval_ms=10))
+    await manager.create_session(spec("p2", interval_ms=10))
+    await scheduler.start()
+    try:
+        await manager.recover_session("p1")
+        assert scheduler.running  # resumed after recovery
+        p2 = factory.built["p2"]
+        before = p2.ticks
+        await _wait_until(lambda: p2.ticks > before)
+    finally:
+        await scheduler.stop()
+
+
 def test_no_hidden_state_between_manager_instances():
     first, _, _, _ = make_manager()
     second, _, _, _ = make_manager()

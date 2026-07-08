@@ -17,7 +17,9 @@ import sys
 from pathlib import Path
 
 from bap.app.composition import create_application
+from bap.app.supervisor import Supervisor
 from bap.config.config_loader import load_config
+from bap.core.engine.health import HealthMonitor
 from bap.gui.main_window import MainWindow
 from bap.gui.qt_bridge import QtReportBridge
 from bap.gui.runtime_service import RuntimeService
@@ -27,6 +29,14 @@ def build_main_window(config, *, real: bool = False, real_vision: bool = False):
     """Wire config -> application -> service/bridge -> window. Returns the
     window; the caller owns the Qt lifecycle."""
     bridge = QtReportBridge()
+
+    # Recovery supervisor sits in the report path: it forwards every report to
+    # the GUI bridge and drives session recovery on transient failures.
+    supervisor = Supervisor(
+        monitor=HealthMonitor(),
+        sink=bridge.on_report,
+        on_health=bridge.on_health_change,
+    )
 
     extra: dict = {}
     if real:
@@ -38,7 +48,8 @@ def build_main_window(config, *, real: bool = False, real_vision: bool = False):
 
         extra["analyzer_registry"] = production_analyzer_registry()
 
-    app = create_application(config, on_report=bridge.on_report, **extra)
+    app = create_application(config, on_report=supervisor.on_report, **extra)
+    supervisor.session_manager = app.manager  # late-bind now that the manager exists
     service = RuntimeService(app)
     service.on_state_change = bridge.on_state_change
     service.on_error = bridge.on_error
