@@ -1,29 +1,21 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any
 
-TabId = str
+from bap.core.domain.models import TabHandle, TabId, TabProfile, ViewportSize
 
-
-@dataclass(frozen=True)
-class ViewportSize:
-    width: int = 1920
-    height: int = 1080
-
-
-@dataclass(frozen=True)
-class TabProfile:
-    id: TabId
-    start_url: str | None = None
-    viewport: ViewportSize = field(default_factory=ViewportSize)
-
-
-@dataclass(frozen=True)
-class TabHandle:
-    tab_id: TabId
-    native: Any
+__all__ = [
+    "TabHandle",
+    "TabId",
+    "TabProfile",
+    "ViewportSize",
+    "BrowserManagerError",
+    "BrowserNotStartedError",
+    "DuplicateTabError",
+    "TabLimitExceededError",
+    "TabNotFoundError",
+    "BrowserPort",
+]
 
 
 class BrowserManagerError(Exception):
