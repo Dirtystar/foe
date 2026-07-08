@@ -147,3 +147,23 @@ class PageState:
     def value_of(self, name: str) -> AttributeValue | None:
         obs = self.fields.get(name)
         return None if obs is None else obs.value
+
+
+@dataclass(frozen=True)
+class ActionRequest:
+    """A command produced by the rule layer for the action layer to execute.
+
+    Pure data (Command pattern): what to do (`action_type`, a registry key
+    such as "click" or "navigate") and its parameters — never how to do it.
+    `rule_id` records provenance once the engine stamps it; requests declared
+    inline on a Rule leave it None and the engine fills it at match time.
+    """
+
+    action_type: str
+    params: Mapping[str, Any] = field(default_factory=dict)
+    rule_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.action_type:
+            raise ValueError("ActionRequest.action_type must be non-empty.")
+        object.__setattr__(self, "params", MappingProxyType(dict(self.params)))
