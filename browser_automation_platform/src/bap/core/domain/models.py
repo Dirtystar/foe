@@ -8,11 +8,21 @@ import from adapters or from third-party frameworks.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Any
 
+from bap.core.domain.enums import ObservationKind
+
 TabId = str
+
+AttributeValue = str | int | float | bool
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -75,3 +85,36 @@ class ImageData:
     format: str = "png"
     region: Rect | None = None
     selector: str | None = None
+
+
+@dataclass(frozen=True)
+class Observation:
+    """One fact a vision analyzer extracted from a captured image.
+
+    `name` is the logical field the aggregator keys PageState by (e.g.
+    "header_region.text"). `value` carries the payload: recognized text for
+    TEXT, template/object identifier for TEMPLATE_MATCH/OBJECT. `region` is
+    in the coordinate space of the analyzed image; combine with
+    ImageData.region to map back to page coordinates. Analyzer-specific
+    extras go in `attributes` (exposed read-only).
+    """
+
+    name: str
+    kind: ObservationKind
+    analyzer: str
+    value: AttributeValue | None = None
+    confidence: float = 1.0
+    region: Rect | None = None
+    attributes: Mapping[str, AttributeValue] = field(default_factory=dict)
+    observed_at: datetime = field(default_factory=_utc_now)
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("Observation.name must be a non-empty string.")
+        if not self.analyzer:
+            raise ValueError("Observation.analyzer must identify the source analyzer.")
+        if not isinstance(self.kind, ObservationKind):
+            raise ValueError(f"Observation.kind must be an ObservationKind, got {self.kind!r}.")
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(f"Observation.confidence must be in [0.0, 1.0], got {self.confidence}.")
+        object.__setattr__(self, "attributes", MappingProxyType(dict(self.attributes)))
