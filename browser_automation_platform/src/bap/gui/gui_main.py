@@ -25,18 +25,33 @@ from bap.gui.qt_bridge import QtReportBridge
 from bap.gui.runtime_service import RuntimeService
 
 
-def build_main_window(config, *, real: bool = False, real_vision: bool = False):
+def build_main_window(
+    config, *, real: bool = False, real_vision: bool = False, store_path: str | None = None
+):
     """Wire config -> application -> service/bridge -> window. Returns the
     window; the caller owns the Qt lifecycle."""
     bridge = QtReportBridge()
 
+    # Report/health flow into the GUI. Optional persistence sits between the
+    # supervisor and the bridge, storing everything without affecting the UI.
+    report_sink = bridge.on_report
+    health_sink = bridge.on_health_change
+    on_close = None
+    if store_path:
+        from bap.adapters.persistence.sqlite_store import SqliteStateStore
+        from bap.app.persistence_sink import PersistenceSink
+
+        store = SqliteStateStore(store_path)
+        persistence = PersistenceSink(
+            store, report_sink=bridge.on_report, health_sink=bridge.on_health_change
+        )
+        report_sink = persistence.on_report
+        health_sink = persistence.on_health
+        on_close = store.close
+
     # Recovery supervisor sits in the report path: it forwards every report to
-    # the GUI bridge and drives session recovery on transient failures.
-    supervisor = Supervisor(
-        monitor=HealthMonitor(),
-        sink=bridge.on_report,
-        on_health=bridge.on_health_change,
-    )
+    # the (persistence ->) GUI bridge and drives recovery on transient failures.
+    supervisor = Supervisor(monitor=HealthMonitor(), sink=report_sink, on_health=health_sink)
 
     extra: dict = {}
     if real:
@@ -55,7 +70,7 @@ def build_main_window(config, *, real: bool = False, real_vision: bool = False):
     service.on_error = bridge.on_error
     service.start_loop()
 
-    return MainWindow(service, bridge)
+    return MainWindow(service, bridge, on_close=on_close)
 
 
 def main() -> None:
@@ -63,13 +78,16 @@ def main() -> None:
     parser.add_argument("config", nargs="?", default="config/app.example.yaml")
     parser.add_argument("--real", action="store_true", help="use real Playwright adapters")
     parser.add_argument("--real-vision", action="store_true", help="use real OCR/template analyzers")
+    parser.add_argument("--store", default=None, metavar="PATH", help="persist history to SQLite")
     args = parser.parse_args()
 
     from PySide6.QtWidgets import QApplication
 
     qapp = QApplication(sys.argv)
     config = load_config(Path(args.config))
-    window = build_main_window(config, real=args.real, real_vision=args.real_vision)
+    window = build_main_window(
+        config, real=args.real, real_vision=args.real_vision, store_path=args.store
+    )
     window.resize(900, 600)
     window.show()
     sys.exit(qapp.exec())

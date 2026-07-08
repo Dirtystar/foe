@@ -9,6 +9,8 @@ bridge signals delivered via queued connections.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -32,10 +34,17 @@ _HEALTH_COL = _COLUMNS.index("Health")
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, service: RuntimeService, bridge: QtReportBridge) -> None:
+    def __init__(
+        self,
+        service: RuntimeService,
+        bridge: QtReportBridge,
+        *,
+        on_close: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__()
         self._service = service
         self._bridge = bridge
+        self._on_close = on_close
         self._row_index: dict[str, int] = {}
 
         self.setWindowTitle("Browser Automation Platform — Monitor")
@@ -156,6 +165,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
         self._service.stop_loop()
+        if self._on_close is not None:
+            self._on_close()
         super().closeEvent(event)
 
 

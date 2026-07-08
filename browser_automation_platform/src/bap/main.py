@@ -67,7 +67,14 @@ def _log_health(profile_id: str, health, reason: str) -> None:
     logger.info("health %s -> %s (%s)", profile_id, health.value, reason)
 
 
-async def run(config_path: Path, *, seconds: float | None, real: bool, real_vision: bool) -> None:
+async def run(
+    config_path: Path,
+    *,
+    seconds: float | None,
+    real: bool,
+    real_vision: bool,
+    store_path: str | None = None,
+) -> None:
     from bap.app.supervisor import Supervisor
     from bap.core.engine.health import HealthMonitor
 
@@ -78,8 +85,29 @@ async def run(config_path: Path, *, seconds: float | None, real: bool, real_visi
 
         extra["analyzer_registry"] = production_analyzer_registry()
 
+    # Optional persistence sits between the supervisor and the log sinks:
+    # supervisor -> persistence (stores) -> log. Storage failures are logged,
+    # never fatal.
+    store = None
+    report_sink = _log_report
+    health_sink = _log_health
+    if store_path:
+        from bap.adapters.persistence.sqlite_store import SqliteStateStore
+        from bap.app.persistence_sink import PersistenceSink
+
+        store = SqliteStateStore(store_path, on_error=lambda e: logger.warning("store: %s", e))
+        persistence = PersistenceSink(
+            store,
+            report_sink=_log_report,
+            health_sink=_log_health,
+            on_error=logger.warning,
+        )
+        report_sink = persistence.on_report
+        health_sink = persistence.on_health
+        logger.info("Persisting runtime history to %s", store_path)
+
     supervisor = Supervisor(
-        monitor=HealthMonitor(), sink=_log_report, on_health=_log_health
+        monitor=HealthMonitor(), sink=report_sink, on_health=health_sink
     )
     app = create_application(config, on_report=supervisor.on_report, **extra)
     supervisor.session_manager = app.manager
@@ -93,6 +121,8 @@ async def run(config_path: Path, *, seconds: float | None, real: bool, real_visi
             await asyncio.sleep(seconds)
     finally:
         errors = await app.stop()
+        if store is not None:
+            store.close()
         if errors:
             logger.warning("Shutdown completed with %d error(s): %s", len(errors), errors)
         else:
@@ -113,6 +143,9 @@ def main() -> None:
     parser.add_argument(
         "--real-vision", action="store_true", help="use real OCR/template analyzers instead of stubs"
     )
+    parser.add_argument(
+        "--store", default=None, metavar="PATH", help="persist runtime history to a SQLite file"
+    )
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
 
@@ -124,6 +157,7 @@ def main() -> None:
                 seconds=args.seconds,
                 real=args.real,
                 real_vision=args.real_vision,
+                store_path=args.store,
             )
         )
     except KeyboardInterrupt:
