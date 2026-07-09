@@ -74,6 +74,7 @@ async def run(
     real: bool,
     real_vision: bool,
     store_path: str | None = None,
+    vision_workers: int | None = None,
 ) -> None:
     from bap.app.supervisor import Supervisor
     from bap.core.engine.health import HealthMonitor
@@ -84,6 +85,10 @@ async def run(
         from bap.adapters.vision.registry import production_analyzer_registry
 
         extra["analyzer_registry"] = production_analyzer_registry()
+        # Offload real (CPU-bound) analyzers off the event loop by default.
+        extra["vision_workers"] = vision_workers or 4
+    elif vision_workers:
+        extra["vision_workers"] = vision_workers
 
     # Optional persistence sits between the supervisor and the log sinks:
     # supervisor -> persistence (stores) -> log. Storage failures are logged,
@@ -146,6 +151,10 @@ def main() -> None:
     parser.add_argument(
         "--store", default=None, metavar="PATH", help="persist runtime history to a SQLite file"
     )
+    parser.add_argument(
+        "--vision-workers", type=int, default=None, metavar="N",
+        help="offload vision analyzers to N worker threads (default 4 with --real-vision)",
+    )
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
 
@@ -158,6 +167,7 @@ def main() -> None:
                 real=args.real,
                 real_vision=args.real_vision,
                 store_path=args.store,
+                vision_workers=args.vision_workers,
             )
         )
     except KeyboardInterrupt:

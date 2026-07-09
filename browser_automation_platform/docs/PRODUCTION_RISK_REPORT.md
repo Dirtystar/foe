@@ -83,14 +83,18 @@ the vision-offload fix below.
 
 ## Identified bottlenecks / scaling risks (documented, not fixed)
 
-1. **Vision runs inline on the event loop.** `VisionPipeline` awaits analyzers
-   directly. Real OCR/template matching is CPU-bound and will block the single
-   event loop, delaying *all* sessions' ticks (the "slow session" test only
-   passes because a hung session *awaits*; a CPU-bound one would stall the
-   loop). The architecture already anticipates this: analyzers should offload
-   to a `ProcessPoolExecutor`/`run_in_executor`. **Next scaling fix.** Not done
-   here because it changes the vision execution model and needs its own
-   validation.
+1. ~~**Vision runs inline on the event loop.**~~ **FIXED.** `AsyncVisionPipeline`
+   (`adapters/vision/async_pipeline.py`) offloads analyzer execution to a shared
+   `ThreadPoolExecutor` (`create_application(vision_workers=N)`; default 4 with
+   `--real-vision`). A drop-in subclass of `VisionPipeline`, so CaptureBinding,
+   TabSession, and the analyzer port are unchanged. Measured: with one blocking
+   (20 ms) analyzer, a co-scheduled fast session ticked **20× inline vs 700×
+   offloaded** in the same 0.4 s window. Threads are joined on `Application.stop`
+   (`shutdown(wait=True)`). Note: still thread-based, so genuinely parallel
+   CPU work is bounded by the GIL for pure-Python analyzers — cv2/tesseract
+   release the GIL during native work, so real OCR/template matching parallelise;
+   a `ProcessPoolExecutor` variant is the next step only if a pure-Python
+   analyzer becomes the bottleneck.
 
 2. **Recovery pauses the whole scheduler.** Under the live scheduler,
    `recover_session` stops and restarts the entire scheduler (the Scheduler
@@ -137,8 +141,9 @@ test harness over existing ports.
 
 ## Next scaling risks (in priority order)
 
-1. Offload CPU-bound vision analyzers off the event loop (risk #1) — the real
-   throughput ceiling for multi-session real-browser operation.
+1. ~~Offload CPU-bound vision analyzers~~ — **done** (AsyncVisionPipeline). A
+   `ProcessPoolExecutor` variant remains a future option if a *pure-Python*
+   analyzer (not GIL-releasing cv2/tesseract) becomes the bottleneck.
 2. Dynamic per-job scheduler mutation to remove the recovery global-pause
    (risk #2) — needed before high-failure-density or >16-session operation.
 3. Bounded/backpressured persistence queue (risk #3) — needed only for

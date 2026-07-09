@@ -91,7 +91,11 @@ def build_capture_target(cfg: CaptureBindingConfig) -> CaptureTarget:
 
 
 def build_capture_binding(
-    profile_id: str, cfg: CaptureBindingConfig, analyzers: AnalyzerRegistry
+    profile_id: str,
+    cfg: CaptureBindingConfig,
+    analyzers: AnalyzerRegistry,
+    *,
+    executor=None,
 ) -> CaptureBinding:
     bindings = [
         AnalyzerBinding(
@@ -102,7 +106,15 @@ def build_capture_binding(
         )
         for a in cfg.analyzers
     ]
-    return CaptureBinding(target=build_capture_target(cfg), pipeline=VisionPipeline(bindings))
+    # When an executor is supplied, analyzers run off the event loop; otherwise
+    # they run inline (unchanged default behaviour).
+    if executor is not None:
+        from bap.adapters.vision.async_pipeline import AsyncVisionPipeline
+
+        pipeline = AsyncVisionPipeline(bindings, executor=executor)
+    else:
+        pipeline = VisionPipeline(bindings)
+    return CaptureBinding(target=build_capture_target(cfg), pipeline=pipeline)
 
 
 def build_tab_profile(cfg: ProfileConfig) -> TabProfile:

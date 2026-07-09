@@ -69,6 +69,7 @@ def build_main_window(
         from bap.adapters.vision.registry import production_analyzer_registry
 
         extra["analyzer_registry"] = production_analyzer_registry()
+        extra["vision_workers"] = 4  # offload CPU-bound analyzers off the loop
 
     app = create_application(config, on_report=supervisor.on_report, **extra)
     supervisor.session_manager = app.manager  # late-bind now that the manager exists

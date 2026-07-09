@@ -50,6 +50,7 @@ class Application:
     scheduler: Scheduler
     manager: SessionManager
     session_specs: tuple[SessionSpec, ...]
+    vision_executor: object = None  # ThreadPoolExecutor when vision is offloaded
 
     async def create_sessions(self) -> None:
         for spec in self.session_specs:
@@ -60,7 +61,11 @@ class Application:
         await self.scheduler.start()
 
     async def stop(self) -> tuple[tuple[str, Exception], ...]:
-        return await self.manager.shutdown()
+        errors = await self.manager.shutdown()
+        if self.vision_executor is not None:
+            # Wait for in-flight analyzers so no worker thread is leaked.
+            self.vision_executor.shutdown(wait=True)
+        return errors
 
 
 def create_application(
@@ -73,11 +78,16 @@ def create_application(
     scheduler: Scheduler | None = None,
     sleep: SleepFn | None = None,
     on_report: ReportCallback | None = None,
+    vision_workers: int | None = None,
 ) -> Application:
     """Assemble an Application from validated configuration.
 
     All collaborators are injectable (defaulting to dev stubs) so real
     adapters — or test doubles — drop in without touching this function.
+
+    `vision_workers` (>0) offloads analyzer execution to a shared
+    ThreadPoolExecutor so CPU-bound vision does not block the event loop;
+    None keeps vision inline (default).
     """
     if scheduler is not None and (on_report is not None or sleep is not None):
         # An injected scheduler carries its own on_report/sleep; accepting them
@@ -99,9 +109,19 @@ def create_application(
         name: tuple(build_rule(rule) for rule in rules)
         for name, rules in config.rule_packs.items()
     }
+    vision_executor = None
+    if vision_workers:
+        from concurrent.futures import ThreadPoolExecutor
+
+        if vision_workers <= 0:
+            raise ValueError("vision_workers must be > 0")
+        vision_executor = ThreadPoolExecutor(
+            max_workers=vision_workers, thread_name_prefix="bap-vision"
+        )
+
     bindings_by_profile = {
         profile.id: tuple(
-            build_capture_binding(profile.id, binding, analyzer_registry)
+            build_capture_binding(profile.id, binding, analyzer_registry, executor=vision_executor)
             for binding in profile.capture_bindings
         )
         for profile in config.profiles
@@ -145,6 +165,7 @@ def create_application(
         scheduler=scheduler,
         manager=manager,
         session_specs=session_specs,
+        vision_executor=vision_executor,
     )
 
 
