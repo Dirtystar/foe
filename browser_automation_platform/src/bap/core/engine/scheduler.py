@@ -96,7 +96,15 @@ class Scheduler:
         self._jobs: dict[str, ScheduledJob] = {}
         self._runs: dict[str, int] = {}
         self._tasks: dict[str, asyncio.Task] = {}
+        # Per-job cancel events: setting one stops that job at its next await
+        # boundary (the sleep) without interrupting an in-flight tick.
+        self._cancels: dict[str, asyncio.Event] = {}
         self._stop_event: asyncio.Event | None = None
+        self._started = False
+        # Serializes structural mutations (register/unregister/replace) so
+        # concurrent recoveries cannot duplicate or lose jobs. Held only around
+        # the synchronous registry edits, never around the tick-reaping await.
+        self._mutation_lock = asyncio.Lock()
 
     # --- registration ---------------------------------------------------------
 
@@ -126,7 +134,74 @@ class Scheduler:
 
     @property
     def running(self) -> bool:
-        return bool(self._tasks)
+        # A flag, not len(_tasks): unregistering the last job must not flip the
+        # scheduler to "stopped" (a later register must still spawn a task).
+        return self._started
+
+    # --- runtime job mutation (safe while ticking) -----------------------------
+
+    async def register_job(self, job: ScheduledJob) -> None:
+        """Add a job. If the scheduler is running, its loop starts immediately;
+        otherwise it starts on the next start(). Other jobs are unaffected."""
+        profile_id = job.session.profile_id
+        async with self._mutation_lock:
+            if profile_id in self._jobs:
+                raise ValueError(f"A job for profile '{profile_id}' is already registered.")
+            self._install(job)
+
+    async def unregister_job(self, profile_id: str) -> None:
+        """Remove a job. If it is mid-tick, that tick finishes normally; the
+        job then stops before its next tick. Tolerant of an already-absent
+        job so it is safe under concurrent close/recovery. Does not block the
+        event loop — other jobs keep ticking while this awaits the reap."""
+        async with self._mutation_lock:
+            task = self._detach(profile_id)
+        if task is not None:
+            await task  # waits out any in-flight tick, then the loop exits
+
+    async def replace_job(self, profile_id: str, new_job: ScheduledJob) -> None:
+        """Swap the session behind a profile without pausing the scheduler.
+
+        The old job's in-flight tick (if any) finishes normally, its loop
+        exits, and only then is the new job installed — so there is never more
+        than one task per profile and no duplicate execution. Other sessions
+        keep ticking throughout.
+        """
+        if new_job.session.profile_id != profile_id:
+            raise ValueError(
+                f"replace_job profile mismatch: '{profile_id}' vs "
+                f"'{new_job.session.profile_id}'"
+            )
+        async with self._mutation_lock:
+            old_task = self._detach(profile_id)
+        if old_task is not None:
+            await old_task  # reap the old loop (outside the lock; others tick on)
+        async with self._mutation_lock:
+            self._install(new_job)
+
+    def _detach(self, profile_id: str) -> asyncio.Task | None:
+        """Remove a job from the registry and signal its loop to stop. Returns
+        the running task (if any) for the caller to await. Synchronous and
+        atomic — no await, so it cannot interleave with another mutation."""
+        self._jobs.pop(profile_id, None)
+        self._runs.pop(profile_id, None)
+        cancel = self._cancels.pop(profile_id, None)
+        task = self._tasks.pop(profile_id, None)
+        if cancel is not None:
+            cancel.set()
+        return task
+
+    def _install(self, job: ScheduledJob) -> None:
+        """Register a job and, if the scheduler is running, spawn its loop."""
+        profile_id = job.session.profile_id
+        self._jobs[profile_id] = job
+        self._runs[profile_id] = 0
+        if self._started:
+            cancel = asyncio.Event()
+            self._cancels[profile_id] = cancel
+            self._tasks[profile_id] = asyncio.create_task(
+                self._run_job(job, cancel), name=f"scheduler:{profile_id}"
+            )
 
     # --- one-shot execution ----------------------------------------------------
 
@@ -141,35 +216,42 @@ class Scheduler:
 
     async def start(self) -> None:
         """Start one loop task per job. Idempotent."""
-        if self.running:
+        if self._started:
             return
         self._stop_event = asyncio.Event()
+        self._started = True
         for profile_id, job in self._jobs.items():
+            cancel = asyncio.Event()
+            self._cancels[profile_id] = cancel
             self._tasks[profile_id] = asyncio.create_task(
-                self._run_job(job), name=f"scheduler:{profile_id}"
+                self._run_job(job, cancel), name=f"scheduler:{profile_id}"
             )
 
     async def stop(self) -> None:
         """Graceful shutdown: in-flight ticks complete, sleeps are interrupted.
         Idempotent; the scheduler can be started again afterwards."""
-        if not self.running:
+        if not self._started:
             return
         assert self._stop_event is not None
         self._stop_event.set()
         await asyncio.gather(*self._tasks.values(), return_exceptions=True)
         self._tasks.clear()
+        self._cancels.clear()
         self._stop_event = None
+        self._started = False
 
     # --- internals -----------------------------------------------------------------
 
-    async def _run_job(self, job: ScheduledJob) -> None:
+    async def _run_job(self, job: ScheduledJob, cancel: asyncio.Event) -> None:
         assert self._stop_event is not None
-        while not self._stop_event.is_set():
-            await self._tick_job(job)
+        while not self._stop_event.is_set() and not cancel.is_set():
+            await self._tick_job(job)  # never interrupted; runs to completion
+            if self._stop_event.is_set() or cancel.is_set():
+                break  # removed/stopped during the tick: no further tick
             delay_ms = job.interval_ms + (
                 self._rng() * job.jitter_ms if job.jitter_ms else 0.0
             )
-            await self._interruptible_sleep(delay_ms / 1000.0)
+            await self._interruptible_sleep(delay_ms / 1000.0, cancel)
 
     async def _tick_job(self, job: ScheduledJob) -> JobRun:
         profile_id = job.session.profile_id
@@ -178,7 +260,10 @@ class Scheduler:
             run = JobRun(profile_id=profile_id, report=report)
         except Exception as exc:
             run = JobRun(profile_id=profile_id, error=exc)
-        self._runs[profile_id] += 1
+        # The job may have been unregistered during this tick; only record the
+        # run if it is still registered (avoids resurrecting a removed entry).
+        if profile_id in self._runs:
+            self._runs[profile_id] += 1
         if run.report is not None:
             await self._dispatch(run.report)
         return run
@@ -195,15 +280,19 @@ class Scheduler:
             # that care about their own errors handle them themselves.
             pass
 
-    async def _interruptible_sleep(self, seconds: float) -> None:
-        """Sleep, but wake immediately when stop() is called."""
+    async def _interruptible_sleep(self, seconds: float, cancel: asyncio.Event) -> None:
+        """Sleep, but wake immediately when stop() is called or this job is
+        unregistered/replaced (its cancel event fires)."""
         assert self._stop_event is not None
         sleep_task = asyncio.ensure_future(self._sleep(seconds))
         stop_task = asyncio.ensure_future(self._stop_event.wait())
+        cancel_task = asyncio.ensure_future(cancel.wait())
         try:
-            await asyncio.wait({sleep_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(
+                {sleep_task, stop_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED
+            )
         finally:
-            for task in (sleep_task, stop_task):
+            for task in (sleep_task, stop_task, cancel_task):
                 if not task.done():
                     task.cancel()
                     try:

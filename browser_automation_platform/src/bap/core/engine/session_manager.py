@@ -115,11 +115,11 @@ class SessionManager:
         tab = await self._browser.open_tab(spec.tab_profile)
         try:
             session = self._session_factory(spec, tab)
-            await self._with_scheduler_paused(
-                lambda: self._scheduler.add_job(
-                    ScheduledJob(
-                        session=session, interval_ms=spec.interval_ms, jitter_ms=spec.jitter_ms
-                    )
+            # register_job starts the loop immediately if the scheduler is
+            # running, without pausing the other sessions.
+            await self._scheduler.register_job(
+                ScheduledJob(
+                    session=session, interval_ms=spec.interval_ms, jitter_ms=spec.jitter_ms
                 )
             )
         except Exception:
@@ -131,11 +131,12 @@ class SessionManager:
 
     async def close_session(self, profile_id: str) -> None:
         """Deregister from the scheduler, close the tab, forget the session.
-        The registry is cleaned up even if closing the tab fails."""
+        The registry is cleaned up even if closing the tab fails. The other
+        sessions keep ticking — no scheduler pause."""
         entry = self._entries.pop(profile_id, None)
         if entry is None:
             raise SessionNotFoundError(f"Session '{profile_id}' does not exist.")
-        await self._with_scheduler_paused(lambda: self._scheduler.remove_job(profile_id))
+        await self._scheduler.unregister_job(profile_id)  # waits out any in-flight tick
         await self._browser.close_tab(entry.tab)
 
     async def recover_session(self, profile_id: str) -> str:
@@ -155,51 +156,57 @@ class SessionManager:
 
         On failure the session is dropped (so it stops ticking rather than
         looping) and the error is raised for the caller to report.
+
+        No scheduler stop/start: the swap uses scheduler.replace_job, so the
+        other sessions keep ticking throughout and only this profile's loop is
+        replaced. The old session's in-flight tick finishes normally on the old
+        tab before that tab is retired.
         """
         entry = self._entries.get(profile_id)
         if entry is None:
             raise SessionNotFoundError(f"Session '{profile_id}' does not exist.")
 
-        was_running = self._scheduler.running
-        if was_running:
-            await self._scheduler.stop()
+        await self._ensure_browser_started()
+        new_tab = None
         try:
+            new_tab = await self._browser.open_tab(entry.spec.tab_profile)
+            new_session = self._session_factory(entry.spec, new_tab)
+        except Exception:
+            # Could not build a replacement: stop the broken session and drop
+            # it so it does not keep looping, then re-raise for the caller.
+            if new_tab is not None:
+                try:
+                    await self._browser.close_tab(new_tab)
+                except Exception:
+                    pass
             try:
-                self._scheduler.remove_job(profile_id)
-            except ValueError:
-                pass  # already deregistered
+                await self._scheduler.unregister_job(profile_id)
+            except Exception:
+                pass
             try:
                 await self._browser.close_tab(entry.tab)
             except Exception:
-                pass  # old tab may already be gone; recovery continues
+                pass
+            self._entries.pop(profile_id, None)
+            raise
 
-            await self._ensure_browser_started()
-            new_tab = None
-            try:
-                new_tab = await self._browser.open_tab(entry.spec.tab_profile)
-                new_session = self._session_factory(entry.spec, new_tab)
-                self._scheduler.add_job(
-                    ScheduledJob(
-                        session=new_session,
-                        interval_ms=entry.spec.interval_ms,
-                        jitter_ms=entry.spec.jitter_ms,
-                    )
-                )
-            except Exception:
-                if new_tab is not None:
-                    try:
-                        await self._browser.close_tab(new_tab)
-                    except Exception:
-                        pass
-                self._entries.pop(profile_id, None)  # drop it; do not keep ticking a broken session
-                raise
-
-            self._entries[profile_id] = _SessionEntry(
-                spec=entry.spec, tab=new_tab, session=new_session
-            )
-        finally:
-            if was_running:
-                await self._scheduler.start()
+        # Swap the job in place; reaps the old loop (its last tick completes on
+        # the old tab), then starts the new session's loop.
+        await self._scheduler.replace_job(
+            profile_id,
+            ScheduledJob(
+                session=new_session,
+                interval_ms=entry.spec.interval_ms,
+                jitter_ms=entry.spec.jitter_ms,
+            ),
+        )
+        try:
+            await self._browser.close_tab(entry.tab)  # retire the old tab
+        except Exception:
+            pass
+        self._entries[profile_id] = _SessionEntry(
+            spec=entry.spec, tab=new_tab, session=new_session
+        )
         return profile_id
 
     async def shutdown(self) -> tuple[tuple[str, Exception], ...]:
@@ -234,18 +241,6 @@ class SessionManager:
         if not self._browser_started:
             await self._browser.start()
             self._browser_started = True
-
-    async def _with_scheduler_paused(self, mutate: Callable[[], None]) -> None:
-        """Apply a job-registry mutation, pausing the scheduler around it if
-        it is currently running (its registry is fixed while running)."""
-        was_running = self._scheduler.running
-        if was_running:
-            await self._scheduler.stop()
-        try:
-            mutate()
-        finally:
-            if was_running:
-                await self._scheduler.start()
 
 
 __all__ = [

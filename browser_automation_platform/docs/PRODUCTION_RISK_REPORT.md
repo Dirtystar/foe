@@ -96,13 +96,20 @@ the vision-offload fix below.
    a `ProcessPoolExecutor` variant is the next step only if a pure-Python
    analyzer becomes the bottleneck.
 
-2. **Recovery pauses the whole scheduler.** Under the live scheduler,
-   `recover_session` stops and restarts the entire scheduler (the Scheduler
-   forbids per-job mutation while running). One session's recovery briefly
-   pauses all others. Harmless at low recovery rates and ≤8 sessions, but under
-   high failure density it causes global thrash. Fix would be dynamic per-job
-   add/remove inside the Scheduler — deferred to avoid changing a validated
-   component.
+2. ~~**Recovery pauses the whole scheduler.**~~ **FIXED.** The Scheduler now
+   supports safe runtime job mutation — `register_job` / `unregister_job` /
+   `replace_job` operate while it keeps ticking, each job running in its own
+   task with a per-job cancel event so cancellation interrupts only the *sleep*,
+   never an in-flight *tick*. `SessionManager.recover_session` now uses
+   `replace_job` (no stop/start), and create/close use register/unregister — so
+   no runtime lifecycle operation pauses the scheduler. Verified: recovery
+   (single and 4-way concurrent) while running never stops the scheduler; a
+   16-session live-scheduler run with continuous periodic failures kept every
+   session ticking (15–16 ticks each, no starvation), recovered the flaky
+   sessions repeatedly, and the scheduler never paused. Invariants covered by
+   tests: in-flight tick finishes normally on removal, no second tick after
+   removal, no duplicate/lost jobs under concurrent replacement, fairness
+   preserved across replacement, failed replacement leaves a consistent state.
 
 3. ~~**Writer queue is unbounded.**~~ **FIXED.** The write buffer is now bounded
    (`SqliteStateStore(max_queue_size=N)`, default 10 000) with a non-blocking,
@@ -149,10 +156,11 @@ test harness over existing ports.
 1. ~~Offload CPU-bound vision analyzers~~ — **done** (AsyncVisionPipeline). A
    `ProcessPoolExecutor` variant remains a future option if a *pure-Python*
    analyzer (not GIL-releasing cv2/tesseract) becomes the bottleneck.
-2. Dynamic per-job scheduler mutation to remove the recovery global-pause
-   (risk #2) — needed before high-failure-density or >16-session operation.
+2. ~~Dynamic per-job scheduler mutation~~ — **done** (register/unregister/
+   replace while ticking; recovery no longer pauses the scheduler).
 3. ~~Bounded/backpressured persistence queue~~ — **done** (bounded + priority
    dropping). A future refinement could make dropped-priority thresholds
    configurable per deployment.
 4. Real-browser resource benchmarking at 8/16 tabs (RAM/CPU) — the practical
-   deployment limit, outside the deterministic harness.
+   deployment limit, outside the deterministic harness. **Now the top
+   remaining scaling item** — all three orchestration-level risks are resolved.
