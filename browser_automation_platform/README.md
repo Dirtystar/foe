@@ -22,6 +22,10 @@ playwright install chromium      # once, for --real runs
 
 Optional extras: `vision`, `gui`, `monitoring`, `plugins`, `production`, `dev`.
 
+**Windows beta users**: download the installer and follow
+**[docs/WINDOWS_BETA.md](docs/WINDOWS_BETA.md)** — no Python needed. Build details
+in [docs/PACKAGING.md](docs/PACKAGING.md).
+
 ## Commands
 
 ```bash

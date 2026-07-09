@@ -61,24 +61,45 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
+def _make_formatter(*, structured: bool, json_format: bool) -> logging.Formatter:
+    if json_format:
+        return JsonFormatter()
+    if structured:
+        return StructuredFormatter()
+    return logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+
 def configure_logging(
-    level: str = "INFO", *, structured: bool = True, json_format: bool = False, stream=None
+    level: str = "INFO",
+    *,
+    structured: bool = True,
+    json_format: bool = False,
+    stream=None,
+    log_file=None,
 ) -> None:
-    """Install a single root handler. Idempotent-friendly: replaces handlers.
+    """Install the root handlers. Idempotent-friendly: replaces handlers.
 
     `json_format=True` emits JSON lines; otherwise `structured` chooses between
     the key=value formatter (default) and a plain message-only formatter.
+    `log_file` (a path) additionally writes the same format to a rotating file —
+    used by the packaged app so a windowless GUI still leaves a log trail. When
+    omitted (dev/tests), behaviour is unchanged: one stream handler only.
     """
-    handler = logging.StreamHandler(stream)
-    if json_format:
-        formatter: logging.Formatter = JsonFormatter()
-    elif structured:
-        formatter = StructuredFormatter()
-    else:
-        formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-    handler.setFormatter(formatter)
+    formatter = _make_formatter(structured=structured, json_format=json_format)
+    handlers: list[logging.Handler] = [logging.StreamHandler(stream)]
+    if log_file is not None:
+        from logging.handlers import RotatingFileHandler
+        from pathlib import Path
+
+        path = Path(log_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(
+            RotatingFileHandler(path, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+        )
+    for handler in handlers:
+        handler.setFormatter(formatter)
     root = logging.getLogger()
-    root.handlers[:] = [handler]
+    root.handlers[:] = handlers
     root.setLevel(level)
 
 

@@ -90,6 +90,26 @@ Then draft the GitHub release from the tag using the notes in
   unavailable (Windows / non-main thread).
 - Extras pin lower bounds only — deployers should add a constraints/lockfile.
 
+## Windows beta build (packaging/windows)
+
+On Windows 10/11 x64 with Python 3.11/3.12 and Inno Setup 6 (`ISCC.exe` on PATH):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1
+```
+
+- [ ] `Output\BAP-Setup-<version>.exe` produced.
+- [ ] `Output\BAP-Setup-<version>.exe.sha256` and `Output\version.txt` produced.
+- [ ] Validate on a clean VM / fresh user profile:
+      `powershell -ExecutionPolicy Bypass -File packaging\windows\validate.ps1 -Installer .\packaging\windows\Output\BAP-Setup-<version>.exe`
+      (silent install → version → validate-config → headless run + persistence →
+      logs present → GUI launches → uninstall).
+- [ ] Manual sanity: Start Menu shortcut launches the GUI; `install-browser.ps1`
+      fetches Chromium; uninstall offers to remove `%LOCALAPPDATA%\BAP`.
+
+See `docs/PACKAGING.md` (build + tool rationale) and `docs/WINDOWS_BETA.md`
+(end-user guide).
+
 ## Upgrade notes
 
 - **From pre-release checkouts:** `--plain-logs` was replaced by

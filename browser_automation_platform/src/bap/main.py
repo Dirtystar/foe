@@ -19,6 +19,7 @@ import contextlib
 import logging
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from bap import __version__
@@ -27,8 +28,10 @@ from bap.config.config_loader import ConfigError, load_config
 from bap.config.config_models import ApplicationConfig
 from bap.core.engine.tab_session import TickReport
 from bap.core.ports.state_store_port import StorageError
+from bap.ops.crash import CrashReporter, LogTailHandler, install as install_crash
 from bap.ops.logging_setup import configure_logging, log_event
 from bap.ops.lifecycle import IdempotentShutdown, install_signal_handlers
+from bap.ops.paths import ensure_dirs, get_paths, is_frozen
 from bap.ops.status import OperationalState, OperationalStatus
 from bap.ops.validation import OperationalError, validate_startup
 
@@ -95,6 +98,7 @@ async def run(
     store_path: str | None = None,
     vision_workers: int | None = None,
     dry_run: bool = False,
+    status_observer: Callable[[str], None] | None = None,
 ) -> None:
     from bap.app.supervisor import Supervisor
     from bap.core.engine.health import HealthMonitor
@@ -104,8 +108,12 @@ async def run(
     # Operational status: starting -> ready -> (degraded) -> stopping -> stopped.
     # A single on_change fans the transition out to the logs; observe_health is
     # wired into the health callback chain below so it can derive ready<->degraded.
+    # `status_observer` (e.g. the crash reporter) also gets each status so a
+    # later crash bundle can record the last known state.
     def _on_status(status: OperationalStatus, reason: str) -> None:
         log_event(logger, "status", status=status.value, reason=reason or None)
+        if status_observer is not None:
+            status_observer(status.value)
 
     state = OperationalState(on_change=_on_status)
 
@@ -343,9 +351,35 @@ def add_run_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def setup_crash_reporting(version: str = __version__, *, set_excepthook: bool = False) -> CrashReporter:
+    """Build and install a crash reporter writing bundles under the app's data
+    directory. The log-tail handler is attached immediately (in-memory, no I/O);
+    a bundle file is written only if a crash actually occurs."""
+    tail = LogTailHandler()
+    tail.setFormatter(_make_tail_formatter())
+    reporter = CrashReporter(
+        version=version, crashes_dir=get_paths().crashes_dir, log_tail=tail
+    )
+    return install_crash(reporter, set_excepthook=set_excepthook)
+
+
+def _make_tail_formatter() -> logging.Formatter:
+    from bap.ops.logging_setup import StructuredFormatter
+
+    return StructuredFormatter()
+
+
 def execute_run(args: argparse.Namespace) -> int:
     """Configure logging and run (or dry-run). Returns a process exit code."""
-    configure_logging(args.log_level, json_format=(args.log_format == "json"))
+    # The packaged (frozen) app also writes a rotating log file, since a
+    # windowless build has no console to read. Dev/source runs are unchanged.
+    log_file = None
+    if is_frozen():
+        log_file = ensure_dirs(get_paths()).logs_dir / "bap.log"
+    configure_logging(
+        args.log_level, json_format=(args.log_format == "json"), log_file=log_file
+    )
+    reporter = setup_crash_reporting()
     config_path = resolve_config_path(args)
     try:
         asyncio.run(
@@ -357,6 +391,7 @@ def execute_run(args: argparse.Namespace) -> int:
                 store_path=args.store,
                 vision_workers=args.vision_workers,
                 dry_run=args.dry_run,
+                status_observer=reporter.set_status,
             )
         )
     except ConfigError as exc:
@@ -373,6 +408,13 @@ def execute_run(args: argparse.Namespace) -> int:
         return 2
     except KeyboardInterrupt:
         logger.info("Interrupted.")
+    except Exception as exc:  # unexpected fatal: capture a local crash bundle
+        path = reporter.write(type(exc), exc, exc.__traceback__)
+        if path is not None:
+            logger.error("Fatal error: %s — crash report written to %s", exc, path)
+        else:
+            logger.error("Fatal error: %s", exc)
+        return 1
     return 0
 
 

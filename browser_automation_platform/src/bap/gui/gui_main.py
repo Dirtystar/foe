@@ -29,17 +29,22 @@ from bap.ops.validation import validate_startup
 
 
 def build_main_window(
-    config, *, real: bool = False, real_vision: bool = False, store_path: str | None = None
+    config, *, real: bool = False, real_vision: bool = False, store_path: str | None = None,
+    status_observer=None,
 ):
     """Wire config -> application -> service/bridge -> window. Returns the
-    window; the caller owns the Qt lifecycle."""
+    window; the caller owns the Qt lifecycle. `status_observer` (e.g. a crash
+    reporter's set_status) receives each operational status as well."""
     bridge = QtReportBridge()
 
     # Operational status derives ready<->degraded from the health flow (in the
     # ops layer) and is pushed to the GUI as a signal — the window only displays it.
-    state = OperationalState(
-        on_change=lambda status, reason: bridge.on_status_change(status.value, reason)
-    )
+    def _on_status(status, reason):
+        bridge.on_status_change(status.value, reason)
+        if status_observer is not None:
+            status_observer(status.value)
+
+    state = OperationalState(on_change=_on_status)
 
     # Report/health flow into the GUI. Optional persistence sits between the
     # supervisor and the bridge, storing everything without affecting the UI.
@@ -151,6 +156,7 @@ def run_gui(
     real_vision: bool = False,
     store_path: str | None = None,
     exec_app: bool = True,
+    status_observer=None,
 ) -> int:
     """Load config, build the window, and run the Qt loop. Returns an exit code.
 
@@ -174,7 +180,8 @@ def run_gui(
     qapp = QApplication.instance() or QApplication(sys.argv)
     try:
         window = build_main_window(
-            config, real=real, real_vision=real_vision, store_path=store_path
+            config, real=real, real_vision=real_vision, store_path=store_path,
+            status_observer=status_observer,
         )
     except OperationalError as exc:
         logger.error("Startup aborted: %s", exc)
@@ -186,10 +193,26 @@ def run_gui(
     return int(qapp.exec())
 
 
+def _resolve_gui_config(explicit: str | None) -> str:
+    """Config path for the GUI. The packaged app defaults to the per-user config
+    dir (seeding it from a bundled example on first run); source runs default to
+    the repo example."""
+    if explicit:
+        return explicit
+    from bap.ops.paths import ensure_user_config, get_paths, is_frozen
+
+    if is_frozen():
+        bundled = Path(getattr(sys, "_MEIPASS", ".")) / "config" / "app.example.yaml"
+        return str(ensure_user_config(get_paths().config_dir, bundled))
+    return "config/app.example.yaml"
+
+
 def main(argv: list[str] | None = None) -> None:
     from bap import __version__
+    from bap.ops.crash import CrashReporter, LogTailHandler, install as install_crash
+    from bap.ops.logging_setup import StructuredFormatter, configure_logging
+    from bap.ops.paths import ensure_dirs, get_paths, is_frozen
 
-    logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(
         prog="bap-gui", description="Browser Automation Platform — GUI monitor"
     )
@@ -204,9 +227,26 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--store", default=None, metavar="PATH", help="persist history to SQLite")
     args = parser.parse_args(argv)
 
-    config_path = args.config_opt or args.config or "config/app.example.yaml"
+    # Packaged (windowless) build writes a rotating log file; source runs log to
+    # the console only.
+    log_file = ensure_dirs(get_paths()).logs_dir / "bap-gui.log" if is_frozen() else None
+    configure_logging("INFO", log_file=log_file)
+
+    # A GUI exception can surface through sys.excepthook (outside a caught
+    # frame), so install the excepthook variant to still capture a crash bundle.
+    tail = LogTailHandler()
+    tail.setFormatter(StructuredFormatter())
+    reporter = install_crash(
+        CrashReporter(version=__version__, crashes_dir=get_paths().crashes_dir, log_tail=tail),
+        set_excepthook=True,
+    )
+
+    config_path = _resolve_gui_config(args.config_opt or args.config)
     sys.exit(
-        run_gui(config_path, real=args.real, real_vision=args.real_vision, store_path=args.store)
+        run_gui(
+            config_path, real=args.real, real_vision=args.real_vision,
+            store_path=args.store, status_observer=reporter.set_status,
+        )
     )
 
 

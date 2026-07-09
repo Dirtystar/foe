@@ -4,3 +4,6 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+.buildvenv/
+packaging/windows/Output/
+*.spec.bak

@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Windows beta distribution
+
+Packaging and operability for a local Windows install. No runtime features, API
+additions, or architecture changes — only entry-layer/operational plumbing.
+
+### Added
+
+- **Platform-aware paths** (`bap/ops/paths.py`): config/logs/data/plugins under
+  `%LOCALAPPDATA%\BAP` on Windows, XDG on Linux, `~/Library/...` on macOS,
+  overridable with `BAP_HOME`. Source/dev runs are unchanged.
+- **Local crash bundles** (`bap/ops/crash.py`): on a fatal error, a
+  self-contained JSON bundle (timestamp, version, OS info, exception, last
+  operational status, recent log tail) is written to `data/crashes/`. No
+  telemetry — nothing leaves the machine.
+- **Packaged logging**: the frozen app also writes a rotating log file to
+  `logs/` (via `configure_logging(log_file=...)`); console-only in dev.
+- **Windows build tooling** (`packaging/windows/`): PyInstaller spec (one folder,
+  `BAP.exe` GUI + `bap.exe` CLI, embedded Python, icon, version resource),
+  Inno Setup installer (per-user, Start Menu shortcut, clean uninstall),
+  `build.ps1` (→ installer + SHA256 + `version.txt`), `install-browser.ps1`
+  (first-run Chromium), and `validate.ps1` (clean-environment smoke test).
+- **Docs**: `docs/WINDOWS_BETA.md` (install, first run, folders, troubleshooting,
+  logs, uninstall) and `docs/PACKAGING.md` (PyInstaller-vs-Nuitka rationale +
+  build).
+
+### Notes
+
+- Playwright browsers are **not** bundled (installer stays small; GUI runs on
+  stubs by default). Chromium installs on first `--real` use into
+  `data/ms-playwright` (~300–450 MB), pinned to the release's Playwright version.
+
 ## [0.1.0] — 2026-07-09
 
 First tagged release: a generic, site-agnostic visual browser automation

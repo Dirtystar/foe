@@ -107,3 +107,44 @@ def test_run_invalid_config_via_cli_exits_two(tmp_path):
     with pytest.raises(SystemExit) as exc:
         bap_main(["run", str(bad), "--dry-run"])
     assert exc.value.code == 2
+
+
+# --- crash bundle -------------------------------------------------------------
+
+
+def test_unexpected_fatal_writes_a_crash_bundle_and_exits_one(monkeypatch, tmp_path):
+    # Redirect the app tree into a temp dir so the bundle lands there.
+    monkeypatch.setenv("BAP_HOME", str(tmp_path / "home"))
+
+    async def boom(self):
+        raise RuntimeError("unexpected explosion")
+
+    # Fail during app.start(), i.e. after the STARTING status is recorded.
+    monkeypatch.setattr(Application, "start", boom)
+
+    with pytest.raises(SystemExit) as exc:
+        bap_main(["run", _DEV, "--seconds", "0"])
+    assert exc.value.code == 1
+
+    crashes = list((tmp_path / "home" / "data" / "crashes").glob("crash-*.json"))
+    assert crashes, "a crash bundle should have been written"
+    import json
+
+    data = json.loads(crashes[0].read_text())
+    assert data["exception"]["type"] == "RuntimeError"
+    assert data["exception"]["message"] == "unexpected explosion"
+    assert data["last_status"] == "starting"  # last status reached before the crash
+
+
+def test_frozen_app_writes_a_rotating_log_file(monkeypatch, tmp_path):
+    import sys
+
+    monkeypatch.setenv("BAP_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)  # simulate a bundle
+
+    with pytest.raises(SystemExit) as exc:
+        bap_main(["run", _DEV, "--seconds", "0"])
+    assert exc.value.code == 0
+
+    log_file = tmp_path / "home" / "logs" / "bap.log"
+    assert log_file.exists() and log_file.read_text(encoding="utf-8").strip()
