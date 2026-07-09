@@ -13,6 +13,7 @@ Runs on stubs by default, so it is safe without a browser or vision libs.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -143,24 +144,70 @@ def build_main_window(
     )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Browser Automation Platform — GUI monitor")
-    parser.add_argument("config", nargs="?", default="config/app.example.yaml")
+def run_gui(
+    config_path,
+    *,
+    real: bool = False,
+    real_vision: bool = False,
+    store_path: str | None = None,
+    exec_app: bool = True,
+) -> int:
+    """Load config, build the window, and run the Qt loop. Returns an exit code.
+
+    Config problems (ConfigError / OperationalError) are reported and return 2
+    without opening a window. `exec_app=False` builds and shows the window but
+    returns immediately without entering the Qt event loop — used by tests to
+    verify the entry point wires up without blocking.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    from bap.config.config_loader import ConfigError
+    from bap.ops.validation import OperationalError
+
+    logger = logging.getLogger("bap")
+    try:
+        config = load_config(Path(config_path))
+    except ConfigError as exc:
+        logger.error("Configuration error: %s", exc)
+        return 2
+
+    qapp = QApplication.instance() or QApplication(sys.argv)
+    try:
+        window = build_main_window(
+            config, real=real, real_vision=real_vision, store_path=store_path
+        )
+    except OperationalError as exc:
+        logger.error("Startup aborted: %s", exc)
+        return 2
+    window.resize(900, 600)
+    window.show()
+    if not exec_app:
+        return 0
+    return int(qapp.exec())
+
+
+def main(argv: list[str] | None = None) -> None:
+    from bap import __version__
+
+    logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    parser = argparse.ArgumentParser(
+        prog="bap-gui", description="Browser Automation Platform — GUI monitor"
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("config", nargs="?", default=None)
+    parser.add_argument(
+        "--config", dest="config_opt", default=None, metavar="PATH",
+        help="path to the YAML config (overrides the positional argument)",
+    )
     parser.add_argument("--real", action="store_true", help="use real Playwright adapters")
     parser.add_argument("--real-vision", action="store_true", help="use real OCR/template analyzers")
     parser.add_argument("--store", default=None, metavar="PATH", help="persist history to SQLite")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    from PySide6.QtWidgets import QApplication
-
-    qapp = QApplication(sys.argv)
-    config = load_config(Path(args.config))
-    window = build_main_window(
-        config, real=args.real, real_vision=args.real_vision, store_path=args.store
+    config_path = args.config_opt or args.config or "config/app.example.yaml"
+    sys.exit(
+        run_gui(config_path, real=args.real, real_vision=args.real_vision, store_path=args.store)
     )
-    window.resize(900, 600)
-    window.show()
-    sys.exit(qapp.exec())
 
 
 if __name__ == "__main__":

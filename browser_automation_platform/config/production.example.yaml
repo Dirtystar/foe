@@ -1,0 +1,81 @@
+# Production configuration template — real Playwright + real vision.
+#
+# Validate before deploying (checks schema, capacity, limits, and that every
+# analyzer/action type resolves against the real adapters + installed plugins):
+#   bap validate-config config/production.example.yaml --real --real-vision --store /var/lib/bap/history.db
+#
+# Dry-run the full assembly without launching a browser or writing anything:
+#   bap run config/production.example.yaml --real --real-vision --dry-run
+#
+# Run headless with JSON logs and persistence:
+#   bap run config/production.example.yaml --real --real-vision \
+#       --store /var/lib/bap/history.db --log-format json
+#
+# Only the built-in real types are used here (ocr, template_match, click, type,
+# navigate, wait); add your own via plugins (see docs/PLUGINS.md).
+version: 1
+
+settings:
+  max_sessions: 8
+  headless: true
+  browser_engine: chromium
+  isolate_contexts_per_tab: true
+
+  # Observational browser resource monitoring. Memory/CPU need the 'monitoring'
+  # extra (psutil); page/context counts work without it. Exceeding a limit
+  # raises resource pressure (degrade -> recover -> disable) — it never kills
+  # the browser directly. Tune the limits to your host.
+  resource_monitoring:
+    enabled: true
+    collect_every_ticks: 50
+    limits:
+      max_memory_mb: 4096
+      max_pages: 16
+
+rule_packs:
+  monitor:
+    - id: act_when_value_low
+      cooldown_ms: 3000
+      condition:
+        type: all
+        conditions:
+          - type: exists
+            field: panel.number
+          - type: compare
+            field: panel.number
+            op: less_than
+            value: 20
+      actions:
+        - type: click
+          params: { selector: "#primary-action" }
+        - type: wait
+          params: { ms: 500 }
+
+    - id: recover_on_error
+      condition:
+        type: compare
+        field: panel.template_match
+        op: equals
+        value: error_banner
+      actions:
+        - type: navigate
+          params: { url: "https://dashboard.example.com/" }
+
+profiles:
+  - id: dashboard
+    # Point this at your real target. A data: URL keeps the template offline.
+    start_url: "https://dashboard.example.com/"
+    viewport: { width: 1600, height: 900 }
+    session:
+      interval_ms: 1000
+      jitter_ms: 200
+    rule_pack: monitor
+    capture_bindings:
+      - name: panel
+        target: selector
+        selector: "#status-panel"
+        analyzers:
+          - type: ocr
+            settings: { numeric: true }
+          - type: template_match
+            settings: { template: templates/error_banner.png, threshold: 0.85 }

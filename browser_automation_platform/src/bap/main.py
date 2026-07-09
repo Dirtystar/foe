@@ -21,14 +21,17 @@ import os
 import sys
 from pathlib import Path
 
+from bap import __version__
 from bap.app.composition import create_application
-from bap.config.config_loader import load_config
+from bap.config.config_loader import ConfigError, load_config
 from bap.config.config_models import ApplicationConfig
 from bap.core.engine.tab_session import TickReport
 from bap.ops.logging_setup import configure_logging, log_event
 from bap.ops.lifecycle import IdempotentShutdown, install_signal_handlers
 from bap.ops.status import OperationalState, OperationalStatus
 from bap.ops.validation import OperationalError, validate_startup
+
+_DEFAULT_CONFIG = "config/app.example.yaml"
 
 logger = logging.getLogger("bap")
 
@@ -90,6 +93,7 @@ async def run(
     real_vision: bool,
     store_path: str | None = None,
     vision_workers: int | None = None,
+    dry_run: bool = False,
 ) -> None:
     from bap.app.supervisor import Supervisor
     from bap.core.engine.health import HealthMonitor
@@ -127,10 +131,12 @@ async def run(
     # Optional persistence sits between the supervisor and the log sinks:
     # supervisor -> persistence (stores) -> log. Storage failures are logged,
     # never fatal.
+    # A dry run validates the persistence *path* (above) but opens no store, so
+    # it makes zero writes.
     store = None
     report_sink = _log_report
     health_sink = _log_health
-    if store_path:
+    if store_path and not dry_run:
         from bap.adapters.persistence.sqlite_store import SqliteStateStore
         from bap.app.persistence_sink import PersistenceSink
 
@@ -182,9 +188,29 @@ async def run(
             rm_cfg.collect_every_ticks, rm_cfg.limits.max_memory_mb, rm_cfg.limits.max_pages,
         )
 
+    # create_application resolves every analyzer/action type (including plugins
+    # when real registries are supplied), builds the rules/bindings/handlers,
+    # and type-checks them — all without launching a browser. A dry run stops
+    # exactly here: everything is validated, nothing is started.
     app = create_application(config, on_report=top_sink, **extra)
     supervisor.session_manager = app.manager
     profile_ids = tuple(spec.profile_id for spec in app.session_specs)
+
+    if dry_run:
+        await app.stop()  # releases any vision executor; no sessions/tabs, no writes
+        log_event(
+            logger, "dry-run-ok",
+            profiles=len(profile_ids),
+            analyzers="real" if real_vision else "stub",
+            actions="real" if real else "stub",
+            store=store_path,
+        )
+        logger.info(
+            "Dry run OK: configuration valid, %d profile(s) resolved, no browser launched.",
+            len(profile_ids),
+        )
+        return
+
     logger.info("Starting %d profile(s): %s", len(profile_ids), profile_ids)
 
     stop_event = asyncio.Event()
@@ -227,10 +253,66 @@ async def run(
         await shutdown()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Browser Automation Platform")
+def _registries_for(real: bool, real_vision: bool):
+    """Resolve the analyzer/action registries a run would use for these flags.
+
+    Real flags select the production registries (which discover installed
+    plugins via entry points); otherwise the built-in dev registries. Used by
+    both the runtime and the standalone config validation so a `validate-config`
+    or `--dry-run` checks exactly what a real run would.
+    """
+    from bap.app.stubs import default_action_registry, default_analyzer_registry
+
+    if real:
+        from bap.adapters.actions.playwright_action_handlers import playwright_action_registry
+
+        actions = playwright_action_registry()
+    else:
+        actions = default_action_registry()
+
+    if real_vision:
+        from bap.adapters.vision.registry import production_analyzer_registry
+
+        analyzers = production_analyzer_registry()
+    else:
+        analyzers = default_analyzer_registry()
+    return analyzers, actions
+
+
+def validate_config(
+    config_path: Path,
+    *,
+    real: bool = False,
+    real_vision: bool = False,
+    store_path: str | None = None,
+) -> ApplicationConfig:
+    """Load and fully validate a config without launching anything.
+
+    Raises ConfigError (parse/schema) or OperationalError (operational
+    preconditions, including unknown analyzer/action types and unwritable
+    persistence path). Opens no browser and makes no persistence writes.
+    """
+    config = load_config(config_path)
+    analyzers, actions = _registries_for(real, real_vision)
+    validate_startup(
+        config, store_path=store_path, analyzer_registry=analyzers, action_registry=actions
+    )
+    return config
+
+
+def resolve_config_path(args: argparse.Namespace) -> Path:
+    return Path(getattr(args, "config_opt", None) or args.config or _DEFAULT_CONFIG)
+
+
+def add_run_arguments(parser: argparse.ArgumentParser) -> None:
+    """Register the flags shared by `bap-run` and `bap run`."""
     parser.add_argument(
-        "config", nargs="?", default="config/app.example.yaml", help="path to the YAML config"
+        "config", nargs="?", default=None,
+        help=f"path to the YAML config (default: {_DEFAULT_CONFIG})",
+    )
+    parser.add_argument(
+        "--config", dest="config_opt", default=None, metavar="PATH",
+        help="path to the YAML config (overrides the positional argument)",
     )
     parser.add_argument(
         "--seconds", type=float, default=None, help="run for N seconds then stop (default: forever)"
@@ -248,32 +330,55 @@ def main() -> None:
         "--vision-workers", type=int, default=None, metavar="N",
         help="offload vision analyzers to N worker threads (default 4 with --real-vision)",
     )
-    parser.add_argument("--log-level", default="INFO")
+    parser.add_argument("--log-level", default="INFO", help="logging level (default: INFO)")
     parser.add_argument(
-        "--plain-logs", action="store_true",
-        help="disable structured key=value fields on log lines",
+        "--log-format", choices=["plain", "json"], default="plain",
+        help="log output format: human-readable key=value (plain) or JSON lines (json)",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="validate config, resolve plugins and action/analyzer types, then exit "
+        "without launching a browser or writing persistence",
+    )
 
-    configure_logging(args.log_level, structured=not args.plain_logs)
+
+def execute_run(args: argparse.Namespace) -> int:
+    """Configure logging and run (or dry-run). Returns a process exit code."""
+    configure_logging(args.log_level, json_format=(args.log_format == "json"))
+    config_path = resolve_config_path(args)
     try:
         asyncio.run(
             run(
-                Path(args.config),
+                config_path,
                 seconds=args.seconds,
                 real=args.real,
                 real_vision=args.real_vision,
                 store_path=args.store,
                 vision_workers=args.vision_workers,
+                dry_run=args.dry_run,
             )
         )
+    except ConfigError as exc:
+        logger.error("Configuration error: %s", exc)
+        return 2
     except OperationalError as exc:
         # Startup precondition failed: report the actionable message and exit
         # non-zero without a traceback.
         logger.error("Startup aborted: %s", exc)
-        sys.exit(2)
+        return 2
     except KeyboardInterrupt:
         logger.info("Interrupted.")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="bap-run", description="Browser Automation Platform — headless runner"
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    add_run_arguments(parser)
+    args = parser.parse_args(argv)
+    sys.exit(execute_run(args))
 
 
 if __name__ == "__main__":

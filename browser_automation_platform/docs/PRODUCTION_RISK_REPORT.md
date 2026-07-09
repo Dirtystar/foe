@@ -264,3 +264,57 @@ the existing `on_health` callback chain).
   is verified with stub adapters (opens == closes) and the Playwright adapter's
   `close`, but a hard `kill -9` of the Python process still can't guarantee
   child cleanup — an OS-level concern outside the runtime.
+
+## Deployment / package readiness (this milestone)
+
+Makes the hardened runtime installable and operable by a non-developer, without
+touching core or changing runtime behaviour. All new code is at the CLI/entry
+and packaging layer (`bap/cli.py`, extended `bap/main.py` and `gui_main.py`,
+`pyproject.toml`, config examples, docs); the core (`bap/core/`) and the
+runtime flows are unchanged.
+
+- ~~**No installable distribution / console entry points.**~~ **FIXED.**
+  `pyproject.toml` now declares three console scripts — `bap` (dispatcher),
+  `bap-run`, `bap-gui` — and groups optional extras `vision`, `gui`,
+  `monitoring`, `plugins`, and an umbrella `production` (self-referencing
+  `[vision,monitoring,plugins]`). Metadata completed (readme, license,
+  classifiers, keywords, `__version__` as the single source of truth). Verified
+  by building a wheel (entry points + `Provides-Extra` present) **and** a clean
+  install into a fresh virtualenv where `bap --version` and
+  `bap validate-config` run from the generated scripts. A packaging test asserts
+  the scripts/extras exist and every entry-point target imports.
+- ~~**No pre-flight config check.**~~ **FIXED.** `bap validate-config <file>`
+  loads the config, runs full startup validation (capacity, limits, path
+  writability, and — with `--real`/`--real-vision` — analyzer/action/plugin type
+  resolution), and exits `0`/`2` without launching a browser. Validation
+  messages now name the **file**, the **field path** (e.g.
+  `profiles.0.session.interval_ms`), the problem, and a **suggested fix**.
+  Shipped `config/development.example.yaml` (stub, offline) and
+  `config/production.example.yaml` (real stack, resource monitoring, persistence
+  guidance).
+- ~~**Thin, single-mode CLI.**~~ **FIXED.** Added `--version`, `--config`,
+  `--store`, `--log-format {plain,json}`, and `--dry-run`. **Dry-run** builds
+  the whole application (resolving plugins and type-checking every
+  analyzer/action/handler) and then stops before starting — it opens no browser
+  and makes no persistence writes (the store is never opened; the path is still
+  validated). A test asserts dry-run never calls `Application.start` and leaves
+  no store file.
+- ~~**No operator documentation.**~~ **FIXED.** `docs/OPERATIONS.md` covers
+  installation, first run, config structure, running headless/GUI, persistence
+  location (incl. WAL sidecars), interpreting health vs operational status,
+  plugin installation, and a troubleshooting table. `README.md` added as the
+  quick-start entry point.
+- **Release verification tests added:** CLI help/version, valid & invalid
+  config exit codes (`validate-config` and `run`), dry-run-never-starts-browser,
+  production-config-validates, GUI entry point builds/shows without blocking
+  (`run_gui(exec_app=False)`), and a packaging-surface test. Full matrix
+  unchanged: default **546 passed / 1 skipped**, `-m load` **15**, `-m stress`
+  **9**, `-m integration` **5**.
+- **Residual risks.** (1) Extras pin lower bounds only (`>=`); a lockfile/
+  constraints file is left to the deployer. (2) No published artifact yet — the
+  wheel builds cleanly but is not uploaded to an index; distribution channel is
+  a release-process decision. (3) `bap validate-config` without `--real`
+  validates against the built-in dev types (which include `log`/`stop_session`);
+  to check the exact production adapter + plugin set, pass `--real`/
+  `--real-vision` (documented). (4) No web/HTTP health endpoint — deliberately
+  out of scope; the `OperationalState` seam remains ready for it.
