@@ -22,6 +22,7 @@ class QtReportBridge(QObject):
     state_changed = Signal(str)              # "running" / "stopped"
     error_occurred = Signal(str)
     health_changed = Signal(str, str, str)   # profile_id, health, reason
+    status_changed = Signal(str, str)        # operational status, reason
 
     def on_report(self, report: TickReport) -> None:
         """Passed to create_application(on_report=...); called on the runtime
@@ -38,6 +39,11 @@ class QtReportBridge(QObject):
         """Wired to Supervisor.on_health; reuses the same callback->signal
         pattern as state/error — not a new event system."""
         self.health_changed.emit(profile_id, health.value, reason)
+
+    def on_status_change(self, status: str, reason: str) -> None:
+        """Wired to OperationalState.on_change (via the composition root); the
+        readiness derivation lives in the ops layer, the GUI only displays it."""
+        self.status_changed.emit(status, reason)
 
 
 __all__ = ["QtReportBridge"]

@@ -80,6 +80,10 @@ class MainWindow(QMainWindow):
         for widget in (self.start_button, self.stop_button, self.tick_button):
             controls.addWidget(widget)
         controls.addStretch(1)
+        controls.addWidget(QLabel("Status:"))
+        self.status_label = QLabel("stopped")
+        self.status_label.setObjectName("statusLabel")
+        controls.addWidget(self.status_label)
         controls.addWidget(QLabel("Runtime:"))
         controls.addWidget(self.state_label)
         layout.addLayout(controls)
@@ -118,6 +122,7 @@ class MainWindow(QMainWindow):
         self._bridge.state_changed.connect(self._apply_state)
         self._bridge.error_occurred.connect(self._on_error)
         self._bridge.health_changed.connect(self._on_health)
+        self._bridge.status_changed.connect(self._apply_status)
 
     # --- control slots ------------------------------------------------------
 
@@ -163,6 +168,10 @@ class MainWindow(QMainWindow):
         self.start_button.setEnabled(not running)
         self.stop_button.setEnabled(running)
         self.tick_button.setEnabled(not running)
+
+    def _apply_status(self, status: str, reason: str) -> None:
+        self.status_label.setText(status)
+        self._append_log(f"STATUS -> {status}" + (f" ({reason})" if reason else ""))
 
     def _on_health(self, profile_id: str, health: str, reason: str) -> None:
         row = self._row_index.get(profile_id)

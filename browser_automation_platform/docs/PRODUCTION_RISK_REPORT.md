@@ -215,3 +215,52 @@ product decision.
   recover/disable actions are coarse (all sessions). Per-tab memory attribution
   (CDP per-target metrics) would allow targeting the heaviest tab — a future
   refinement, not required for safe operation.
+
+## Operational lifecycle (this milestone)
+
+Turns the startup/shutdown/observability edges from ad-hoc into a hardened,
+testable layer. New code lives under `src/bap/ops/` (logging, validation,
+status, lifecycle); wired only at the composition roots (`main.py`,
+`gui_main.py`) — no runtime component (TabSession, Scheduler, Supervisor,
+stores) changed. StateStorePort is unchanged; no new event bus (status rides
+the existing `on_health` callback chain).
+
+- ~~**Ad-hoc log strings, no correlation.**~~ **FIXED.** `log_event` emits a
+  stable event name plus `key=value` correlation fields (`profile_id`,
+  `tick_id`, `status`, `error_category`, `health`, recovery/plugin/action
+  where relevant) via a `StructuredFormatter`. Plain `logger.info` calls are
+  untouched (no fields → nothing appended), so existing consumers still work.
+  `--plain-logs` disables the field suffix.
+- ~~**No startup validation — misconfig surfaces mid-run.**~~ **FIXED.**
+  `validate_startup` runs *before the browser launches* and fails fast with an
+  actionable `OperationalError`: capacity vs `max_sessions`, positive
+  intervals, sane resource limits (≥128 MB when monitoring is enabled),
+  writable persistence path, and (when registries are supplied) analyzer/action
+  type resolution. Complements — does not replace — the pydantic load-time gate
+  and composition-time type check. `main()` exits non-zero without a traceback.
+- ~~**Shutdown correctness unverified.**~~ **HARDENED.** Teardown is wrapped in
+  `IdempotentShutdown` so overlapping triggers (SIGTERM/SIGINT + timed expiry +
+  `finally`) collapse into exactly one clean shutdown; SIGTERM/SIGINT now
+  request a graceful stop (`loop.add_signal_handler`) instead of a hard
+  interrupt. Verified: clean start/stop returns to baseline task **and** thread
+  counts with every tab closed (opens == closes); shutdown mid-tick and
+  mid-recovery (real in-flight recovery tasks) both complete with no leaked
+  asyncio tasks/threads; persistence drains on `close()`. The GUI's `closeEvent`
+  path (stop loop → stop runtime → close store) is unchanged and still valid.
+- ~~**No operational readiness signal.**~~ **FIXED.** An `OperationalState`
+  machine (`starting → ready → degraded → stopping → stopped`) derives
+  `ready↔degraded` from the same health events the sinks see, and pushes changes
+  through a single `on_change` fanned out to the headless logs (a `status`
+  event) and the GUI (a status label via one Qt signal). No HTTP endpoint yet
+  (explicitly out of scope); the state object is the seam a future
+  health/readiness HTTP probe would read.
+- **Residual risks.** (1) Signal handling is a no-op on platforms/threads where
+  `add_signal_handler` is unavailable (e.g. Windows / non-main thread) — there
+  the `KeyboardInterrupt`/GUI-close paths still apply, but a Windows service
+  wrapper would need its own stop hook. (2) `validate_startup` checks *path*
+  writability, not disk space or SQLite file health — a corrupt existing DB
+  still surfaces at first write (logged, non-fatal). (3) Orphan-Chromium
+  prevention rests on `Application.stop` closing every tab and the browser; it
+  is verified with stub adapters (opens == closes) and the Playwright adapter's
+  `close`, but a hard `kill -9` of the Python process still can't guarantee
+  child cleanup — an OS-level concern outside the runtime.

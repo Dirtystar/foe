@@ -64,6 +64,16 @@ def test_controls_exist_and_reflect_stopped_state(window):
     assert win.state_label.text() == "stopped"
 
 
+def test_operational_status_label_reflects_status_signal(window):
+    win, _, bridge = window
+
+    assert win.status_label.text() == "stopped"
+    bridge.status_changed.emit("ready", "started")
+    assert win.status_label.text() == "ready"
+    bridge.status_changed.emit("degraded", "session s0 failed")
+    assert win.status_label.text() == "degraded"
+
+
 # --- control commands ---------------------------------------------------------
 
 

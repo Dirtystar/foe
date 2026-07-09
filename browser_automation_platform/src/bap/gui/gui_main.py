@@ -23,6 +23,8 @@ from bap.core.engine.health import HealthMonitor
 from bap.gui.main_window import MainWindow
 from bap.gui.qt_bridge import QtReportBridge
 from bap.gui.runtime_service import RuntimeService
+from bap.ops.status import OperationalState, OperationalStatus
+from bap.ops.validation import validate_startup
 
 
 def build_main_window(
@@ -31,6 +33,12 @@ def build_main_window(
     """Wire config -> application -> service/bridge -> window. Returns the
     window; the caller owns the Qt lifecycle."""
     bridge = QtReportBridge()
+
+    # Operational status derives ready<->degraded from the health flow (in the
+    # ops layer) and is pushed to the GUI as a signal — the window only displays it.
+    state = OperationalState(
+        on_change=lambda status, reason: bridge.on_status_change(status.value, reason)
+    )
 
     # Report/health flow into the GUI. Optional persistence sits between the
     # supervisor and the bridge, storing everything without affecting the UI.
@@ -56,6 +64,14 @@ def build_main_window(
             store.close()
             metrics_repository.close()
 
+    # Head of the health chain: the operational-state observer derives
+    # ready<->degraded from the same events the bridge/persistence already see.
+    _downstream_health = health_sink
+
+    def health_sink(profile_id, health, reason=""):  # noqa: F811
+        state.observe_health(profile_id, health, reason)
+        _downstream_health(profile_id, health, reason)
+
     # Recovery supervisor sits in the report path: it forwards every report to
     # the (persistence ->) GUI bridge and drives recovery on transient failures.
     supervisor = Supervisor(monitor=HealthMonitor(), sink=report_sink, on_health=health_sink)
@@ -70,6 +86,14 @@ def build_main_window(
 
         extra["analyzer_registry"] = production_analyzer_registry()
         extra["vision_workers"] = 4  # offload CPU-bound analyzers off the loop
+
+    # Fail fast before assembling the runtime, same checks as the headless entry.
+    validate_startup(
+        config,
+        store_path=store_path,
+        analyzer_registry=extra.get("analyzer_registry"),
+        action_registry=extra.get("action_registry"),
+    )
 
     # Optional browser resource monitoring at the top of the report chain.
     top_sink = supervisor.on_report
@@ -94,7 +118,17 @@ def build_main_window(
     app = create_application(config, on_report=top_sink, **extra)
     supervisor.session_manager = app.manager  # late-bind now that the manager exists
     service = RuntimeService(app)
-    service.on_state_change = bridge.on_state_change
+
+    def _on_state_change(runtime_state: str) -> None:
+        # Map the runtime's running/stopped to the operational lifecycle so the
+        # status label reflects readiness; health events then derive degraded.
+        if runtime_state == "running":
+            state.transition(OperationalStatus.READY, "runtime running")
+        else:
+            state.transition(OperationalStatus.STOPPED, "runtime stopped")
+        bridge.on_state_change(runtime_state)
+
+    service.on_state_change = _on_state_change
     service.on_error = bridge.on_error
     service.start_loop()
 
