@@ -190,6 +190,11 @@ def run_gui(
     window.show()
     if not exec_app:
         return 0
+    # First launch: a one-time welcome that explains demo vs real mode and
+    # offers to install the browser. Only in a real run (never in tests).
+    from bap.gui.first_run import maybe_run_first_run
+
+    maybe_run_first_run()
     return int(qapp.exec())
 
 

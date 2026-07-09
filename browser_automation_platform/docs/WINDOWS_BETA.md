@@ -27,8 +27,10 @@ everything.
 
 Launch **Browser Automation Platform** from the Start Menu. On first run the app:
 
-- creates its data folders under `%LOCALAPPDATA%\BAP` (see below), and
-- seeds `config\app.yaml` from a bundled example.
+- creates its data folders under `%LOCALAPPDATA%\BAP` (see below),
+- seeds `config\app.yaml` from a bundled example, and
+- shows a one-time **Welcome** wizard explaining demo vs real mode and offering
+  to install the browser now or later.
 
 The GUI opens in **monitoring mode running on built-in stubs** — it exercises
 the full loop (capture → analyze → rules → actions → report) with no browser and
@@ -36,9 +38,17 @@ no network, so you can see it working immediately. Use **Start / Stop / Tick**
 and watch the session table, live log, and operational **Status**
 (*starting → ready → degraded → stopping → stopped*).
 
+Everything you need day-to-day is in the **Tools** menu — no command line
+required:
+
+- **Tools → Install browser…** — download Chromium for real automation.
+- **Tools → Export diagnostics…** — save a single zip for a bug report.
+- **Tools → Open data folder** — open `%LOCALAPPDATA%\BAP` in Explorer.
+- **Tools → Run first-run setup…** — re-open the Welcome wizard.
+
 To use a real browser, see **Real automation** below.
 
-### The CLI
+### The CLI (optional, for testers)
 
 A console tool `bap.exe` ships alongside the GUI (Start Menu → *BAP (CLI)*, or
 run it from `%LOCALAPPDATA%\Programs\BAP\bap.exe`):
@@ -80,23 +90,25 @@ before launching.
 
 The installer is intentionally small and does **not** include a browser; the GUI
 runs on stubs by default. To drive a real browser (the `--real` option), install
-Chromium once:
+Chromium once — **the easy way, from the app**:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\Programs\BAP\install-browser.ps1"
-```
+> **Tools → Install browser…** → **Install now**, then wait for
+> *"Browser installed successfully."*
+
+(Or from the Start Menu: *Install Browser (for real automation)*.)
 
 - **Disk usage:** ~300–450 MB for Chromium, downloaded to
   `%LOCALAPPDATA%\BAP\data\ms-playwright`.
 - **Update behavior:** the browser is pinned to the Playwright version bundled
   with this release. It is **not** auto-updated; a future app update that bumps
-  Playwright will prompt you to re-run the installer above to fetch a matching
+  Playwright will prompt you to re-install the browser to fetch a matching
   Chromium. Old versions can be deleted from the `ms-playwright` folder.
 - **Troubleshooting:** if a real run reports it cannot find a browser, re-run
-  `install-browser.ps1`; confirm `%LOCALAPPDATA%\BAP\data\ms-playwright` exists
-  and is non-empty. Behind a corporate proxy, set `HTTPS_PROXY` before running it.
+  **Tools → Install browser…**; confirm `%LOCALAPPDATA%\BAP\data\ms-playwright`
+  exists and is non-empty. Behind a corporate proxy, set `HTTPS_PROXY` before
+  launching the app.
 
-Then, from the CLI:
+Testers can then run from the CLI:
 
 ```powershell
 bap run "%LOCALAPPDATA%\BAP\config\app.yaml" --real --seconds 30
@@ -110,7 +122,7 @@ bap run "%LOCALAPPDATA%\BAP\config\app.yaml" --real --seconds 30
 |---|---|
 | App won't start | Open `%LOCALAPPDATA%\BAP\logs\bap-gui.log` — the last lines usually explain why. |
 | A config error on launch | Run `bap validate-config <your config>`; the message names the file, field, and a suggested fix. |
-| Real run: "no browser" | Run `install-browser.ps1` (section 4). |
+| Real run: "no browser" | **Tools → Install browser…** (section 4). |
 | It crashed | Look in `%LOCALAPPDATA%\BAP\data\crashes\` for a `crash-*.json` bundle (section 7) and attach it to your report. |
 | SmartScreen blocks it | *More info → Run anyway* (unsigned beta build). |
 | Nothing is persisted | Persistence is opt-in — pass `--store <path>`; without it the app only logs. |
@@ -118,21 +130,21 @@ bap run "%LOCALAPPDATA%\BAP\config\app.yaml" --real --seconds 30
 
 ---
 
-## 6. Collecting logs
+## 6. Collecting logs (one click)
 
-To send a report, gather:
+The simplest way to gather everything for a report:
 
-- `%LOCALAPPDATA%\BAP\logs\` — `bap.log` and/or `bap-gui.log` (plus rotated
-  `.1`, `.2` files).
+> **Tools → Export diagnostics…**
+
+This saves a single **`bap-diagnostics-<date>.zip`** to your Desktop containing
+the logs, any crash reports, your config, and a system-info summary — then
+offers to open the folder. Nothing is sent anywhere; the zip is yours to attach.
+
+If the app won't open, gather these folders manually instead:
+
+- `%LOCALAPPDATA%\BAP\logs\` — `bap.log` / `bap-gui.log` (plus rotated `.1`, `.2`).
 - `%LOCALAPPDATA%\BAP\data\crashes\` — any `crash-*.json` from around the time
   of the problem.
-
-Quick way to zip them (PowerShell):
-
-```powershell
-Compress-Archive -Path "$env:LOCALAPPDATA\BAP\logs\*","$env:LOCALAPPDATA\BAP\data\crashes\*" `
-    -DestinationPath "$env:USERPROFILE\Desktop\bap-logs.zip"
-```
 
 Logs contain ids, timings, statuses, and error categories — **not** the text
 you type, page contents, selectors, or URLs.

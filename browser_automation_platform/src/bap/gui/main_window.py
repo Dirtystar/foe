@@ -11,12 +11,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QTableWidget,
@@ -60,6 +62,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Browser Automation Platform — Monitor")
         self._build_ui()
+        self._build_menu()
         self._populate_sessions(service.profile_ids)
         self._connect_signals()
         self._apply_state("stopped")
@@ -107,6 +110,64 @@ class MainWindow(QMainWindow):
         self.start_button.clicked.connect(self._on_start_clicked)
         self.stop_button.clicked.connect(self._on_stop_clicked)
         self.tick_button.clicked.connect(self._on_tick_clicked)
+
+    def _build_menu(self) -> None:
+        # Non-developer entry points: install the browser, export diagnostics,
+        # open the data folder — all without a command line. Each delegates to
+        # the ops layer; the window holds no automation logic.
+        bar = self.menuBar()
+        tools = bar.addMenu("&Tools")
+        tools.addAction("Install browser…", self._install_browser)
+        tools.addAction("Export diagnostics…", self._export_diagnostics)
+        tools.addSeparator()
+        tools.addAction("Open data folder", self._open_data_folder)
+        tools.addAction("Run first-run setup…", self._run_first_run)
+
+        help_menu = bar.addMenu("&Help")
+        help_menu.addAction("About", self._about)
+
+    def _install_browser(self) -> None:
+        from bap.gui.first_run import BrowserInstallDialog
+
+        BrowserInstallDialog(self).exec()
+
+    def _export_diagnostics(self) -> None:
+        from bap.ops.diagnostics import export_diagnostics
+
+        try:
+            path = export_diagnostics()
+        except Exception as exc:  # never crash the UI over a diagnostics export
+            QMessageBox.warning(self, "Diagnostics", f"Could not export diagnostics:\n{exc}")
+            return
+        box = QMessageBox(self)
+        box.setWindowTitle("Diagnostics exported")
+        box.setText(f"Saved to:\n{path}")
+        open_btn = box.addButton("Open folder", QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Ok)
+        box.exec()
+        if box.clickedButton() is open_btn:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
+
+    def _open_data_folder(self) -> None:
+        from bap.ops.paths import ensure_dirs, get_paths
+
+        home = ensure_dirs(get_paths()).home
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(home)))
+
+    def _run_first_run(self) -> None:
+        from bap.gui.first_run import FirstRunDialog
+
+        FirstRunDialog(self).exec()
+
+    def _about(self) -> None:
+        from bap import __version__
+
+        QMessageBox.about(
+            self,
+            "About",
+            f"<b>Browser Automation Platform</b><br>Version {__version__}<br><br>"
+            "A generic, site-agnostic visual browser automation platform.",
+        )
 
     def _populate_sessions(self, profile_ids) -> None:
         self.table.setRowCount(len(profile_ids))

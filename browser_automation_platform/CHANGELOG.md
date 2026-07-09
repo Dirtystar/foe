@@ -25,9 +25,20 @@ additions, or architecture changes — only entry-layer/operational plumbing.
   Inno Setup installer (per-user, Start Menu shortcut, clean uninstall),
   `build.ps1` (→ installer + SHA256 + `version.txt`), `install-browser.ps1`
   (first-run Chromium), and `validate.ps1` (clean-environment smoke test).
-- **Docs**: `docs/WINDOWS_BETA.md` (install, first run, folders, troubleshooting,
-  logs, uninstall) and `docs/PACKAGING.md` (PyInstaller-vs-Nuitka rationale +
-  build).
+- **Non-developer UX (no Python/Git/command line):**
+  - **First-run wizard** (`bap/gui/first_run.py`): a one-time welcome shown on
+    first launch, explaining demo vs real mode and offering to install the
+    browser; re-openable from *Tools → Run first-run setup…*.
+  - **In-GUI browser install** (`bap/ops/browser_install.py` + a threaded
+    dialog): *Tools → Install browser…* downloads Chromium via Playwright's own
+    installer, with a live progress log — no PowerShell needed.
+  - **One-click diagnostics export** (`bap/ops/diagnostics.py`): *Tools → Export
+    diagnostics…* writes a single zip (logs + crash reports + config + system
+    info) to the Desktop. Local only.
+  - **Tools/Help menu** with *Open data folder* and *About*.
+- **Docs**: `docs/WINDOWS_BETA.md` (updated to lead with the GUI),
+  `docs/WINDOWS_INSTALL_CHECKLIST.md` (step-by-step, mouse-only), and
+  `docs/PACKAGING.md` (PyInstaller-vs-Nuitka rationale + build).
 
 ### Notes
 

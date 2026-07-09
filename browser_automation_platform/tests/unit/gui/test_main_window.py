@@ -197,3 +197,48 @@ def test_close_stops_the_runtime_loop(window):
     win.close()
 
     assert "stop_loop" in service.calls
+
+
+# --- non-developer tooling (menu) ---------------------------------------------
+
+
+def _menu_actions(win, title):
+    for action in win.menuBar().actions():
+        if action.text() == title and action.menu() is not None:
+            return [a.text() for a in action.menu().actions() if a.text()]
+    return []
+
+
+def test_tools_and_help_menus_present(window):
+    win, _, _ = window
+
+    top = [a.text() for a in win.menuBar().actions()]
+    assert "&Tools" in top and "&Help" in top
+    tools = _menu_actions(win, "&Tools")
+    assert "Install browser…" in tools
+    assert "Export diagnostics…" in tools
+    assert "Open data folder" in tools
+
+
+def test_export_diagnostics_action_invokes_ops(window, monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+
+    import bap.gui.main_window as mw
+    import bap.ops.diagnostics as diag
+
+    out = tmp_path / "bap-diagnostics.zip"
+    out.write_text("zip")
+    called = {}
+
+    def fake_export(*a, **k):
+        called["yes"] = True
+        return out
+
+    monkeypatch.setattr(diag, "export_diagnostics", fake_export)
+    monkeypatch.setattr(mw, "QMessageBox", MagicMock())          # non-blocking
+    monkeypatch.setattr(mw, "QDesktopServices", MagicMock())
+
+    win, _, _ = window
+    win._export_diagnostics()
+
+    assert called.get("yes") is True
