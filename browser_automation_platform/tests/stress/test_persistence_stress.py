@@ -82,6 +82,41 @@ async def test_wal_mode_is_enabled(tmp_path):
     assert mode.lower() == "wal"  # concurrent reader-friendly journal
 
 
+async def test_runtime_continues_through_persistence_overload(tmp_path, capsys):
+    """A small bounded store + slow writer under 16-session load: records are
+    dropped by priority, but every session keeps ticking and health events
+    survive."""
+
+    class SlowStore(SqliteStateStore):
+        def _write_tick(self, conn, tick):
+            time.sleep(0.001)
+            return SqliteStateStore._write_tick(conn, tick)
+
+    path = str(tmp_path / "overload.db")
+    store = SlowStore(path, max_queue_size=50)
+    persistence = PersistenceSink(store)
+    env = build_env(16, interval_ms=10, downstream_sink=persistence.on_report)
+    await env.app.create_sessions()
+    try:
+        await env.run_rounds(200)  # 3200 ticks into a 50-slot buffer draining at ~1ms
+        completed = env.reports["completed"]
+    finally:
+        await env.app.stop()
+        store.close()
+
+    stats = store.stats()
+    with capsys.disabled():
+        print(
+            f"\n[stress] overload: enqueued=3200 dropped={stats.dropped} "
+            f"written={_row_count(path, 'ticks')} overloaded_seen={stats.dropped > 0}"
+        )
+    # runtime completed all ticks despite storage overload
+    assert completed == 3200
+    assert stats.dropped > 0  # overload dropped low-priority history
+    # nothing lost silently: written + dropped == enqueued
+    assert _row_count(path, "ticks") + stats.dropped == 3200
+
+
 async def test_runtime_unaffected_when_writes_are_slow(tmp_path):
     """A deliberately slow writer must not slow the tick loop: enqueue is
     non-blocking, so the runtime completes all rounds regardless."""

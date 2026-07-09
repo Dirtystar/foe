@@ -1,21 +1,31 @@
 """SQLite StateStorePort implementation.
 
 All writes run on one dedicated background thread that owns the sole SQLite
-connection. Runtime callbacks only enqueue records (non-blocking, thread-safe
-via a queue), so a slow or failing write never blocks the event loop or the
-scheduler. Writes are append-only INSERTs. Schema is created automatically on
-open. Write failures on the background thread are surfaced through an optional
-on_error callback rather than raised into the runtime.
+connection. Runtime callbacks only enqueue records (non-blocking, thread-safe),
+so a slow or failing write never blocks the event loop or the scheduler. Writes
+are append-only INSERTs. Schema is created automatically on open. Write failures
+on the background thread are surfaced through an optional on_error callback
+rather than raised into the runtime.
+
+Overload policy (see docs/PRODUCTION_RISK_REPORT.md): the write buffer is
+bounded (`max_queue_size`). Enqueue is always non-blocking — the runtime never
+waits on storage. When the buffer is full, records are dropped by priority
+(lowest first), and `dropped_records` counts them. CRITICAL records
+(health/recovery/disabled-session events) bypass the bound and are never
+dropped, because losing them would corrupt the diagnostic picture of what the
+runtime did; the tradeoff is that a sustained flood of CRITICAL records could
+grow memory (bounded in practice by how often health transitions occur).
 """
 
 from __future__ import annotations
 
-import queue
 import sqlite3
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import IntEnum
 
 from bap.core.ports.state_store_port import (
     HealthEventRecord,
@@ -24,7 +34,27 @@ from bap.core.ports.state_store_port import (
     TickRecord,
 )
 
-_SENTINEL = object()
+
+class WritePriority(IntEnum):
+    """Higher value = more important. Dropping starts from the lowest."""
+
+    LOW = 0        # successful tick history (completed, no actions)
+    NORMAL = 1     # completed tick carrying action successes
+    IMPORTANT = 2  # failed ticks and ticks containing action failures
+    CRITICAL = 3   # health/recovery/disabled-session events — never dropped
+
+
+def _classify(kind: str, dto) -> WritePriority:
+    if kind == "health":
+        return WritePriority.CRITICAL
+    # tick
+    if dto.status != "completed":
+        return WritePriority.IMPORTANT
+    if any(a.status != "succeeded" for a in dto.actions):
+        return WritePriority.IMPORTANT
+    if dto.actions:
+        return WritePriority.NORMAL
+    return WritePriority.LOW
 
 
 @dataclass(frozen=True)
@@ -34,12 +64,94 @@ class StoreStats:
     pending: int
     completed: int
     failed: int
+    dropped: int
     total_write_ms: float
     max_write_ms: float
+    overloaded: bool
 
     @property
     def avg_write_ms(self) -> float:
         return self.total_write_ms / self.completed if self.completed else 0.0
+
+
+class _WriteBuffer:
+    """Bounded, priority-aware, thread-safe hand-off to the writer thread.
+
+    Non-critical records are capped at `max_size`; CRITICAL records bypass the
+    cap. put() never blocks: on a full buffer it evicts the lowest-priority
+    queued record that ranks below the incoming one (dropping LOW before
+    NORMAL before IMPORTANT), or drops the incoming record if nothing ranks
+    lower. Items are drained FIFO so history stays roughly chronological.
+    """
+
+    def __init__(self, max_size: int) -> None:
+        self._max = max_size
+        self._items: deque = deque()  # (priority, kind, dto)
+        self._noncritical = 0
+        self._dropped = 0
+        self._closed = False
+        self._cond = threading.Condition()
+
+    def put(self, priority: WritePriority, kind: str, dto) -> None:
+        with self._cond:
+            if priority is WritePriority.CRITICAL:
+                self._items.append((priority, kind, dto))
+                self._cond.notify()
+                return
+            if self._noncritical < self._max:
+                self._items.append((priority, kind, dto))
+                self._noncritical += 1
+                self._cond.notify()
+                return
+            # Full: evict the lowest-priority item ranking below the incoming.
+            victim = self._lowest_index_below(priority)
+            if victim is not None:
+                del self._items[victim]  # evicted item is non-critical
+                self._items.append((priority, kind, dto))
+                self._dropped += 1
+                self._cond.notify()
+            else:
+                self._dropped += 1  # incoming is the least important — drop it
+
+    def _lowest_index_below(self, priority: WritePriority) -> int | None:
+        best_idx: int | None = None
+        best_pri: WritePriority = priority
+        for i, (p, _, _) in enumerate(self._items):
+            if p < best_pri:
+                best_pri = p
+                best_idx = i
+        return best_idx
+
+    def get(self):
+        """Block until an item is available; return None once closed+drained."""
+        with self._cond:
+            while not self._items and not self._closed:
+                self._cond.wait()
+            if not self._items:
+                return None
+            priority, kind, dto = self._items.popleft()
+            if priority is not WritePriority.CRITICAL:
+                self._noncritical -= 1
+            return priority, kind, dto
+
+    def close(self) -> None:
+        with self._cond:
+            self._closed = True
+            self._cond.notify_all()
+
+    @property
+    def pending(self) -> int:
+        with self._cond:
+            return len(self._items)
+
+    @property
+    def dropped(self) -> int:
+        return self._dropped
+
+    @property
+    def overloaded(self) -> bool:
+        with self._cond:
+            return self._noncritical >= self._max
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS ticks (
@@ -78,15 +190,23 @@ CREATE TABLE IF NOT EXISTS actions (
 
 
 class SqliteStateStore(StateStorePort):
-    def __init__(self, path: str, *, on_error: Callable[[Exception], None] | None = None) -> None:
+    def __init__(
+        self,
+        path: str,
+        *,
+        max_queue_size: int = 10_000,
+        on_error: Callable[[Exception], None] | None = None,
+    ) -> None:
+        if max_queue_size <= 0:
+            raise ValueError("max_queue_size must be > 0")
         self._path = str(path)
         self._on_error = on_error
-        self._queue: queue.Queue = queue.Queue()
+        self._buffer = _WriteBuffer(max_queue_size)
         self._ready = threading.Event()
         self._init_error: Exception | None = None
         self._closed = False
         # Observability (written only by the writer thread; read after work
-        # settles or post-close). qsize() is the live pending-write depth.
+        # settles or post-close).
         self._completed = 0
         self._failed = 0
         self._total_write_ms = 0.0
@@ -100,34 +220,45 @@ class SqliteStateStore(StateStorePort):
     # --- port API (called from runtime threads; non-blocking) ---------------
 
     def record_tick(self, tick: TickRecord) -> None:
-        self._enqueue(("tick", tick))
+        self._enqueue("tick", tick)
 
     def record_health(self, event: HealthEventRecord) -> None:
-        self._enqueue(("health", event))
+        self._enqueue("health", event)
 
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
-        self._queue.put(_SENTINEL)
-        self._thread.join(timeout=5.0)
+        self._buffer.close()  # writer drains remaining items, then exits
+        self._thread.join(timeout=10.0)
 
-    def _enqueue(self, item) -> None:
+    def _enqueue(self, kind: str, dto) -> None:
         if self._closed:
             raise StorageError("store is closed")
-        self._queue.put(item)
+        # Non-blocking, priority-aware. Never raises on overload; drops instead.
+        self._buffer.put(_classify(kind, dto), kind, dto)
 
     @property
     def pending_writes(self) -> int:
-        return self._queue.qsize()
+        return self._buffer.pending
+
+    @property
+    def dropped_records(self) -> int:
+        return self._buffer.dropped
+
+    @property
+    def overload_state(self) -> str:
+        return "overloaded" if self._buffer.overloaded else "normal"
 
     def stats(self) -> StoreStats:
         return StoreStats(
-            pending=self._queue.qsize(),
+            pending=self._buffer.pending,
             completed=self._completed,
             failed=self._failed,
+            dropped=self._buffer.dropped,
             total_write_ms=self._total_write_ms,
             max_write_ms=self._max_write_ms,
+            overloaded=self._buffer.overloaded,
         )
 
     # --- writer thread ------------------------------------------------------
@@ -146,10 +277,10 @@ class SqliteStateStore(StateStorePort):
 
         try:
             while True:
-                item = self._queue.get()
-                if item is _SENTINEL:
+                item = self._buffer.get()
+                if item is None:  # closed and drained
                     break
-                kind, dto = item
+                _priority, kind, dto = item
                 started = time.perf_counter()
                 try:
                     if kind == "tick":
@@ -216,4 +347,4 @@ class SqliteStateStore(StateStorePort):
         )
 
 
-__all__ = ["SqliteStateStore", "StoreStats"]
+__all__ = ["SqliteStateStore", "StoreStats", "WritePriority"]

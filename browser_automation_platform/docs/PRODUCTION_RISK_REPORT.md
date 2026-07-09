@@ -104,17 +104,22 @@ the vision-offload fix below.
    add/remove inside the Scheduler — deferred to avoid changing a validated
    component.
 
-3. **Writer queue is unbounded.** The persistence queue can grow to the full
-   burst size if the enqueue rate exceeds the drain rate (observed peak 4791
-   under an unthrottled test driver). It drains to 0 in realistic,
-   interval-spaced operation and always flushes on `close()`, so it does not
-   grow *indefinitely* in steady state — but a sustained overload (tiny
-   intervals, very many tabs, or a stalled disk) would grow memory. Mitigation
-   in place: `pending_writes` and write-latency are now observable via
-   `SqliteStateStore.stats()`; operators should alarm on `pending`. A bounded
-   queue with an explicit drop-or-block policy is the fix if this ever
-   materialises (deferred — it trades data loss vs. backpressure and needs a
-   product decision).
+3. ~~**Writer queue is unbounded.**~~ **FIXED.** The write buffer is now bounded
+   (`SqliteStateStore(max_queue_size=N)`, default 10 000) with a non-blocking,
+   priority-aware overload policy: the runtime never blocks on storage, and when
+   the buffer is full, records are dropped lowest-priority-first (LOW successful
+   history → NORMAL action successes → IMPORTANT failures), while CRITICAL
+   health/recovery events bypass the bound and are never dropped. `stats()` now
+   exposes `pending`, `dropped`, `overloaded`, and write latency. Verified under
+   a 16-session load against a 50-slot buffer + slow writer: 3200 ticks
+   enqueued, ~3142 dropped by priority, **every session still completed all
+   ticks**, and written+dropped reconciled exactly (no silent loss).
+   **Tradeoff:** under sustained overload, low-priority tick *history* is
+   sacrificed to keep the runtime responsive and the diagnostic
+   (health/failure) record intact — a deliberate lossy-telemetry choice, not
+   backpressure. The residual risk is a sustained flood of CRITICAL records
+   (bypasses the bound); bounded in practice by how often health transitions
+   occur.
 
 4. **WAL checkpoint latency spikes.** Max write latency (~129 ms) corresponds
    to WAL setup / autocheckpoint, versus ~0.9 ms typical. Not a correctness
@@ -146,7 +151,8 @@ test harness over existing ports.
    analyzer (not GIL-releasing cv2/tesseract) becomes the bottleneck.
 2. Dynamic per-job scheduler mutation to remove the recovery global-pause
    (risk #2) — needed before high-failure-density or >16-session operation.
-3. Bounded/backpressured persistence queue (risk #3) — needed only for
-   sustained-overload or very-high-cardinality deployments.
+3. ~~Bounded/backpressured persistence queue~~ — **done** (bounded + priority
+   dropping). A future refinement could make dropped-priority thresholds
+   configurable per deployment.
 4. Real-browser resource benchmarking at 8/16 tabs (RAM/CPU) — the practical
    deployment limit, outside the deterministic harness.
