@@ -114,7 +114,33 @@ async def run(
     supervisor = Supervisor(
         monitor=HealthMonitor(), sink=report_sink, on_health=health_sink
     )
-    app = create_application(config, on_report=supervisor.on_report, **extra)
+
+    # Optional browser resource monitoring sits at the top of the report chain:
+    # resource_monitor -> supervisor -> persistence -> log. Observational; it
+    # feeds the supervisor's resource-pressure policy.
+    top_sink = supervisor.on_report
+    rm_cfg = config.settings.resource_monitoring
+    browser_manager = extra.get("browser")
+    if rm_cfg.enabled and browser_manager is not None:
+        from bap.adapters.browser.playwright_metrics import PlaywrightBrowserMetrics
+        from bap.app.resource_monitor import ResourceMonitor
+
+        resource_monitor = ResourceMonitor(
+            PlaywrightBrowserMetrics(browser_manager),
+            collect_every=rm_cfg.collect_every_ticks,
+            max_memory_mb=rm_cfg.limits.max_memory_mb,
+            max_pages=rm_cfg.limits.max_pages,
+            store=store,
+            report_sink=supervisor.on_report,
+            on_pressure=supervisor.note_resource_pressure,
+        )
+        top_sink = resource_monitor.on_report
+        logger.info(
+            "Resource monitoring enabled (every %d ticks; limits mem=%s pages=%s)",
+            rm_cfg.collect_every_ticks, rm_cfg.limits.max_memory_mb, rm_cfg.limits.max_pages,
+        )
+
+    app = create_application(config, on_report=top_sink, **extra)
     supervisor.session_manager = app.manager
     profile_ids = tuple(spec.profile_id for spec in app.session_specs)
     logger.info("Starting %d profile(s): %s", len(profile_ids), profile_ids)

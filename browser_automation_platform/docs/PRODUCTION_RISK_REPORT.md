@@ -161,6 +161,37 @@ test harness over existing ports.
 3. ~~Bounded/backpressured persistence queue~~ — **done** (bounded + priority
    dropping). A future refinement could make dropped-priority thresholds
    configurable per deployment.
-4. Real-browser resource benchmarking at 8/16 tabs (RAM/CPU) — the practical
-   deployment limit, outside the deterministic harness. **Now the top
-   remaining scaling item** — all three orchestration-level risks are resolved.
+4. Real-browser resource benchmarking at 8/16 tabs (RAM/CPU) — **now
+   observable**: browser resource monitoring (memory/CPU/pages/contexts) is
+   collected via a `BrowserMetricsPort`, persisted to a `browser_metrics`
+   table, shown on the dashboard, and enforced against configurable limits
+   that raise `RESOURCE_PRESSURE` (a browser-level health signal driving a
+   bounded degrade → recover → disable policy). Memory/CPU require the
+   `monitoring` extra (psutil); without it, page/context counts still work and
+   memory/CPU report None. What remains is establishing *deployment-specific*
+   limits from real hardware — a tuning exercise, not a code gap.
+
+---
+
+## Resource monitoring (this milestone)
+
+- **Observational-first, adapter-isolated.** `BrowserMetricsPort.collect()`
+  returns a generic `BrowserResourceSnapshot` (no Playwright/Chromium types in
+  core). The Playwright adapter reads page/context counts from the browser and
+  memory/CPU best-effort via psutil over the Chromium process tree; a missing
+  process or absent psutil yields None, never an error.
+- **Rides the existing report stream.** A `ResourceMonitor` sits in the report
+  sink chain (like Supervisor/PersistenceSink), forwards every report, and uses
+  the report cadence to trigger periodic collection *off* the callback — no
+  TabSession change, no second event system. Measured: monitoring adds
+  negligible tick-throughput overhead (0.137s vs 0.135s baseline over 200
+  rounds × 8 sessions; 16 sessions monitored show no starvation).
+- **Bounded pressure policy.** Limits (`max_memory_mb`, `max_pages`) are
+  evaluated per snapshot; breaches feed a `ResourcePressurePolicy` in the
+  Supervisor that degrades on brief pressure, recovers all sessions once at a
+  sustained threshold, and disables them only if pressure persists — it never
+  kills the browser directly.
+- **Residual risk:** memory attribution is browser-global (not per-tab), so the
+  recover/disable actions are coarse (all sessions). Per-tab memory attribution
+  (CDP per-target metrics) would allow targeting the heaviest tab — a future
+  refinement, not required for safe operation.

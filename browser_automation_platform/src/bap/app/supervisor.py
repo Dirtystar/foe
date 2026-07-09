@@ -19,12 +19,30 @@ import asyncio
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-from bap.core.engine.health import HealthMonitor, RecoveryDecision, SessionHealth
+from bap.core.engine.health import (
+    HealthMonitor,
+    RecoveryDecision,
+    ResourceAction,
+    ResourcePressurePolicy,
+    ResourcePressureState,
+    SessionHealth,
+)
 from bap.core.engine.tab_session import TickReport
+from bap.core.ports.browser_metrics_port import BrowserResourceSnapshot
 
 ReportSink = Callable[[TickReport], Any]
 HealthCallback = Callable[[str, SessionHealth, str], None]
 TaskRunner = Callable[[Coroutine], Any]
+
+# Health "profile" used for browser-level resource pressure so it rides the
+# existing per-session health channel (persisted + shown) without a new bus.
+BROWSER_HEALTH_ID = "__browser__"
+
+_STATE_TO_HEALTH = {
+    ResourcePressureState.NORMAL: SessionHealth.HEALTHY,
+    ResourcePressureState.DEGRADED: SessionHealth.DEGRADED,
+    ResourcePressureState.CRITICAL: SessionHealth.FAILED,
+}
 
 
 class Supervisor:
@@ -36,6 +54,7 @@ class Supervisor:
         sink: ReportSink | None = None,
         on_health: HealthCallback | None = None,
         task_runner: TaskRunner | None = None,
+        resource_policy: ResourcePressurePolicy | None = None,
     ) -> None:
         self._monitor = monitor
         # Late-bindable: the manager is created by the composition root in the
@@ -46,6 +65,7 @@ class Supervisor:
         self._task_runner = task_runner or asyncio.ensure_future
         self._recovering: set[str] = set()
         self._last_health: dict[str, SessionHealth] = {}
+        self._resource_policy = resource_policy or ResourcePressurePolicy()
 
     def on_report(self, report: TickReport) -> None:
         if self._sink is not None:
@@ -88,6 +108,45 @@ class Supervisor:
             await self.session_manager.close_session(profile_id)
         except Exception:
             pass  # already gone; disabling is best-effort
+
+    # --- resource pressure (browser-level health policy) --------------------
+
+    def note_resource_pressure(
+        self, snapshot: BrowserResourceSnapshot, breaches: tuple[str, ...]
+    ) -> None:
+        """Wired to ResourceMonitor.on_pressure. Escalates via the resource
+        policy: brief pressure only degrades (a browser-level health signal);
+        sustained pressure recovers all sessions to reclaim, and persistent
+        pressure disables them. Observational first — recover/disable fire
+        only at their thresholds. Never kills the browser directly."""
+        decision = self._resource_policy.observe(tuple(breaches))
+        if decision.changed:
+            self._notify(
+                BROWSER_HEALTH_ID, _STATE_TO_HEALTH[decision.state], decision.reason
+            )
+        if decision.action is ResourceAction.RECOVER:
+            self._task_runner(self._recover_all(decision.reason))
+        elif decision.action is ResourceAction.DISABLE:
+            self._task_runner(self._disable_all(decision.reason))
+
+    async def _recover_all(self, reason: str) -> None:
+        if self.session_manager is None:
+            return
+        for profile_id in tuple(self.session_manager.profile_ids):
+            try:
+                await self.session_manager.recover_session(profile_id)
+            except Exception as exc:
+                self._monitor.mark_failed(profile_id)
+                self._notify(profile_id, SessionHealth.FAILED, f"resource recovery failed: {exc}")
+
+    async def _disable_all(self, reason: str) -> None:
+        if self.session_manager is None:
+            return
+        for profile_id in tuple(self.session_manager.profile_ids):
+            try:
+                await self.session_manager.close_session(profile_id)
+            except Exception:
+                pass
 
     # --- health notification ------------------------------------------------
 

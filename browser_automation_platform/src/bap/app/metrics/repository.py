@@ -16,6 +16,7 @@ from pathlib import Path
 from bap.app.metrics import queries as q
 from bap.app.metrics.models import (
     ActionMetrics,
+    BrowserResourceMetrics,
     MetricSummary,
     ProfileMetrics,
     RecentFailure,
@@ -129,6 +130,27 @@ class MetricsRepository:
             successful=ok,
             failed=failed,
             top_failing=tuple(q.top_failing_actions(self._conn, top)),
+        )
+
+    # --- browser resources --------------------------------------------------
+
+    def browser_resources(self, *, trend: int = 30) -> BrowserResourceMetrics:
+        if self._conn is None:
+            return BrowserResourceMetrics()
+        samples = q.resource_sample_count(self._conn)
+        if samples == 0:
+            return BrowserResourceMetrics()
+        latest = q.latest_resource_row(self._conn)
+        browser_id, memory_mb, cpu_percent, pages, contexts, ts = latest
+        return BrowserResourceMetrics(
+            browser_id=browser_id,
+            memory_mb=float(memory_mb) if memory_mb is not None else None,
+            cpu_percent=float(cpu_percent) if cpu_percent is not None else None,
+            pages=int(pages),
+            contexts=int(contexts),
+            last_seen=_parse_ts(ts),
+            samples=samples,
+            memory_trend=tuple(q.resource_memory_trend(self._conn, trend)),
         )
 
     # --- recent failures ----------------------------------------------------

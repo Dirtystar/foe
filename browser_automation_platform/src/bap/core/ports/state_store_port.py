@@ -52,6 +52,16 @@ class HealthEventRecord:
     reason: str
 
 
+@dataclass(frozen=True)
+class BrowserResourceRecord:
+    timestamp: datetime
+    browser_id: str
+    memory_mb: float | None
+    cpu_percent: float | None
+    pages: int
+    contexts: int
+
+
 class StateStorePort(ABC):
     """Append-only history store for runtime diagnostics.
 
@@ -66,12 +76,18 @@ class StateStorePort(ABC):
     @abstractmethod
     def record_health(self, event: HealthEventRecord) -> None: ...
 
+    def record_resource(self, snapshot: BrowserResourceRecord) -> None:
+        """Persist a browser resource snapshot. Non-abstract with a no-op
+        default so existing stores keep working unchanged; backends that
+        support it (SQLite) override this."""
+
     @abstractmethod
     def close(self) -> None: ...
 
 
 __all__ = [
     "ActionRecord",
+    "BrowserResourceRecord",
     "HealthEventRecord",
     "StateStorePort",
     "StorageError",

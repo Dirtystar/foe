@@ -6,6 +6,7 @@ pytest.importorskip("PySide6")
 
 from bap.app.metrics.models import (
     ActionMetrics,
+    BrowserResourceMetrics,
     MetricSummary,
     ProfileMetrics,
     RecentFailure,
@@ -62,6 +63,9 @@ class FakeRepository:
     def recent_failures(self, *, limit=20):
         return self.failures
 
+    def browser_resources(self, *, trend=30):
+        return getattr(self, "resources_metrics", BrowserResourceMetrics())
+
 
 @pytest.fixture
 def dashboard(qapp):
@@ -113,6 +117,43 @@ def test_refresh_reflects_updated_repository_values(dashboard):
     assert widget.failure_table.rowCount() == 0
 
 
+def test_dashboard_renders_browser_resources_with_warning(qapp):
+    from datetime import datetime, timezone
+
+    repo = FakeRepository()
+    repo.resources_metrics = BrowserResourceMetrics(
+        browser_id="b", memory_mb=5000.0, cpu_percent=40.0, pages=20, contexts=8,
+        last_seen=datetime(2026, 7, 8, tzinfo=timezone.utc), samples=5,
+        memory_trend=(3000.0, 4000.0, 5000.0),
+    )
+    widget = DashboardWidget(repo, max_memory_mb=4096, max_pages=16)
+
+    v = widget._resource_values  # noqa: SLF001
+    assert v["Memory"].text() == "5000 MB"
+    assert v["Pages"].text() == "20"
+    assert v["Contexts"].text() == "8"
+    assert "↑" in v["Trend"].text()
+    assert "⚠" in v["Warning"].text()  # both memory and pages exceed limits
+    assert "memory" in v["Warning"].text() and "pages" in v["Warning"].text()
+    widget.deleteLater()
+
+
+def test_dashboard_resources_ok_when_within_limits(qapp):
+    repo = FakeRepository()
+    repo.resources_metrics = BrowserResourceMetrics(
+        browser_id="b", memory_mb=1000.0, pages=4, contexts=2, samples=3
+    )
+    widget = DashboardWidget(repo, max_memory_mb=4096, max_pages=16)
+
+    assert widget._resource_values["Warning"].text() == "ok"  # noqa: SLF001
+    widget.deleteLater()
+
+
+def test_dashboard_resources_no_data(dashboard):
+    widget, _ = dashboard  # default FakeRepository -> empty resources
+    assert widget._resource_values["Warning"].text() == "no data"  # noqa: SLF001
+
+
 def test_dashboard_has_no_database_dependency(dashboard):
     widget, _ = dashboard
     # The widget only holds the injected repository; nothing SQLite-related.
@@ -136,6 +177,9 @@ def test_empty_repository_renders_without_error(qapp):
 
         def recent_failures(self, *, limit=20):
             return []
+
+        def browser_resources(self, *, trend=30):
+            return BrowserResourceMetrics()
 
     widget = DashboardWidget(EmptyRepo())
     assert widget._overview_values["Total ticks"].text() == "0"  # noqa: SLF001

@@ -158,6 +158,15 @@ class PlaywrightBrowserManager(BrowserPort):
     def list_tabs(self) -> list[TabId]:
         return list(self._tabs.keys())
 
+    def context_and_page_counts(self) -> tuple[int, int]:
+        """(contexts, pages) currently open in the live browser, or (0, 0) if
+        it is not started. Used by the resource metrics adapter; keeps the
+        Playwright `contexts`/`pages` access inside this adapter."""
+        if self._browser is None:
+            return (0, 0)
+        contexts = self._browser.contexts
+        return (len(contexts), sum(len(c.pages) for c in contexts))
+
     def _require_tab(self, tab_id: TabId) -> _TabEntry:
         entry = self._tabs.get(tab_id)
         if entry is None:

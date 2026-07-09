@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from bap.core.ports.state_store_port import (
+    BrowserResourceRecord,
     HealthEventRecord,
     StateStorePort,
     StorageError,
@@ -47,6 +48,8 @@ class WritePriority(IntEnum):
 def _classify(kind: str, dto) -> WritePriority:
     if kind == "health":
         return WritePriority.CRITICAL
+    if kind == "resource":
+        return WritePriority.NORMAL  # diagnostic; below failures, above pure history
     # tick
     if dto.status != "completed":
         return WritePriority.IMPORTANT
@@ -186,6 +189,15 @@ CREATE TABLE IF NOT EXISTS actions (
     error TEXT,
     FOREIGN KEY (tick_id) REFERENCES ticks (id)
 );
+CREATE TABLE IF NOT EXISTS browser_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    browser_id TEXT NOT NULL,
+    memory_mb REAL,
+    cpu_percent REAL,
+    pages INTEGER NOT NULL,
+    contexts INTEGER NOT NULL
+);
 """
 
 
@@ -224,6 +236,9 @@ class SqliteStateStore(StateStorePort):
 
     def record_health(self, event: HealthEventRecord) -> None:
         self._enqueue("health", event)
+
+    def record_resource(self, snapshot: BrowserResourceRecord) -> None:
+        self._enqueue("resource", snapshot)
 
     def close(self) -> None:
         if self._closed:
@@ -287,6 +302,8 @@ class SqliteStateStore(StateStorePort):
                         self._write_tick(conn, dto)
                     elif kind == "health":
                         self._write_health(conn, dto)
+                    elif kind == "resource":
+                        self._write_resource(conn, dto)
                     conn.commit()
                     elapsed_ms = (time.perf_counter() - started) * 1000.0
                     self._completed += 1
@@ -331,6 +348,21 @@ class SqliteStateStore(StateStorePort):
                 "VALUES (?, ?, ?, ?, ?)",
                 (tick_id, action.rule_id, action.action_type, action.status, action.error),
             )
+
+    @staticmethod
+    def _write_resource(conn: sqlite3.Connection, snap: BrowserResourceRecord) -> None:
+        conn.execute(
+            "INSERT INTO browser_metrics (timestamp, browser_id, memory_mb, cpu_percent, "
+            "pages, contexts) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                snap.timestamp.isoformat(),
+                snap.browser_id,
+                snap.memory_mb,
+                snap.cpu_percent,
+                snap.pages,
+                snap.contexts,
+            ),
+        )
 
     @staticmethod
     def _write_health(conn: sqlite3.Connection, event: HealthEventRecord) -> None:

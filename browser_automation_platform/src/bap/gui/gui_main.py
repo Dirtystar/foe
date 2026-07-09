@@ -71,15 +71,41 @@ def build_main_window(
         extra["analyzer_registry"] = production_analyzer_registry()
         extra["vision_workers"] = 4  # offload CPU-bound analyzers off the loop
 
-    app = create_application(config, on_report=supervisor.on_report, **extra)
+    # Optional browser resource monitoring at the top of the report chain.
+    top_sink = supervisor.on_report
+    rm_cfg = config.settings.resource_monitoring
+    browser_manager = extra.get("browser")
+    if rm_cfg.enabled and browser_manager is not None:
+        from bap.adapters.browser.playwright_metrics import PlaywrightBrowserMetrics
+        from bap.app.resource_monitor import ResourceMonitor
+
+        store_arg = store if store_path else None
+        resource_monitor = ResourceMonitor(
+            PlaywrightBrowserMetrics(browser_manager),
+            collect_every=rm_cfg.collect_every_ticks,
+            max_memory_mb=rm_cfg.limits.max_memory_mb,
+            max_pages=rm_cfg.limits.max_pages,
+            store=store_arg,
+            report_sink=supervisor.on_report,
+            on_pressure=supervisor.note_resource_pressure,
+        )
+        top_sink = resource_monitor.on_report
+
+    app = create_application(config, on_report=top_sink, **extra)
     supervisor.session_manager = app.manager  # late-bind now that the manager exists
     service = RuntimeService(app)
     service.on_state_change = bridge.on_state_change
     service.on_error = bridge.on_error
     service.start_loop()
 
+    limits = config.settings.resource_monitoring.limits
     return MainWindow(
-        service, bridge, on_close=on_close, metrics_repository=metrics_repository
+        service,
+        bridge,
+        on_close=on_close,
+        metrics_repository=metrics_repository,
+        max_memory_mb=limits.max_memory_mb,
+        max_pages=limits.max_pages,
     )
 
 

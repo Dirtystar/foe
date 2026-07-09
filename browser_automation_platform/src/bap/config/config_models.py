@@ -174,11 +174,28 @@ class ProfileConfig(_Base):
         return self
 
 
+class BrowserLimitsConfig(_Base):
+    """Observational safety limits. Exceeding one raises resource pressure —
+    it never kills the browser directly."""
+
+    max_memory_mb: Annotated[int, Field(gt=0)] | None = None
+    max_pages: Annotated[int, Field(gt=0)] | None = None
+
+
+class ResourceMonitoringConfig(_Base):
+    enabled: bool = False
+    collect_every_ticks: Annotated[int, Field(gt=0)] = 50
+    limits: BrowserLimitsConfig = Field(default_factory=BrowserLimitsConfig)
+
+
 class GlobalSettings(_Base):
     max_sessions: Annotated[int, Field(gt=0)] = 8
     headless: bool = False
     browser_engine: Literal["chromium", "firefox", "webkit"] = "chromium"
     isolate_contexts_per_tab: bool = True
+    resource_monitoring: ResourceMonitoringConfig = Field(
+        default_factory=ResourceMonitoringConfig
+    )
 
 
 class ApplicationConfig(_Base):
@@ -216,11 +233,13 @@ __all__ = [
     "ActionConfig",
     "AnalyzerConfig",
     "ApplicationConfig",
+    "BrowserLimitsConfig",
     "CaptureBindingConfig",
     "ConditionConfig",
     "GlobalSettings",
     "ProfileConfig",
     "RegionConfig",
+    "ResourceMonitoringConfig",
     "RuleConfig",
     "SessionConfig",
     "ViewportConfig",

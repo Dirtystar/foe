@@ -164,17 +164,46 @@ def recent_failure_rows(conn, limit: int) -> list[tuple]:
     )
 
 
+# --- browser resources --------------------------------------------------------
+
+
+def resource_sample_count(conn) -> int:
+    return int(_scalar(conn, "SELECT COUNT(*) FROM browser_metrics"))
+
+
+def latest_resource_row(conn) -> tuple | None:
+    rows = _rows(
+        conn,
+        "SELECT browser_id, memory_mb, cpu_percent, pages, contexts, timestamp "
+        "FROM browser_metrics ORDER BY id DESC LIMIT 1",
+    )
+    return rows[0] if rows else None
+
+
+def resource_memory_trend(conn, limit: int) -> list[float]:
+    rows = _rows(
+        conn,
+        "SELECT memory_mb FROM browser_metrics WHERE memory_mb IS NOT NULL "
+        "ORDER BY id DESC LIMIT ?",
+        (limit,),
+    )
+    return [float(r[0]) for r in reversed(rows)]  # oldest -> newest
+
+
 __all__ = [
     "action_totals",
     "avg_duration_ms",
     "avg_vision_ms",
     "duration_percentile",
     "latest_health_rows",
+    "latest_resource_row",
     "profile_action_rows",
     "profile_tick_rows",
     "recent_failure_rows",
     "recovery_count",
     "recovery_rows",
+    "resource_memory_trend",
+    "resource_sample_count",
     "successful_ticks",
     "top_failing_actions",
     "total_ticks",

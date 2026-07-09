@@ -64,8 +64,25 @@ class RecentFailure:
     reason: str
 
 
+@dataclass(frozen=True)
+class BrowserResourceMetrics:
+    browser_id: str | None = None
+    memory_mb: float | None = None
+    cpu_percent: float | None = None
+    pages: int = 0
+    contexts: int = 0
+    last_seen: datetime | None = None
+    samples: int = 0
+    memory_trend: tuple[float, ...] = ()  # recent memory samples, oldest -> newest
+
+    @property
+    def has_data(self) -> bool:
+        return self.samples > 0
+
+
 __all__ = [
     "ActionMetrics",
+    "BrowserResourceMetrics",
     "MetricSummary",
     "ProfileMetrics",
     "RecentFailure",

@@ -165,11 +165,81 @@ class HealthMonitor:
         )
 
 
+class ResourcePressureState(Enum):
+    NORMAL = "normal"
+    DEGRADED = "degraded"
+    CRITICAL = "critical"
+
+
+class ResourceAction(Enum):
+    NONE = "none"
+    RECOVER = "recover"    # reclaim resources by recreating sessions
+    DISABLE = "disable"    # persistent pressure: stop the sessions
+
+
+@dataclass(frozen=True)
+class ResourcePressureDecision:
+    state: ResourcePressureState
+    action: ResourceAction
+    reason: str
+    changed: bool
+
+
+class ResourcePressurePolicy:
+    """Escalates browser resource pressure over time, mirroring HealthMonitor.
+
+    Observational first: brief pressure only degrades (a health signal). Only
+    sustained pressure escalates — one RECOVER at `recover_after` consecutive
+    breaches, then DISABLE at `disable_after`. Actions fire once at their
+    threshold (not every sample), and any within-limits sample resets.
+    """
+
+    def __init__(self, *, recover_after: int = 3, disable_after: int = 6) -> None:
+        if not 1 <= recover_after < disable_after:
+            raise ValueError("require 1 <= recover_after < disable_after")
+        self._recover_after = recover_after
+        self._disable_after = disable_after
+        self._consecutive = 0
+        self._state = ResourcePressureState.NORMAL
+
+    @property
+    def state(self) -> ResourcePressureState:
+        return self._state
+
+    def observe(self, breaches: tuple[str, ...]) -> ResourcePressureDecision:
+        prev = self._state
+        if not breaches:
+            self._consecutive = 0
+            self._state = ResourcePressureState.NORMAL
+            return ResourcePressureDecision(
+                ResourcePressureState.NORMAL, ResourceAction.NONE,
+                "resources within limits", prev is not ResourcePressureState.NORMAL,
+            )
+
+        self._consecutive += 1
+        reason = "resource pressure: " + "; ".join(breaches)
+        action = ResourceAction.NONE
+        if self._consecutive == self._disable_after:
+            action = ResourceAction.DISABLE
+        elif self._consecutive == self._recover_after:
+            action = ResourceAction.RECOVER
+        self._state = (
+            ResourcePressureState.CRITICAL
+            if self._consecutive >= self._recover_after
+            else ResourcePressureState.DEGRADED
+        )
+        return ResourcePressureDecision(self._state, action, reason, prev is not self._state)
+
+
 __all__ = [
     "FailureClass",
     "HealthMonitor",
     "RecoveryAction",
     "RecoveryDecision",
+    "ResourceAction",
+    "ResourcePressureDecision",
+    "ResourcePressurePolicy",
+    "ResourcePressureState",
     "SessionHealth",
     "classify",
 ]

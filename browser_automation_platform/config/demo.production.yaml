@@ -18,6 +18,15 @@ settings:
   max_sessions: 1
   headless: true
   browser_engine: chromium
+  # Observational browser resource monitoring (needs the 'monitoring' extra
+  # for memory/CPU; page/context counts work without it). Exceeding a limit
+  # raises resource pressure — it never kills the browser.
+  resource_monitoring:
+    enabled: true
+    collect_every_ticks: 20
+    limits:
+      max_memory_mb: 4096
+      max_pages: 16
 
 rule_packs:
   restock:

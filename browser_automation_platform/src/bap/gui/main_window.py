@@ -43,6 +43,8 @@ class MainWindow(QMainWindow):
         *,
         on_close: Callable[[], None] | None = None,
         metrics_repository=None,
+        max_memory_mb: int | None = None,
+        max_pages: int | None = None,
     ) -> None:
         super().__init__()
         self._service = service
@@ -51,7 +53,9 @@ class MainWindow(QMainWindow):
         self._row_index: dict[str, int] = {}
         # Dashboard is optional: only shown when analytics history is available.
         self.dashboard = (
-            DashboardWidget(metrics_repository) if metrics_repository is not None else None
+            DashboardWidget(metrics_repository, max_memory_mb=max_memory_mb, max_pages=max_pages)
+            if metrics_repository is not None
+            else None
         )
 
         self.setWindowTitle("Browser Automation Platform — Monitor")
