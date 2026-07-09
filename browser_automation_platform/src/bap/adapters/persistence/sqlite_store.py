@@ -13,7 +13,9 @@ from __future__ import annotations
 import queue
 import sqlite3
 import threading
+import time
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from bap.core.ports.state_store_port import (
     HealthEventRecord,
@@ -23,6 +25,21 @@ from bap.core.ports.state_store_port import (
 )
 
 _SENTINEL = object()
+
+
+@dataclass(frozen=True)
+class StoreStats:
+    """Observability snapshot for the writer. Latencies are milliseconds."""
+
+    pending: int
+    completed: int
+    failed: int
+    total_write_ms: float
+    max_write_ms: float
+
+    @property
+    def avg_write_ms(self) -> float:
+        return self.total_write_ms / self.completed if self.completed else 0.0
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS ticks (
@@ -68,6 +85,12 @@ class SqliteStateStore(StateStorePort):
         self._ready = threading.Event()
         self._init_error: Exception | None = None
         self._closed = False
+        # Observability (written only by the writer thread; read after work
+        # settles or post-close). qsize() is the live pending-write depth.
+        self._completed = 0
+        self._failed = 0
+        self._total_write_ms = 0.0
+        self._max_write_ms = 0.0
         self._thread = threading.Thread(target=self._run, name="bap-store", daemon=True)
         self._thread.start()
         self._ready.wait()
@@ -94,6 +117,19 @@ class SqliteStateStore(StateStorePort):
             raise StorageError("store is closed")
         self._queue.put(item)
 
+    @property
+    def pending_writes(self) -> int:
+        return self._queue.qsize()
+
+    def stats(self) -> StoreStats:
+        return StoreStats(
+            pending=self._queue.qsize(),
+            completed=self._completed,
+            failed=self._failed,
+            total_write_ms=self._total_write_ms,
+            max_write_ms=self._max_write_ms,
+        )
+
     # --- writer thread ------------------------------------------------------
 
     def _run(self) -> None:
@@ -114,13 +150,19 @@ class SqliteStateStore(StateStorePort):
                 if item is _SENTINEL:
                     break
                 kind, dto = item
+                started = time.perf_counter()
                 try:
                     if kind == "tick":
                         self._write_tick(conn, dto)
                     elif kind == "health":
                         self._write_health(conn, dto)
                     conn.commit()
+                    elapsed_ms = (time.perf_counter() - started) * 1000.0
+                    self._completed += 1
+                    self._total_write_ms += elapsed_ms
+                    self._max_write_ms = max(self._max_write_ms, elapsed_ms)
                 except Exception as exc:  # one bad write must not kill the writer
+                    self._failed += 1
                     if self._on_error is not None:
                         self._on_error(exc)
         finally:
@@ -174,4 +216,4 @@ class SqliteStateStore(StateStorePort):
         )
 
 
-__all__ = ["SqliteStateStore"]
+__all__ = ["SqliteStateStore", "StoreStats"]

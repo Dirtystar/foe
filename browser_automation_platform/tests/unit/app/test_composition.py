@@ -143,6 +143,16 @@ def test_injected_dependencies_are_used_by_identity():
     # exercised through the running-tick tests above.
 
 
+def test_injected_scheduler_with_on_report_is_rejected():
+    # Guard against silently dropping on_report/sleep when a scheduler is
+    # injected (the injected scheduler carries its own configuration).
+    scheduler = Scheduler()
+    with pytest.raises(ValueError, match="not both"):
+        create_application(load(), scheduler=scheduler, on_report=lambda r: None)
+    with pytest.raises(ValueError, match="not both"):
+        create_application(load(), scheduler=scheduler, sleep=lambda s: None)
+
+
 def test_max_sessions_flows_from_config_settings():
     app = create_application(load())
     # SessionManager enforces it; the value came from settings.max_sessions=5.

@@ -79,6 +79,14 @@ def create_application(
     All collaborators are injectable (defaulting to dev stubs) so real
     adapters — or test doubles — drop in without touching this function.
     """
+    if scheduler is not None and (on_report is not None or sleep is not None):
+        # An injected scheduler carries its own on_report/sleep; accepting them
+        # here too would silently drop these. Fail loudly instead.
+        raise ValueError(
+            "pass either a pre-built scheduler OR on_report/sleep, not both — "
+            "an injected scheduler already carries its own configuration"
+        )
+
     analyzer_registry = analyzer_registry or default_analyzer_registry()
     action_registry = action_registry or default_action_registry()
 

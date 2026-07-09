@@ -34,7 +34,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration and not load and not stress'"
 markers = [
     "integration: exercises a real Playwright browser; run with -m integration",
+    "load: multi-session load scenarios; run with -m load",
+    "stress: recovery/persistence stress scenarios; run with -m stress",
 ]
