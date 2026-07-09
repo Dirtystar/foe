@@ -130,7 +130,9 @@ class StubActionHandler(ActionHandlerPort):
         return self._action_type
 
     async def execute(self, request: ActionRequest, context: ActionContext) -> ActionResult:
-        logger.info(
+        # DEBUG, not INFO: params can carry sensitive values (e.g. text typed by
+        # a `type` action), so they stay out of the default log stream.
+        logger.debug(
             "[stub] action '%s' on tab '%s' params=%s",
             request.action_type,
             context.tab.tab_id,

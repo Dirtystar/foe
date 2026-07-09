@@ -26,6 +26,7 @@ from bap.app.composition import create_application
 from bap.config.config_loader import ConfigError, load_config
 from bap.config.config_models import ApplicationConfig
 from bap.core.engine.tab_session import TickReport
+from bap.core.ports.state_store_port import StorageError
 from bap.ops.logging_setup import configure_logging, log_event
 from bap.ops.lifecycle import IdempotentShutdown, install_signal_handlers
 from bap.ops.status import OperationalState, OperationalStatus
@@ -365,6 +366,10 @@ def execute_run(args: argparse.Namespace) -> int:
         # Startup precondition failed: report the actionable message and exit
         # non-zero without a traceback.
         logger.error("Startup aborted: %s", exc)
+        return 2
+    except StorageError as exc:
+        # e.g. a corrupt or unopenable persistence file. Report cleanly.
+        logger.error("Persistence error: %s", exc)
         return 2
     except KeyboardInterrupt:
         logger.info("Interrupted.")

@@ -231,6 +231,8 @@ class SessionManager:
         if self._browser_started:
             try:
                 await self._browser.stop()
+            except Exception as exc:  # best-effort: report, don't propagate
+                errors.append(("__browser__", exc))
             finally:
                 self._browser_started = False
         return tuple(errors)

@@ -318,3 +318,113 @@ runtime flows are unchanged.
   to check the exact production adapter + plugin set, pass `--real`/
   `--real-vision` (documented). (4) No web/HTTP health endpoint — deliberately
   out of scope; the `OperationalState` seam remains ready for it.
+
+## Release-candidate audit (v0.1.0)
+
+A final pre-release audit across architecture, security/trust, reliability, and
+performance. No new features, API additions, or architecture changes — only
+correctness fixes discovered by the audit. New automated guards were added
+where a boundary or failure mode was unverified.
+
+### Architecture
+
+- **Layering is clean.** Static boundary guards (scanning source text) now
+  enforce: core imports nothing outward (config/app/adapters/gui/ops); ops
+  depends only on core; config builds no runtime; app never imports gui;
+  adapters never import gui; and gui is imported only lazily outside the gui
+  package (so the headless runtime never requires PySide6).
+- **One intentional inward dependency — documented and fenced.** Adapters
+  import `bap.app.registries` / `bap.app.plugins` in the production registry
+  *factory* functions that live beside the adapters. A new allowlist test
+  (`test_adapters_app_dependency_is_limited_to_the_registry_seam`) permits
+  exactly those two modules and fails on any other adapters→app import. This is
+  the registry-assembly seam, kept deliberately (moving the factories would be
+  an architecture change, out of scope).
+- **No duplicate event path.** The report/health stream is the single fan-out
+  (resource monitor → supervisor → persistence → log/GUI); the `core/events`
+  EventBus is dormant infrastructure, not wired into the runtime, so there is no
+  second event system.
+- **No hidden global state.** No module-level mutable singletons, caches
+  (`lru_cache`), `global` statements, or mutable default arguments in `src/`.
+- **No test-only shortcuts in production.** The "for testing" hooks are all
+  legitimate dependency-injection seams (injectable registries/entry points,
+  step APIs like `run_once`) and dev stubs — none are conditional test
+  backdoors.
+
+### Security / trust (accepted risks)
+
+- **Plugins execute untrusted code** with first-party capabilities (no sandbox).
+  Installing a plugin is a trust decision equivalent to adding a dependency.
+- **Config is trusted operator input.** Paths (`--store`, template paths),
+  selectors, and URLs are taken at face value; there is no path-traversal
+  sandbox because the config author is the operator, not a remote party.
+- **SQLite is safe.** Every statement is parameterized (no string-built SQL);
+  analytics use a dedicated read-only (`mode=ro`) connection; WAL is enabled. A
+  corrupt/unopenable DB fails fast with `StorageError` (now surfaced as a clean
+  CLI exit 2). Accepted: the read-only URI assumes a well-formed local path.
+- **Browser lifecycle** cannot orphan the driver on normal teardown or on a
+  partial start (fixed below). A hard `kill -9` of the process is still an OS
+  concern outside the runtime.
+- **No sensitive values are logged or persisted.** Tick/health/status logs carry
+  ids, counts, durations, statuses, and error *categories* — never action
+  params, typed text, selectors, or URLs. Production action handlers do not log
+  params; the dev stub handler now logs them at DEBUG, not INFO. The database
+  stores action type/status/rule id, never params/values. Accepted: exception
+  messages and `reason` strings could echo page-derived text.
+
+### Reliability (failure injection)
+
+New suite `tests/unit/reliability/test_failure_injection.py` drives the real
+runtime over stubs and injects each fault, asserting the loop survives, the
+fault is reported, and after shutdown there are **no leaked tasks, no leaked
+threads, and no orphan tabs**:
+
+| Injected fault | Behaviour verified |
+|---|---|
+| Browser/capture crash during a tick | error surfaced in the report; session recovered; clean shutdown |
+| Browser crash during recovery | broken session dropped (not thrashing); no leak |
+| Analyzer timeout/exception | isolated as a `vision_failed` report; loop continues |
+| Action handler exception | isolated as a `FAILED` action; tick still `completed` |
+| Persistence write failure during shutdown | `close()` drains without raising; failure counted + reported via `on_error` |
+| Corrupted SQLite database | fails fast with `StorageError` ("cannot open store") |
+| Invalid plugin package | `PluginError` at composition (import failure / non-callable) |
+| SIGTERM during startup | graceful teardown; no leaked tasks/threads |
+
+**Correctness fixes made during this audit:**
+
+- **Orphan-process on teardown (fixed).** `PlaywrightBrowserManager.stop()` was
+  skipping `playwright.stop()` if `browser.close()` raised, leaking the driver
+  subprocess. It now performs best-effort teardown that always reaches
+  `playwright.stop()`, then re-raises the first error. Covered by
+  `test_stop_still_stops_driver_when_browser_close_fails`.
+- **Orphan-process on partial start (fixed).** If `launch()`/`new_context()`
+  failed after the driver started, the driver leaked. `start()` now tears the
+  driver down and re-raises the original error. Covered by
+  `test_partial_start_failure_stops_the_driver`.
+- **Best-effort shutdown reporting (fixed).** `SessionManager.shutdown()` now
+  captures a `browser.stop()` failure as returned error data instead of
+  propagating, honouring its documented contract.
+- **Clean CLI error on a bad store (fixed).** `StorageError` (corrupt/unopenable
+  persistence) exits `2` with a message instead of a traceback.
+- **Test-only correctness (fixed).** `test_shutdown_during_recovery` used a
+  wrong tab-id key (`"s0-tab"` vs `"s0"`) and never actually triggered recovery;
+  corrected so it exercises real in-flight recovery and asserts no orphan tabs.
+
+### Performance (no regression)
+
+Benchmarks re-run and compared to the hardening baseline above:
+
+| Benchmark | Baseline | This audit |
+|---|---|---|
+| Throughput 1/4/8/16 sessions | ~13–14k ticks/s, flat | 13.1k / 13.6k / 13.7k / 14.0k — flat |
+| Memory growth (500 rounds × 8) | ~0 objects | −1 objects |
+| Threads after 10 store lifecycles | baseline → baseline | 1 → 1 |
+| Persistence (4800 ticks) | avg 0.88 ms/write | avg 0.77 ms/write |
+| Overload dropping | written+dropped reconcile | 52+3148 = 3200, reconciles |
+| Recovery storm (16 sessions) | 15–16 ticks each, no pause | 15–16 ticks each, no pause |
+| Vision offload (0.4 s window) | inline 20 vs offloaded ~700 | inline 20 vs offloaded ~940 |
+| Monitoring overhead | ~1.5% | within noise |
+
+No regression attributable to the audit changes (which touch teardown, error
+reporting, and log level only — not the hot tick path). The 16-session
+throughput fluctuates with host load; isolated it holds ~14k ticks/s.

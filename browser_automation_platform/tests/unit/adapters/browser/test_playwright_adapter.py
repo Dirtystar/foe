@@ -236,3 +236,32 @@ async def test_stop_when_never_started_is_a_no_op(fake_playwright):
     await manager.stop()
 
     fake_playwright.factory.assert_not_called()
+
+
+async def test_stop_still_stops_driver_when_browser_close_fails(fake_playwright):
+    # A failing browser.close() must not orphan the Playwright driver: stop()
+    # still reaches instance.stop(), then surfaces the error.
+    manager = PlaywrightBrowserManager()
+    await manager.start()
+    fake_playwright.browser.close.side_effect = RuntimeError("close boom")
+
+    with pytest.raises(RuntimeError, match="close boom"):
+        await manager.stop()
+
+    fake_playwright.instance.stop.assert_awaited_once()  # driver reaped despite the error
+
+
+async def test_partial_start_failure_stops_the_driver(fake_playwright):
+    # If launch() fails after the driver started, start() must tear the driver
+    # down (no orphan) and re-raise the original error.
+    fake_playwright.chromium.launch.side_effect = RuntimeError("launch boom")
+    manager = PlaywrightBrowserManager()
+
+    with pytest.raises(RuntimeError, match="launch boom"):
+        await manager.start()
+
+    fake_playwright.instance.stop.assert_awaited_once()
+    # A subsequent stop() is a clean no-op (nothing left to reap).
+    fake_playwright.instance.stop.reset_mock()
+    await manager.stop()
+    fake_playwright.instance.stop.assert_not_awaited()

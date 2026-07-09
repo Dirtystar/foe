@@ -69,14 +69,20 @@ class PlaywrightBrowserManager(BrowserPort):
             return
 
         self._playwright = await async_playwright().start()
-        engine = getattr(self._playwright, self._browser_engine)
-        launch_kwargs: dict = {"headless": self._headless}
-        if self._executable_path:
-            launch_kwargs["executable_path"] = self._executable_path
-        self._browser = await engine.launch(**launch_kwargs)
+        try:
+            engine = getattr(self._playwright, self._browser_engine)
+            launch_kwargs: dict = {"headless": self._headless}
+            if self._executable_path:
+                launch_kwargs["executable_path"] = self._executable_path
+            self._browser = await engine.launch(**launch_kwargs)
 
-        if not self._isolate_contexts_per_tab:
-            self._shared_context = await self._browser.new_context()
+            if not self._isolate_contexts_per_tab:
+                self._shared_context = await self._browser.new_context()
+        except Exception:
+            # A partial start must not leak the driver subprocess. Tear down
+            # whatever came up (best-effort) and re-raise the original error.
+            await self._shutdown_driver_quietly()
+            raise
 
         logger.info(
             "Browser started (engine=%s, headless=%s, isolate_contexts_per_tab=%s)",
@@ -86,25 +92,61 @@ class PlaywrightBrowserManager(BrowserPort):
         )
 
     async def stop(self) -> None:
-        if self._browser is None:
+        if self._browser is None and self._playwright is None:
             return
 
+        # Best-effort teardown that always reaches _playwright.stop() — the step
+        # that actually reaps the driver subprocess — even if an earlier close
+        # fails. Failures are surfaced (first one re-raised) after the driver is
+        # guaranteed stopped, so a caller still learns something went wrong
+        # without risking an orphan process.
+        errors = await self._shutdown_driver_quietly()
+        logger.info("Browser stopped")
+        if errors:
+            raise errors[0]
+
+    async def _shutdown_driver_quietly(self) -> list[Exception]:
+        """Close tabs/contexts/browser and stop the Playwright driver, never
+        raising. Returns the exceptions encountered (in order) so callers can
+        decide whether to surface them. Idempotent and safe on a partial start."""
+        errors: list[Exception] = []
         for tab_id in list(self._tabs.keys()):
             entry = self._tabs.pop(tab_id)
-            await self._close_entry(entry)
+            try:
+                await self._close_entry(entry)
+            except Exception as exc:  # keep going; the driver must still stop
+                errors.append(exc)
+                logger.warning("error closing tab '%s' during stop", tab_id, exc_info=True)
 
         if self._shared_context is not None:
-            await self._shared_context.close()
-            self._shared_context = None
+            try:
+                await self._shared_context.close()
+            except Exception as exc:
+                errors.append(exc)
+                logger.warning("error closing shared context during stop", exc_info=True)
+            finally:
+                self._shared_context = None
 
-        await self._browser.close()
-        self._browser = None
+        if self._browser is not None:
+            try:
+                await self._browser.close()
+            except Exception as exc:
+                errors.append(exc)
+                logger.warning("error closing browser during stop", exc_info=True)
+            finally:
+                self._browser = None
 
         if self._playwright is not None:
-            await self._playwright.stop()
-            self._playwright = None
+            try:
+                await self._playwright.stop()
+            except Exception as exc:
+                errors.append(exc)
+                logger.warning("error stopping Playwright driver during stop", exc_info=True)
+            finally:
+                self._playwright = None
 
-        logger.info("Browser stopped")
+        self._tabs.clear()
+        return errors
 
     async def open_tab(self, profile: TabProfile) -> TabHandle:
         if self._browser is None:

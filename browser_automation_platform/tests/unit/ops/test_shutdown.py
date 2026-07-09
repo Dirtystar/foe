@@ -78,9 +78,11 @@ async def test_shutdown_during_active_tick_completes_cleanly() -> None:
 
 
 async def test_shutdown_during_recovery_completes_cleanly() -> None:
-    # Real recovery tasks (default task_runner) in flight when we stop.
+    # Real recovery tasks (default task_runner) in flight when we stop. The tab
+    # id equals the profile id ("s0"), so this permanently breaks that session
+    # and keeps recovery churning for the whole window.
     browser = TrackingBrowser()
-    capture = FlakyCapture(fail_plan={"s0-tab": 10_000})  # permanently broken tab
+    capture = FlakyCapture(fail_plan={"s0": 10_000})  # permanently broken session
     monitor = HealthMonitor(recreate_after=1, max_recovery_attempts=100)
     supervisor = Supervisor(monitor=monitor)
     app = create_application(
@@ -92,14 +94,16 @@ async def test_shutdown_during_recovery_completes_cleanly() -> None:
     supervisor.session_manager = app.manager
 
     baseline_tasks = live_task_count()
+    baseline_threads = thread_count()
     await app.start()
     await asyncio.sleep(0.05)  # failures + recovery churning
-    errors = await app.stop()
+    await app.stop()
     await asyncio.sleep(0)  # let any just-scheduled recovery settle
 
-    assert errors == ()
-    assert live_task_count() == baseline_tasks
-    assert browser.opens == browser.closes
+    assert browser.opens["s0"] > 1, "recovery should have recreated the broken session"
+    assert browser.list_tabs() == [], "no orphan tabs after shutdown"
+    assert live_task_count() == baseline_tasks, "no leaked recovery tasks"
+    assert thread_count() == baseline_threads
 
 
 async def test_persistence_is_flushed_on_close(tmp_path) -> None:
