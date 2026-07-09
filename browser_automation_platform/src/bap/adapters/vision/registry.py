@@ -13,10 +13,22 @@ from bap.adapters.vision.template_match_opencv import TemplateMatchAnalyzer
 from bap.app.registries import AnalyzerRegistry
 
 
-def production_analyzer_registry() -> AnalyzerRegistry:
+def production_analyzer_registry(
+    *, include_plugins: bool = True, entry_points=None, allow_override: bool = False
+) -> AnalyzerRegistry:
+    """Built-in analyzers, then any installed plugins from the 'bap.analyzers'
+    entry-point group merged on top. A plugin whose name collides with a
+    built-in is a conflict error unless allow_override=True. `entry_points` is
+    injectable for testing."""
     registry = AnalyzerRegistry()
     registry.register("ocr", lambda: OcrAnalyzer("ocr"))
     registry.register("template_match", lambda: TemplateMatchAnalyzer("template_match"))
+    if include_plugins:
+        from bap.app.plugins import apply_analyzer_plugins
+
+        apply_analyzer_plugins(
+            registry, entry_points=entry_points, allow_override=allow_override
+        )
     return registry
 
 

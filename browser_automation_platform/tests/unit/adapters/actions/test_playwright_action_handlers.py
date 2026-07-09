@@ -29,7 +29,7 @@ def req(action_type: str, **params) -> ActionRequest:
 
 
 def test_registry_exposes_the_four_handlers():
-    registry = playwright_action_registry()
+    registry = playwright_action_registry(include_plugins=False)
 
     assert set(registry.types) == {"click", "type", "navigate", "wait"}
     handlers = {h.action_type: h for h in registry.create_all()}

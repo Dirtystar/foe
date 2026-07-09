@@ -173,6 +173,26 @@ test harness over existing ports.
 
 ---
 
+## Plugin extensibility (entry-point discovery)
+
+Third-party analyzers/action handlers install as normal packages and are
+discovered via `importlib.metadata` entry points (`bap.analyzers`,
+`bap.actions`); see `docs/PLUGINS.md`. Discovery is explicit (a caller merges
+plugins into a registry), injectable/testable, and has no global state.
+Invalid plugins fail during composition (bad import/non-callable →
+`PluginError`; wrong return type → `CompositionError` when the handler/analyzer
+is instantiated and type-checked before the browser starts). Name collisions
+with built-ins are conflict errors unless explicitly overridden.
+
+**Residual risk — plugin trust.** Installing a plugin runs its code with the
+same capabilities as a first-party adapter; there is no sandbox. This is by
+design (the extension seam), but it means plugin installation is a trust
+decision equivalent to adding a dependency. A future hardening option is an
+allowlist of permitted entry-point names in config, or running plugin
+analyzers in the existing vision worker-process pool for a degree of
+isolation — deferred, as it trades flexibility for containment and needs a
+product decision.
+
 ## Resource monitoring (this milestone)
 
 - **Observational-first, adapter-isolated.** `BrowserMetricsPort.collect()`

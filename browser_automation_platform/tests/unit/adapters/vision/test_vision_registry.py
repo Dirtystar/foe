@@ -10,7 +10,9 @@ from bap.core.ports.vision_analyzer_port import VisionAnalyzerPort
 
 
 def test_production_registry_provides_real_analyzers():
-    registry = production_analyzer_registry()
+    # include_plugins=False to assert the built-in set in isolation (installed
+    # plugins would otherwise merge in).
+    registry = production_analyzer_registry(include_plugins=False)
 
     assert set(registry.types) == {"ocr", "template_match"}
     assert isinstance(registry.create("ocr"), OcrAnalyzer)
@@ -18,7 +20,7 @@ def test_production_registry_provides_real_analyzers():
 
 
 def test_each_create_returns_a_fresh_instance():
-    registry = production_analyzer_registry()
+    registry = production_analyzer_registry(include_plugins=False)
 
     assert registry.create("ocr") is not registry.create("ocr")
 

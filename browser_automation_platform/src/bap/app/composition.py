@@ -174,15 +174,31 @@ def _validate_referenced_types(
     analyzers: AnalyzerRegistry,
     actions: ActionHandlerRegistry,
 ) -> None:
-    """Fail fast if config names an analyzer or action no registry provides."""
-    for name, rules in config.rule_packs.items():
-        for rule in rules:
-            for action in rule.actions:
-                if not actions.knows(action.type):
-                    raise CompositionError(
-                        f"rule pack '{name}', rule '{rule.id}': "
-                        f"no handler registered for action type '{action.type}'"
-                    )
+    """Fail fast if config names an analyzer or action no registry provides.
+    Also instantiates each referenced action handler once and type-checks it,
+    so an invalid (e.g. plugin) handler fails during composition — before the
+    browser starts — rather than lazily in session_factory. Analyzers are
+    validated equivalently when their bindings are built (build_capture_binding)."""
+    from bap.core.ports.action_handler_port import ActionHandlerPort
+
+    referenced_actions = {
+        action.type
+        for rules in config.rule_packs.values()
+        for rule in rules
+        for action in rule.actions
+    }
+    for action_type in sorted(referenced_actions):
+        if not actions.knows(action_type):
+            raise CompositionError(f"no handler registered for action type '{action_type}'")
+
+    # Build every handler once (the ActionExecutor requires one per type) and
+    # type-check them, so a bad handler factory is caught here.
+    for handler in actions.create_all():
+        if not isinstance(handler, ActionHandlerPort):
+            raise CompositionError(
+                f"action handler for '{handler}' is not an ActionHandlerPort"
+            )
+
     for profile in config.profiles:
         for binding in profile.capture_bindings:
             for analyzer in binding.analyzers:

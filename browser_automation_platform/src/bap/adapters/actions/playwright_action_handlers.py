@@ -119,11 +119,20 @@ class WaitHandler(_PlaywrightActionHandler):
         return self._ok(request, f"waited {ms}ms")
 
 
-def playwright_action_registry() -> ActionHandlerRegistry:
-    """Registry wiring the config action-type strings to real handlers."""
+def playwright_action_registry(
+    *, include_plugins: bool = True, entry_points=None, allow_override: bool = False
+) -> ActionHandlerRegistry:
+    """Built-in Playwright handlers, then any installed plugins from the
+    'bap.actions' entry-point group merged on top. A plugin whose name
+    collides with a built-in is a conflict error unless allow_override=True.
+    `entry_points` is injectable for testing."""
     registry = ActionHandlerRegistry()
     for handler_cls in (ClickHandler, TypeHandler, NavigateHandler, WaitHandler):
         registry.register(handler_cls._ACTION_TYPE, handler_cls)
+    if include_plugins:
+        from bap.app.plugins import apply_action_plugins
+
+        apply_action_plugins(registry, entry_points=entry_points, allow_override=allow_override)
     return registry
 
 

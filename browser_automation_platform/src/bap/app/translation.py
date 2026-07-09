@@ -24,7 +24,7 @@ from bap.config.config_models import (
 from bap.core.domain.models import ActionRequest, Rect, Selector, TabProfile, ViewportSize
 from bap.core.engine.tab_session import CaptureBinding
 from bap.core.ports.capture_port import CaptureTarget
-from bap.core.ports.vision_analyzer_port import AnalyzerContext
+from bap.core.ports.vision_analyzer_port import AnalyzerContext, VisionAnalyzerPort
 from bap.core.rules.conditions import (
     AndCondition,
     ComparisonOp,
@@ -97,15 +97,24 @@ def build_capture_binding(
     *,
     executor=None,
 ) -> CaptureBinding:
-    bindings = [
-        AnalyzerBinding(
-            analyzer=analyzers.create(a.type),
-            context=AnalyzerContext(
-                profile_id=profile_id, target_name=cfg.name, settings=dict(a.settings)
-            ),
+    bindings = []
+    for a in cfg.analyzers:
+        analyzer = analyzers.create(a.type)
+        # Validate the factory contract at composition time so a bad plugin
+        # (wrong return type) fails here, not during a live tick.
+        if not isinstance(analyzer, VisionAnalyzerPort):
+            raise CompositionError(
+                f"analyzer type '{a.type}' produced {type(analyzer).__name__}, "
+                f"not a VisionAnalyzerPort"
+            )
+        bindings.append(
+            AnalyzerBinding(
+                analyzer=analyzer,
+                context=AnalyzerContext(
+                    profile_id=profile_id, target_name=cfg.name, settings=dict(a.settings)
+                ),
+            )
         )
-        for a in cfg.analyzers
-    ]
     # When an executor is supplied, analyzers run off the event loop; otherwise
     # they run inline (unchanged default behaviour).
     if executor is not None:
