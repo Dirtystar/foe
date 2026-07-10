@@ -91,6 +91,17 @@ class RuntimeService:
         collide with an already-running runtime's session set."""
         return self._submit(self._single_tick())
 
+    # --- attended browser controls (thread-safe, non-blocking) --------------
+
+    def open_browser(self) -> Future:
+        """Open the visible attended browser. The user then drives it."""
+        return self._submit(self._app.browser.start())
+
+    def scan_tabs(self) -> Future:
+        """Return the tabs currently open in the attended browser
+        (Future resolves to list[BrowserTab])."""
+        return self._submit(self._app.browser.scan_tabs())
+
     async def _single_tick(self) -> None:
         await self._app.create_sessions()
         try:

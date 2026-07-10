@@ -23,6 +23,8 @@ class QtReportBridge(QObject):
     error_occurred = Signal(str)
     health_changed = Signal(str, str, str)   # profile_id, health, reason
     status_changed = Signal(str, str)        # operational status, reason
+    browser_ready = Signal()                 # attended browser opened
+    tabs_scanned = Signal(object)            # list[BrowserTab]
 
     def on_report(self, report: TickReport) -> None:
         """Passed to create_application(on_report=...); called on the runtime

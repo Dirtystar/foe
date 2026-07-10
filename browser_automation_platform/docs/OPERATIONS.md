@@ -190,6 +190,33 @@ stopping → stopped`), and — when `--store` is given — a Dashboard tab with
 analytics. It never runs business logic; it drives the same runtime the
 headless entry point does.
 
+### Attended mode (assign tabs instead of URLs)
+
+Instead of configuring a `start_url` per profile, you can let the **user** open
+the pages — logging in and navigating as needed — and then assign each open tab
+to a session. Enable it with `attended: true` under `settings` (see
+`config/attended.example.yaml`). There are no URLs in the config; BAP never
+navigates for you.
+
+```bash
+bap gui config/attended.example.yaml
+```
+
+The GUI shows an **Attended** panel:
+
+1. **Open Browser** — a visible Chromium window opens (a persistent profile, so
+   logins are remembered between runs). Install the browser first if needed
+   (*Tools → Install browser*).
+2. Open your pages as tabs in that window.
+3. **Scan tabs** — every open tab is listed by title and URL.
+4. Pick a tab for each **Session** from the dropdowns.
+5. **Start** — enabled only once every session has a tab. Each session then
+   captures and evaluates *its* assigned tab; the tick pipeline is identical to
+   normal mode.
+
+The assignment (tab id/title/url only — never cookies or credentials) is saved
+under `data/attended-assignment.json` and pre-selected next time.
+
 ---
 
 ## 6. Persistence location

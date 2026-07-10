@@ -83,11 +83,36 @@ def build_main_window(
     supervisor = Supervisor(monitor=HealthMonitor(), sink=report_sink, on_health=health_sink)
 
     extra: dict = {}
-    if real:
+    attended = config.settings.attended
+    assignment = None
+    save_assignment_path = None
+    if attended:
+        # Attended mode: a visible browser the user drives; sessions adopt the
+        # tab the user assigns (no start_url navigation). Uses real page capture
+        # with the built-in demo analyzers/actions so no vision libs are needed.
+        import os
+
+        from bap.adapters.browser.attended_adapter import AttendedBrowserManager
+        from bap.adapters.capture.playwright_capture import PlaywrightCaptureAdapter
+        from bap.app.attended import load_assignment, make_tab_provider, save_assignment
+        from bap.ops.paths import ensure_dirs, get_paths
+
+        paths = ensure_dirs(get_paths())
+        browser = AttendedBrowserManager(
+            user_data_dir=str(paths.data_dir / "attended-profile"),
+            browser_engine=config.settings.browser_engine,
+            executable_path=os.environ.get("PLAYWRIGHT_EXECUTABLE_PATH"),
+        )
+        save_assignment_path = paths.data_dir / "attended-assignment.json"
+        assignment = load_assignment(save_assignment_path)
+        extra["browser"] = browser
+        extra["capture_port"] = PlaywrightCaptureAdapter()
+        extra["tab_provider"] = make_tab_provider(browser, assignment)
+    elif real:
         from bap.main import _playwright_kwargs
 
         extra.update(_playwright_kwargs(config))
-    if real_vision:
+    if real_vision and not attended:
         from bap.adapters.vision.registry import production_analyzer_registry
 
         extra["analyzer_registry"] = production_analyzer_registry()
@@ -102,10 +127,12 @@ def build_main_window(
     )
 
     # Optional browser resource monitoring at the top of the report chain.
+    # Skipped in attended mode: the metrics adapter targets the standard
+    # PlaywrightBrowserManager, not the attended persistent-context browser.
     top_sink = supervisor.on_report
     rm_cfg = config.settings.resource_monitoring
     browser_manager = extra.get("browser")
-    if rm_cfg.enabled and browser_manager is not None:
+    if rm_cfg.enabled and browser_manager is not None and not attended:
         from bap.adapters.browser.playwright_metrics import PlaywrightBrowserMetrics
         from bap.app.resource_monitor import ResourceMonitor
 
@@ -138,6 +165,21 @@ def build_main_window(
     service.on_error = bridge.on_error
     service.start_loop()
 
+    # Persist the tab assignment (metadata only) on close, then run any store
+    # close from above.
+    if attended and save_assignment_path is not None:
+        from bap.app.attended import save_assignment as _save
+
+        _previous_close = on_close
+
+        def on_close() -> None:  # noqa: F811
+            try:
+                _save(save_assignment_path, assignment)
+            except Exception:  # a failed save must not block shutdown
+                pass
+            if _previous_close is not None:
+                _previous_close()
+
     limits = config.settings.resource_monitoring.limits
     return MainWindow(
         service,
@@ -146,6 +188,8 @@ def build_main_window(
         metrics_repository=metrics_repository,
         max_memory_mb=limits.max_memory_mb,
         max_pages=limits.max_pages,
+        attended=attended,
+        assignment=assignment,
     )
 
 
@@ -236,6 +280,11 @@ def main(argv: list[str] | None = None) -> None:
     # the console only.
     log_file = ensure_dirs(get_paths()).logs_dir / "bap-gui.log" if is_frozen() else None
     configure_logging("INFO", log_file=log_file)
+
+    # Find a browser installed via Tools → Install browser without a manual env var.
+    from bap.ops.browser_install import configure_browser_path
+
+    configure_browser_path()
 
     # A GUI exception can surface through sys.excepthook (outside a caught
     # frame), so install the excepthook variant to still capture a crash bundle.

@@ -39,6 +39,24 @@ def browsers_dir() -> Path:
     return get_paths().data_dir / "ms-playwright"
 
 
+def configure_browser_path() -> str:
+    """Point Playwright at BAP's per-user browser directory so a browser
+    installed via *Tools → Install browser* is found at launch — removing the
+    need for a manual PLAYWRIGHT_BROWSERS_PATH. Idempotent; never overrides an
+    existing value (so dev/CI setups keep their own). Returns the path in use.
+
+    Must run before the browser launches. The entry points call it at startup;
+    because install and launch both go through `browsers_dir()`, they always
+    agree afterwards.
+    """
+    existing = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if existing:
+        return existing
+    path = str(get_paths().data_dir / "ms-playwright")
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = path
+    return path
+
+
 def is_chromium_installed(directory: Path | None = None) -> bool:
     """True if a full Chromium build (not just headless shell) is present."""
     directory = directory or browsers_dir()
@@ -112,4 +130,4 @@ def install_chromium(
     return code
 
 
-__all__ = ["browsers_dir", "install_chromium", "is_chromium_installed"]
+__all__ = ["browsers_dir", "configure_browser_path", "install_chromium", "is_chromium_installed"]

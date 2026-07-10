@@ -1,30 +1,34 @@
-# Production configuration template — real Playwright + real vision.
+# Production template — attended mode with real vision analyzers.
 #
-# Validate before deploying (checks schema, capacity, limits, and that every
-# analyzer/action type resolves against the real adapters + installed plugins):
-#   bap validate-config config/production.example.yaml --real --real-vision --store /var/lib/bap/history.db
+# Attended mode: YOU open and log into the pages you want to watch in the
+# browser BAP opens, then assign each open tab to a session in the GUI. BAP
+# never navigates for you, so there are NO hardcoded URLs here.
 #
-# Dry-run the full assembly without launching a browser or writing anything:
-#   bap run config/production.example.yaml --real --real-vision --dry-run
+# Run it:
+#   1. Install the browser once (GUI: Tools → Install browser).
+#   2. bap-gui config/production.example.yaml
+#   3. Attended panel: Open Browser → open your pages → Scan tabs →
+#      assign a tab to each session → Start.
 #
-# Run headless with JSON logs and persistence:
-#   bap run config/production.example.yaml --real --real-vision \
-#       --store /var/lib/bap/history.db --log-format json
+# Validate before deploying (types resolve against the built-in dev registry;
+# add --real-vision to check the real OCR/template analyzers + plugins):
+#   bap validate-config config/production.example.yaml
 #
-# Only the built-in real types are used here (ocr, template_match, click, type,
-# navigate, wait); add your own via plugins (see docs/PLUGINS.md).
+# The analyzers below (ocr, template_match) need the 'vision' extra
+# (pip install "browser-automation-platform[vision]") plus Tesseract for real
+# runs. Start from config/attended.example.yaml if you just want to see attended
+# mode working with the built-in demo analyzers (no extra libraries).
 version: 1
 
 settings:
+  attended: true
   max_sessions: 8
-  headless: true
   browser_engine: chromium
   isolate_contexts_per_tab: true
 
-  # Observational browser resource monitoring. Memory/CPU need the 'monitoring'
-  # extra (psutil); page/context counts work without it. Exceeding a limit
-  # raises resource pressure (degrade -> recover -> disable) — it never kills
-  # the browser directly. Tune the limits to your host.
+  # Observational browser resource monitoring (memory/CPU need the 'monitoring'
+  # extra; page/context counts work without it). Exceeding a limit raises
+  # resource pressure (degrade → recover → disable) — it never kills the browser.
   resource_monitoring:
     enabled: true
     collect_every_ticks: 50
@@ -51,20 +55,9 @@ rule_packs:
         - type: wait
           params: { ms: 500 }
 
-    - id: recover_on_error
-      condition:
-        type: compare
-        field: panel.template_match
-        op: equals
-        value: error_banner
-      actions:
-        - type: navigate
-          params: { url: "https://dashboard.example.com/" }
-
 profiles:
+  # One session per page you want to watch. No start_url — you assign a tab.
   - id: dashboard
-    # Point this at your real target. A data: URL keeps the template offline.
-    start_url: "https://dashboard.example.com/"
     viewport: { width: 1600, height: 900 }
     session:
       interval_ms: 1000

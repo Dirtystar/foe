@@ -28,7 +28,7 @@ from bap.app.translation import build_capture_binding, build_rule, build_tab_pro
 from bap.config.config_models import ApplicationConfig
 from bap.core.actions.action_executor import ActionExecutor
 from bap.core.engine.scheduler import ReportCallback, Scheduler, SleepFn
-from bap.core.engine.session_manager import SessionManager, SessionSpec
+from bap.core.engine.session_manager import SessionManager, SessionSpec, TabProvider
 from bap.core.engine.tab_session import TabSession
 from bap.core.ports.browser_port import BrowserPort
 from bap.core.ports.capture_port import CapturePort
@@ -79,6 +79,7 @@ def create_application(
     sleep: SleepFn | None = None,
     on_report: ReportCallback | None = None,
     vision_workers: int | None = None,
+    tab_provider: "TabProvider | None" = None,
 ) -> Application:
     """Assemble an Application from validated configuration.
 
@@ -157,6 +158,7 @@ def create_application(
         scheduler=scheduler,
         session_factory=session_factory,
         max_sessions=config.settings.max_sessions,
+        tab_provider=tab_provider,
     )
 
     return Application(

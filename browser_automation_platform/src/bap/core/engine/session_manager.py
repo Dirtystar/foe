@@ -15,7 +15,7 @@ released on the way out of a failure.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from bap.core.domain.models import TabHandle, TabProfile
@@ -65,6 +65,13 @@ composition root, which is the only place that knows how to assemble the
 automation stack (capture bindings, rule engine, action executor)."""
 
 
+TabProvider = Callable[[SessionSpec], Awaitable[TabHandle]]
+"""How a session acquires its tab. Default (None): open a fresh tab from the
+profile and navigate to its start_url. Attended mode injects a provider that
+adopts the tab the user assigned to this profile — so the tick pipeline is
+untouched, only tab acquisition changes."""
+
+
 @dataclass
 class _SessionEntry:
     spec: SessionSpec
@@ -80,6 +87,7 @@ class SessionManager:
         scheduler: Scheduler,
         session_factory: SessionFactory,
         max_sessions: int = 8,
+        tab_provider: TabProvider | None = None,
     ) -> None:
         if max_sessions <= 0:
             raise ValueError(f"max_sessions must be > 0, got {max_sessions}.")
@@ -87,8 +95,16 @@ class SessionManager:
         self._scheduler = scheduler
         self._session_factory = session_factory
         self._max_sessions = max_sessions
+        self._tab_provider = tab_provider
         self._entries: dict[str, _SessionEntry] = {}
         self._browser_started = False
+
+    async def _acquire_tab(self, spec: SessionSpec) -> TabHandle:
+        """Get the tab for a session: the injected provider (attended mode) or
+        the default open-a-fresh-tab behaviour."""
+        if self._tab_provider is not None:
+            return await self._tab_provider(spec)
+        return await self._browser.open_tab(spec.tab_profile)
 
     @property
     def profile_ids(self) -> tuple[str, ...]:
@@ -112,7 +128,7 @@ class SessionManager:
             )
 
         await self._ensure_browser_started()
-        tab = await self._browser.open_tab(spec.tab_profile)
+        tab = await self._acquire_tab(spec)
         try:
             session = self._session_factory(spec, tab)
             # register_job starts the loop immediately if the scheduler is
@@ -169,7 +185,7 @@ class SessionManager:
         await self._ensure_browser_started()
         new_tab = None
         try:
-            new_tab = await self._browser.open_tab(entry.spec.tab_profile)
+            new_tab = await self._acquire_tab(entry.spec)
             new_session = self._session_factory(entry.spec, new_tab)
         except Exception:
             # Could not build a replacement: stop the broken session and drop

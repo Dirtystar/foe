@@ -4,6 +4,36 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Attended browser mode + browser discovery fix
+
+Move from developer-oriented `start_url` config to user-driven tab assignment,
+and make an installed Chromium discoverable without a manual env var. Core tick
+pipeline, RuleEngine, ActionExecutor, Vision, and Persistence are unchanged; the
+internal model stays `profile_id` (the GUI just calls them "sessions").
+
+### Fixed
+
+- **Installed browser is found automatically.** The app now points Playwright at
+  its per-user browser directory (`configure_browser_path()` at startup), so a
+  Chromium installed via *Tools → Install browser* is found at launch — no more
+  setting `PLAYWRIGHT_BROWSERS_PATH` by hand.
+
+### Added
+
+- **Attended (user-driven) browser mode** (`settings.attended: true`):
+  - `BrowserTab` model + `TabSourcePort` (core, engine-agnostic) and an
+    `AttendedBrowserManager` adapter that opens a **visible, persistent**
+    Chromium context, **scans** open tabs (title/url/id), and **adopts** the tab
+    the user assigns — Playwright types stay inside the adapter.
+  - `SessionManager` gains an optional `tab_provider` seam so sessions adopt an
+    assigned tab instead of opening one and navigating (tick pipeline untouched).
+  - GUI **Attended** panel: *Open Browser* → *Scan tabs* → a per-session tab
+    picker; **Start** is blocked until every session has a tab.
+  - Assignment persisted locally as metadata only (id/title/url) in
+    `data/attended-assignment.json` — never cookies or credentials.
+- **`config/attended.example.yaml`** (no URLs) and `production.example.yaml`
+  converted to attended mode — replacing the old unreachable placeholder URLs.
+
 ## [Unreleased] — Windows beta distribution
 
 Packaging and operability for a local Windows install. No runtime features, API

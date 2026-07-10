@@ -14,6 +14,9 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -47,11 +50,17 @@ class MainWindow(QMainWindow):
         metrics_repository=None,
         max_memory_mb: int | None = None,
         max_pages: int | None = None,
+        attended: bool = False,
+        assignment=None,
     ) -> None:
         super().__init__()
         self._service = service
         self._bridge = bridge
         self._on_close = on_close
+        self._attended = attended
+        self._assignment = assignment
+        self._running = False
+        self._pickers: dict[str, QComboBox] = {}
         self._row_index: dict[str, int] = {}
         # Dashboard is optional: only shown when analytics history is available.
         self.dashboard = (
@@ -90,6 +99,9 @@ class MainWindow(QMainWindow):
         controls.addWidget(QLabel("Runtime:"))
         controls.addWidget(self.state_label)
         layout.addLayout(controls)
+
+        if self._attended:
+            layout.addWidget(self._build_attended_panel())
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
@@ -169,6 +181,114 @@ class MainWindow(QMainWindow):
             "A generic, site-agnostic visual browser automation platform.",
         )
 
+    # --- attended browser panel ---------------------------------------------
+
+    def _build_attended_panel(self) -> QGroupBox:
+        """Open Browser → Scan tabs → assign a tab to each session. The window
+        only collects the choice; adopting the tab happens in the runtime."""
+        box = QGroupBox("Attended browser — assign a tab to each session")
+        outer = QVBoxLayout(box)
+
+        row = QHBoxLayout()
+        self.open_browser_button = QPushButton("Open Browser")
+        self.scan_button = QPushButton("Scan tabs")
+        self.scan_button.setEnabled(False)  # enabled once the browser is open
+        self.attended_hint = QLabel("Open the browser, open your pages, then scan.")
+        self.attended_hint.setObjectName("attendedHint")
+        row.addWidget(self.open_browser_button)
+        row.addWidget(self.scan_button)
+        row.addWidget(self.attended_hint)
+        row.addStretch(1)
+        outer.addLayout(row)
+
+        form = QFormLayout()
+        for profile_id in self._service.profile_ids:
+            combo = QComboBox()
+            combo.setEnabled(False)
+            combo.addItem("— scan tabs first —", None)
+            combo.currentIndexChanged.connect(
+                lambda _i, pid=profile_id: self._on_tab_selected(pid)
+            )
+            self._pickers[profile_id] = combo
+            form.addRow(QLabel(f"Session “{profile_id}”"), combo)
+        outer.addLayout(form)
+
+        self.open_browser_button.clicked.connect(self._on_open_browser_clicked)
+        self.scan_button.clicked.connect(self._on_scan_clicked)
+        return box
+
+    def _on_open_browser_clicked(self) -> None:
+        self._append_log("Opening browser…")
+        self.open_browser_button.setEnabled(False)
+        future = self._service.open_browser()
+        future.add_done_callback(self._browser_open_done)
+
+    def _browser_open_done(self, future) -> None:
+        # Runs on the runtime thread; hop to the UI thread via signals.
+        try:
+            future.result()
+        except Exception as exc:  # surfaced, never raised into the thread
+            self._bridge.error_occurred.emit(f"Could not open browser: {exc}")
+            return
+        self._bridge.browser_ready.emit()
+
+    def _on_browser_ready(self) -> None:
+        self.scan_button.setEnabled(True)
+        self.open_browser_button.setText("Browser open")
+        self.attended_hint.setText("Open your pages, then click Scan tabs.")
+        self._append_log("Browser open. Open your pages, then Scan tabs.")
+
+    def _on_scan_clicked(self) -> None:
+        self._append_log("Scanning open tabs…")
+        future = self._service.scan_tabs()
+        future.add_done_callback(self._scan_done)
+
+    def _scan_done(self, future) -> None:
+        try:
+            tabs = future.result()
+        except Exception as exc:
+            self._bridge.error_occurred.emit(f"Could not scan tabs: {exc}")
+            return
+        self._bridge.tabs_scanned.emit(tabs)
+
+    def _populate_tab_pickers(self, tabs) -> None:
+        tabs = list(tabs)
+        self.attended_hint.setText(f"{len(tabs)} tab(s) found — pick one per session.")
+        for profile_id, combo in self._pickers.items():
+            previous = self._assignment.get(profile_id) if self._assignment else None
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem("— select tab —", None)
+            selected_index = 0
+            for i, tab in enumerate(tabs, start=1):
+                label = f"{tab.title or tab.url} — {tab.url}"
+                combo.addItem(label, tab)
+                if previous is not None and previous.tab_id == tab.tab_id:
+                    selected_index = i
+            combo.setCurrentIndex(selected_index)
+            combo.setEnabled(True)
+            combo.blockSignals(False)
+            self._on_tab_selected(profile_id)  # sync assignment with the shown value
+
+    def _on_tab_selected(self, profile_id: str) -> None:
+        if self._assignment is None:
+            return
+        tab = self._pickers[profile_id].currentData()
+        if tab is None:
+            self._assignment.clear(profile_id)
+        else:
+            self._assignment.assign(profile_id, tab)
+        self._update_start_gate()
+
+    def _update_start_gate(self) -> None:
+        idle = not self._running
+        assigned = True
+        if self._attended:
+            profile_ids = list(self._service.profile_ids)
+            assigned = self._assignment is not None and self._assignment.all_assigned(profile_ids)
+        self.start_button.setEnabled(idle and assigned)
+        self.tick_button.setEnabled(idle and assigned)
+
     def _populate_sessions(self, profile_ids) -> None:
         self.table.setRowCount(len(profile_ids))
         for row, profile_id in enumerate(profile_ids):
@@ -184,6 +304,9 @@ class MainWindow(QMainWindow):
         self._bridge.error_occurred.connect(self._on_error)
         self._bridge.health_changed.connect(self._on_health)
         self._bridge.status_changed.connect(self._apply_status)
+        if self._attended:
+            self._bridge.browser_ready.connect(self._on_browser_ready)
+            self._bridge.tabs_scanned.connect(self._populate_tab_pickers)
 
     # --- control slots ------------------------------------------------------
 
@@ -225,10 +348,9 @@ class MainWindow(QMainWindow):
 
     def _apply_state(self, state: str) -> None:
         self.state_label.setText(state)
-        running = state == "running"
-        self.start_button.setEnabled(not running)
-        self.stop_button.setEnabled(running)
-        self.tick_button.setEnabled(not running)
+        self._running = state == "running"
+        self.stop_button.setEnabled(self._running)
+        self._update_start_gate()  # Start/Tick also respect the attended gate
 
     def _apply_status(self, status: str, reason: str) -> None:
         self.status_label.setText(status)

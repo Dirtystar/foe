@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from bap.ops import browser_install
@@ -31,6 +32,33 @@ def test_browsers_dir_defaults_under_data(monkeypatch, tmp_path):
     monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
     monkeypatch.setenv("BAP_HOME", str(tmp_path / "home"))
     assert browser_install.browsers_dir() == tmp_path / "home" / "data" / "ms-playwright"
+
+
+def test_configure_browser_path_sets_env_to_install_dir(monkeypatch, tmp_path):
+    monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    monkeypatch.setenv("BAP_HOME", str(tmp_path / "home"))
+
+    resolved = browser_install.configure_browser_path()
+
+    expected = str(tmp_path / "home" / "data" / "ms-playwright")
+    assert resolved == expected
+    assert os.environ["PLAYWRIGHT_BROWSERS_PATH"] == expected
+    # install target and launch path now agree — the whole point of the fix.
+    assert str(browser_install.browsers_dir()) == expected
+
+
+def test_configure_browser_path_does_not_override_existing(monkeypatch, tmp_path):
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path / "custom"))
+    assert browser_install.configure_browser_path() == str(tmp_path / "custom")
+    assert os.environ["PLAYWRIGHT_BROWSERS_PATH"] == str(tmp_path / "custom")
+
+
+def test_configure_browser_path_is_idempotent(monkeypatch, tmp_path):
+    monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    monkeypatch.setenv("BAP_HOME", str(tmp_path / "home"))
+    first = browser_install.configure_browser_path()
+    second = browser_install.configure_browser_path()
+    assert first == second
 
 
 def test_install_chromium_invokes_runner_with_download_env(tmp_path):

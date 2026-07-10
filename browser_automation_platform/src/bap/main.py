@@ -379,6 +379,11 @@ def execute_run(args: argparse.Namespace) -> int:
     configure_logging(
         args.log_level, json_format=(args.log_format == "json"), log_file=log_file
     )
+    # Find a browser installed via the GUI's per-user directory without a
+    # manual env var.
+    from bap.ops.browser_install import configure_browser_path
+
+    configure_browser_path()
     reporter = setup_crash_reporting()
     config_path = resolve_config_path(args)
     try:

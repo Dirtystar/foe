@@ -51,6 +51,18 @@ class TabHandle:
 
 
 @dataclass(frozen=True)
+class BrowserTab:
+    """A tab discovered in an attended (user-driven) browser: what the user
+    sees, with a stable id the adapter can later resolve back to the real tab.
+    Deliberately free of any engine types so it can cross to the GUI and be
+    persisted as plain data — no Playwright Page here."""
+
+    tab_id: TabId
+    title: str
+    url: str
+
+
+@dataclass(frozen=True)
 class Rect:
     """Pixel-space rectangle in page coordinates."""
 

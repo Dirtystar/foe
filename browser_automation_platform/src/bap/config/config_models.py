@@ -193,6 +193,10 @@ class GlobalSettings(_Base):
     headless: bool = False
     browser_engine: Literal["chromium", "firefox", "webkit"] = "chromium"
     isolate_contexts_per_tab: bool = True
+    # Attended mode: instead of opening tabs and navigating to each profile's
+    # start_url, the user opens tabs in a visible browser and assigns one to
+    # each session. profiles then need no start_url.
+    attended: bool = False
     resource_monitoring: ResourceMonitoringConfig = Field(
         default_factory=ResourceMonitoringConfig
     )
