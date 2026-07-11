@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -22,19 +23,36 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from bap.forge.worlds import BADGE_PCTS, World, WorldError
+from bap.forge.worlds import BADGE_PCTS, World, WorldError, is_forge_hostname, normalize_hostname
 
 
 class WorldDialog(QDialog):
-    """Add or edit one World. `existing` pre-fills the fields (edit mode)."""
+    """Add or edit one World.
 
-    def __init__(self, parent=None, *, existing: World | None = None) -> None:
+    `existing` pre-fills every field (edit mode). `detected_tabs` (add mode)
+    offers the open Forge tabs so the user picks one and the hostname / URL /
+    title fill in automatically — no manual URL typing.
+    """
+
+    def __init__(self, parent=None, *, existing: World | None = None, detected_tabs=None) -> None:
         super().__init__(parent)
         self._result: World | None = None
+        self._last_url = existing.last_url if existing else ""
         self.setWindowTitle("Edit World" if existing else "Add World")
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
+
+        # Prefill-from-tab picker (add mode only). Only real Forge tabs are offered.
+        forge_tabs = [t for t in (detected_tabs or []) if is_forge_hostname(t.url)]
+        self.detected_combo = None
+        if existing is None and forge_tabs:
+            self.detected_combo = QComboBox()
+            self.detected_combo.addItem("— choose a scanned tab to prefill —", None)
+            for tab in forge_tabs:
+                self.detected_combo.addItem(f"{normalize_hostname(tab.url)} — {tab.title}", tab)
+            self.detected_combo.currentIndexChanged.connect(self._on_detected_selected)
+            form.addRow("Detected tab", self.detected_combo)
 
         self.alias_edit = QLineEdit(existing.alias if existing else "")
         self.alias_edit.setPlaceholderText("Main, Farm, H …")
@@ -43,6 +61,10 @@ class WorldDialog(QDialog):
         self.host_edit = QLineEdit(existing.hostname if existing else "")
         self.host_edit.setPlaceholderText("cz8.forgeofempires.com  (or paste the world URL)")
         form.addRow("Forge server (hostname)", self.host_edit)
+
+        self.title_edit = QLineEdit(existing.title if existing else "")
+        self.title_edit.setPlaceholderText("(auto-filled from the tab)")
+        form.addRow("Detected title", self.title_edit)
 
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(100, 60000)
@@ -86,6 +108,16 @@ class WorldDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    def _on_detected_selected(self) -> None:
+        """Fill hostname / title / URL from the chosen scanned tab; leave alias
+        for the user. Never overwrites an alias the user already typed."""
+        tab = self.detected_combo.currentData() if self.detected_combo else None
+        if tab is None:
+            return
+        self.host_edit.setText(normalize_hostname(tab.url))
+        self.title_edit.setText(tab.title or "")
+        self._last_url = tab.url
+
     def _build_world(self) -> World:
         allowed = tuple(p for p, box in self.pct_boxes.items() if box.isChecked())
         if not allowed:
@@ -96,6 +128,8 @@ class WorldDialog(QDialog):
             interval_ms=self.interval_spin.value(),
             max_weakening_pct=self.maxweak_spin.value(),
             allowed_pcts=allowed,
+            title=self.title_edit.text().strip(),
+            last_url=self._last_url,
         )
 
     def _on_accept(self) -> None:
@@ -112,8 +146,8 @@ class WorldDialog(QDialog):
         return self._result
 
     @staticmethod
-    def get_world(parent, *, existing: World | None = None) -> World | None:
-        dialog = WorldDialog(parent, existing=existing)
+    def get_world(parent, *, existing: World | None = None, detected_tabs=None) -> World | None:
+        dialog = WorldDialog(parent, existing=existing, detected_tabs=detected_tabs)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             return dialog.world()
         return None

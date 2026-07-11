@@ -93,7 +93,6 @@ def build_main_window(
         import os
 
         from bap.adapters.browser.attended_adapter import AttendedBrowserManager
-        from bap.adapters.capture.playwright_capture import PlaywrightCaptureAdapter
         from bap.app.attended import (
             TabAssignment,
             load_assignment,
@@ -121,7 +120,16 @@ def build_main_window(
             save_assignment_path = paths.data_dir / "attended-assignment.json"
             assignment = load_assignment(save_assignment_path)
         extra["browser"] = browser
-        extra["capture_port"] = PlaywrightCaptureAdapter()
+        if forge:
+            # Read-only CDP capture: screenshotting a world tab must never
+            # foreground it, resize the canvas, or deliver input (P0-1).
+            from bap.adapters.capture.forge_capture import ForgeCanvasCaptureAdapter
+
+            extra["capture_port"] = ForgeCanvasCaptureAdapter()
+        else:
+            from bap.adapters.capture.playwright_capture import PlaywrightCaptureAdapter
+
+            extra["capture_port"] = PlaywrightCaptureAdapter()
         extra["tab_provider"] = make_tab_provider(browser, assignment)
     elif real:
         from bap.main import _playwright_kwargs
@@ -163,7 +171,9 @@ def build_main_window(
         )
         top_sink = resource_monitor.on_report
 
-    app = create_application(config, on_report=top_sink, **extra)
+    # Forge edits its world set live (hot CRUD); the factory must be able to
+    # build a session for a world the launch config never had.
+    app = create_application(config, on_report=top_sink, dynamic_profiles=forge, **extra)
     supervisor.session_manager = app.manager  # late-bind now that the manager exists
     service = RuntimeService(app)
 

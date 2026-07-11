@@ -33,6 +33,9 @@ class _Runnable(Protocol):
     async def stop(self): ...
     async def open_browser(self) -> None: ...
     async def close_browser(self) -> None: ...
+    async def add_world_session(self, spec) -> None: ...
+    async def remove_world_session(self, profile_id: str) -> None: ...
+    async def edit_world_session(self, spec) -> None: ...
 
 
 class RuntimeService:
@@ -118,6 +121,20 @@ class RuntimeService:
         """Return the tabs currently open in the attended browser
         (Future resolves to list[BrowserTab])."""
         return self._submit(self._app.browser.scan_tabs())
+
+    # --- Forge hot World CRUD (thread-safe; runs on the runtime loop) --------
+
+    def add_world_session(self, spec) -> Future:
+        """Add a world to the live session plan (no restart)."""
+        return self._submit(self._app.add_world_session(spec))
+
+    def remove_world_session(self, profile_id: str) -> Future:
+        """Remove a world from the plan and stop its session; tab is untouched."""
+        return self._submit(self._app.remove_world_session(profile_id))
+
+    def edit_world_session(self, spec) -> Future:
+        """Apply edited world settings live (rebuilds a running session in place)."""
+        return self._submit(self._app.edit_world_session(spec))
 
     async def _single_tick(self) -> None:
         await self._app.open_browser()

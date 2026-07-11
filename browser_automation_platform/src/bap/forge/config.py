@@ -28,7 +28,15 @@ from bap.config.config_models import (
     SessionConfig,
     ViewportConfig,
 )
+from bap.core.domain.models import TabProfile
+from bap.core.engine.session_manager import SessionSpec
 from bap.forge.worlds import World
+
+
+def forge_session_spec(world: World) -> SessionSpec:
+    """The runtime session-plan entry for one World: profile id = alias, cadence
+    = the world's interval. Used for live (no-restart) add/edit of worlds."""
+    return SessionSpec(tab_profile=TabProfile(id=world.alias), interval_ms=world.interval_ms)
 
 # The rule pack Forge sessions reference. Empty for now (observe-only): the
 # assistant looks at the canvas but performs no action until the detector and
@@ -75,4 +83,4 @@ def build_forge_config(
     )
 
 
-__all__ = ["FORGE_RULE_PACK", "CANVAS_BINDING", "build_forge_config"]
+__all__ = ["FORGE_RULE_PACK", "CANVAS_BINDING", "build_forge_config", "forge_session_spec"]

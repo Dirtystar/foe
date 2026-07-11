@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge Milestone 1.1 (Windows-testing P0 fixes)
+
+Fixes found in real Windows testing of Milestone 1. Still capture-only — no
+detector, OCR, rules, actions, or clicking.
+
+### Fixed
+
+- **Capture is provably read-only (P0-1).** The capture-only tick could flicker
+  the game and even open a random province. Root cause: `page.screenshot(full_page=True)`
+  grew/relaid-out the WebGL canvas on every tick and could foreground a
+  background world tab (delivering an incidental pointer event to the canvas). A
+  new `ForgeCanvasCaptureAdapter` drives Chromium's DevTools `Page.captureScreenshot`
+  directly — viewport-only, `fromSurface`, no viewport resize, no tab
+  foregrounding, no input. A regression test proves repeated capture-only ticks
+  invoke **only** the screenshot call and never click/type/scroll/focus/evaluate/
+  bringToFront.
+- **Application exit no longer silently closes Chromium (P0-4).** Closing the
+  window with managed Chromium open now prompts: keep Chromium open (default),
+  close both, or cancel. Stop was already automation-only.
+
+### Added / Changed
+
+- **Add World from a scanned tab (P0-2).** The Add World dialog offers the
+  detected Forge tabs; picking one auto-fills hostname, last URL, and title —
+  the user types only an alias and per-world settings. No manual URL typing.
+- **Hot World CRUD (P0-3).** Add/Edit/Remove update the GUI and the runtime
+  session plan immediately, with no restart: a new world gets its tab picker at
+  once, edits (e.g. cadence) rebuild a running session in place without closing
+  Chromium, and removing a world drops only its session — never its browser tab.
+- **Forge is Worlds-only (P0-5).** The generic "Profile" framing is hidden in
+  Forge mode (the activity table reads "World"); `profile_id` stays internal.
+- **Capture-only is stated plainly (P0-6).** A banner reads
+  "CAPTURE ONLY — NO RULES — NO ACTIONS", and every world row shows rules 0 /
+  actions 0, so no one assumes automation exists.
+
 ## [Unreleased] — Forge of Empires Assistant, Milestone 1 (P0 fixes)
 
 First milestone of the pivot to a Forge-specific product. Adds a persistent

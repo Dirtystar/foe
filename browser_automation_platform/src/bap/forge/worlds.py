@@ -71,6 +71,11 @@ class World:
     max_weakening_pct: int = 100
     allowed_pcts: tuple[int, ...] = BADGE_PCTS
     strategy: dict = field(default_factory=dict)
+    # Display/recognition metadata captured from the scanned tab (NOT identity —
+    # hostname is the durable key). Helps the user recognise a world and lets the
+    # Add-World form prefill without any manual typing.
+    title: str = ""
+    last_url: str = ""
 
     def __post_init__(self) -> None:
         alias = self.alias.strip()
@@ -113,6 +118,8 @@ class World:
             "max_weakening_pct": self.max_weakening_pct,
             "allowed_pcts": list(self.allowed_pcts),
             "strategy": dict(self.strategy),
+            "title": self.title,
+            "last_url": self.last_url,
         }
 
     @classmethod
@@ -125,6 +132,8 @@ class World:
                 max_weakening_pct=int(data.get("max_weakening_pct", 100)),
                 allowed_pcts=tuple(data.get("allowed_pcts", BADGE_PCTS)),
                 strategy=dict(data.get("strategy", {})),
+                title=str(data.get("title", "")),
+                last_url=str(data.get("last_url", "")),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise WorldError(f"Invalid world record: {exc}") from exc

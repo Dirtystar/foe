@@ -51,7 +51,10 @@ class Application:
     browser_controller: BrowserController
     scheduler: Scheduler
     manager: SessionManager
-    session_specs: tuple[SessionSpec, ...]
+    # The runtime session plan. A list (not a tuple) because Forge edits it live
+    # via add/remove/edit World, with no application restart. All mutations go
+    # through the async methods below so they happen on the runtime loop thread.
+    session_specs: list[SessionSpec]
     vision_executor: object = None  # ThreadPoolExecutor when vision is offloaded
 
     async def open_browser(self) -> None:
@@ -65,7 +68,40 @@ class Application:
         await self.browser_controller.close()
 
     async def create_sessions(self) -> None:
-        for spec in self.session_specs:
+        for spec in list(self.session_specs):
+            await self.manager.create_session(spec)
+
+    # --- live session-plan edits (Forge hot CRUD; no restart) ---------------
+
+    def _upsert_spec(self, spec: SessionSpec) -> None:
+        for i, existing in enumerate(self.session_specs):
+            if existing.profile_id == spec.profile_id:
+                self.session_specs[i] = spec
+                return
+        self.session_specs.append(spec)
+
+    def _drop_spec(self, profile_id: str) -> None:
+        self.session_specs[:] = [s for s in self.session_specs if s.profile_id != profile_id]
+
+    async def add_world_session(self, spec: SessionSpec) -> None:
+        """Add a world to the plan. It becomes live on the next Start (it has no
+        assigned tab yet), so this only updates the plan — never opens a tab."""
+        self._upsert_spec(spec)
+
+    async def remove_world_session(self, profile_id: str) -> None:
+        """Remove a world from the plan and stop its live session if running.
+        The browser tab is untouched (attended close_tab is a no-op)."""
+        self._drop_spec(profile_id)
+        if profile_id in self.manager.profile_ids:
+            await self.manager.close_session(profile_id)
+
+    async def edit_world_session(self, spec: SessionSpec) -> None:
+        """Apply edited world settings. If the world is running, its session is
+        rebuilt in place (same still-assigned tab) so e.g. a new cadence takes
+        effect immediately — without closing the browser."""
+        self._upsert_spec(spec)
+        if self.scheduler.running and spec.profile_id in self.manager.profile_ids:
+            await self.manager.close_session(spec.profile_id)
             await self.manager.create_session(spec)
 
     async def start(self) -> None:
@@ -109,6 +145,7 @@ def create_application(
     on_report: ReportCallback | None = None,
     vision_workers: int | None = None,
     tab_provider: "TabProvider | None" = None,
+    dynamic_profiles: bool = False,
 ) -> Application:
     """Assemble an Application from validated configuration.
 
@@ -157,21 +194,40 @@ def create_application(
         for profile in config.profiles
     }
     profiles_by_id = {profile.id: profile for profile in config.profiles}
-    session_specs = tuple(
+    session_specs = [
         SessionSpec(
             tab_profile=build_tab_profile(profile),
             interval_ms=profile.session.interval_ms,
             jitter_ms=profile.session.jitter_ms,
         )
         for profile in config.profiles
-    )
+    ]
 
     browser = browser if browser is not None else StubBrowser()
     capture_port = capture_port if capture_port is not None else StubCapturePort()
     scheduler = scheduler if scheduler is not None else Scheduler(sleep=sleep, on_report=on_report)
 
     def session_factory(spec: SessionSpec, tab) -> TabSession:
-        profile = profiles_by_id[spec.profile_id]
+        profile = profiles_by_id.get(spec.profile_id)
+        if profile is None:
+            if not dynamic_profiles:
+                raise KeyError(spec.profile_id)
+            # A world added at runtime (Forge hot CRUD) that the launch config
+            # never had. Build the same uniform capture-only session the Forge
+            # config produces: full-canvas capture, no analyzers, no rules, no
+            # actions — observe-only, and provably read-only.
+            from bap.core.engine.tab_session import CaptureBinding
+            from bap.core.vision.pipeline import VisionPipeline
+
+            return TabSession(
+                profile_id=spec.profile_id,
+                tab=tab,
+                capture_port=capture_port,
+                bindings=(CaptureBinding(target=None, pipeline=VisionPipeline([])),),
+                aggregator=Aggregator(),
+                rule_engine=RuleEngine(()),
+                action_executor=ActionExecutor([]),
+            )
         return TabSession(
             profile_id=spec.profile_id,
             tab=tab,
