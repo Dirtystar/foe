@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge Milestone 3 (badge detector + Vision Debugger)
+
+The weakening-badge detector, graded against the human-confirmed set, plus an
+observe-only Vision Debugger. **Real clicking stays disabled** — accuracy is
+below the go-live gate (see the report), which is exactly what the debugger is
+for.
+
+### Added
+
+- **Badge detector** (`bap.forge.detection.detector`): two stages — a red
+  attrition-arrow colour prior (recall) confirmed by multi-scale, background-
+  masked emblem-template matching against a bundled bank (precision) + NMS.
+  Reports centre, bbox, and confidence; the side-panel pill is detected
+  separately as a state signal.
+- **Percentage classifier** (`detection.classify`): nearest-neighbour over
+  labelled percentage patches — no OCR engine.
+- **Grading harness** (`detection.evaluate`, `python -m bap.forge.detection.evaluate`):
+  matches predictions to reviewed ground truth and reports recall, precision,
+  centre error, and classification accuracy, **leave-one-frame-out** so the
+  numbers reflect generalisation. Measured now: recall 78.4%, precision 55.8%,
+  centre error median 6.1 px, classification 62.1% — centre meets the ≤10 px
+  target, the rest are below the gate (full write-up in
+  `tests/forge_assets/grading/GRADING_REPORT.md`).
+- **Vision Debugger / Test Scan** (`bap.forge.detection.scan`,
+  `bap.gui.forge_debugger`, World Manager *Test Scan* button): observe-only.
+  Renders the analyzed region, every detection with %/confidence/centre, the
+  panel pill separately, the sector a strategy *would* select for the World, a
+  proposed click point drawn as a cross, and a plain-language explanation under
+  a permanent **OBSERVE ONLY — NO CLICK PERFORMED** banner. Saves the original,
+  annotated image, detection JSON, and calibration metadata. Nothing clicks.
+
 ## [Unreleased] — Forge Milestone 2 (assisted labelling + grading set)
 
 Tooling to build the human-confirmed ground truth the badge detector will be

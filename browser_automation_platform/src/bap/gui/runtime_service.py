@@ -136,6 +136,17 @@ class RuntimeService:
         """Apply edited world settings live (rebuilds a running session in place)."""
         return self._submit(self._app.edit_world_session(spec))
 
+    def capture_world(self, tab_id: str, capture_port) -> Future:
+        """Read-only capture of a world's tab (Future resolves to PNG bytes, or
+        None). Uses the same CDP capture as the runtime — no clicking, no focus."""
+
+        async def _cap():
+            tab = await self._app.browser.adopt_tab(tab_id)
+            image = await capture_port.capture(tab)
+            return image.data
+
+        return self._submit(_cap())
+
     async def _single_tick(self) -> None:
         await self._app.open_browser()
         await self._app.create_sessions()

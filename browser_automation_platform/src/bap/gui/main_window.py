@@ -55,6 +55,7 @@ class MainWindow(QMainWindow):
         assignment=None,
         forge: bool = False,
         world_store=None,
+        capture_callback=None,
     ) -> None:
         super().__init__()
         self._service = service
@@ -68,6 +69,10 @@ class MainWindow(QMainWindow):
         self._attended = attended or forge
         self._assignment = assignment
         self._world_store = world_store
+        # Returns PNG bytes for an assigned world tab (live read-only capture),
+        # or None. Wired by the composition root; None in tests / offline.
+        self._capture_callback = capture_callback
+        self._debugger = None
         self._running = False
         self._pickers: dict[str, QComboBox] = {}
         self._selected_alias: str | None = None
@@ -286,11 +291,13 @@ class MainWindow(QMainWindow):
         self.add_world_button = QPushButton("Add World…")
         self.edit_world_button = QPushButton("Edit…")
         self.remove_world_button = QPushButton("Remove")
+        self.test_scan_button = QPushButton("Test Scan (observe-only)…")
         self.edit_world_button.setEnabled(False)
         self.remove_world_button.setEnabled(False)
         for widget in (self.add_world_button, self.edit_world_button, self.remove_world_button):
             crud.addWidget(widget)
         crud.addStretch(1)
+        crud.addWidget(self.test_scan_button)
         outer.addLayout(crud)
 
         # Per-world tab pickers live in a rebuildable form so add/remove updates
@@ -304,9 +311,56 @@ class MainWindow(QMainWindow):
         self.add_world_button.clicked.connect(self._on_add_world)
         self.edit_world_button.clicked.connect(self._on_edit_world)
         self.remove_world_button.clicked.connect(self._on_remove_world)
+        self.test_scan_button.clicked.connect(self._on_test_scan)
         self._refresh_worlds_table()
         self._rebuild_pickers()
         return box
+
+    def _on_test_scan(self) -> None:
+        """Open the observe-only Vision Debugger on a live world capture (if a
+        world tab is assigned and the browser is open) or a chosen screenshot
+        file. Never clicks — the debugger only shows what the detector sees."""
+        try:
+            import cv2
+            import numpy as np
+        except Exception:
+            QMessageBox.warning(self, "Test Scan", "Vision libraries (OpenCV) are not installed.")
+            return
+
+        alias = self._selected_alias or (self._world_aliases()[0] if self._world_aliases() else None)
+        world = self._world_store.get(alias) if (alias and self._world_store) else None
+        tab = self._assignment.get(alias) if (alias and self._assignment) else None
+
+        img = None
+        source = alias or "screenshot"
+        if self._capture_callback is not None and tab is not None and self._browser_open:
+            try:
+                png = self._capture_callback(tab.tab_id)
+                if png:
+                    img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
+            except Exception as exc:
+                self._append_log(f"Live capture failed ({exc}); pick a screenshot instead.")
+        if img is None:
+            from PySide6.QtWidgets import QFileDialog
+
+            path, _ = QFileDialog.getOpenFileName(self, "Choose a Forge screenshot", "", "PNG (*.png)")
+            if not path:
+                return
+            img = cv2.imread(path)
+            source = path.rsplit("/", 1)[-1]
+        if img is None:
+            QMessageBox.warning(self, "Test Scan", "Could not load an image to scan.")
+            return
+        self._open_debugger(img, world=world, source=source)
+
+    def _open_debugger(self, image, *, world=None, source: str = "") -> None:
+        from bap.gui.forge_debugger import DebuggerWindow, _bundled_classifier
+
+        self._debugger = DebuggerWindow(
+            image, world=world, classifier=_bundled_classifier(), source=source
+        )
+        self._debugger.resize(1280, 760)
+        self._debugger.show()
 
     def _world_aliases(self) -> list[str]:
         return self._world_store.aliases() if self._world_store is not None else []

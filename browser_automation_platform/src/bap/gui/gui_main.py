@@ -205,6 +205,15 @@ def build_main_window(
             if _previous_close is not None:
                 _previous_close()
 
+    # Forge Test Scan: a synchronous read-only capture of a world's tab, used by
+    # the observe-only Vision Debugger. Uses the same CDP capture as the runtime.
+    capture_callback = None
+    if forge:
+        _capture_port = extra.get("capture_port")
+
+        def capture_callback(tab_id: str):  # noqa: F811
+            return service.capture_world(tab_id, _capture_port).result(timeout=20)
+
     limits = config.settings.resource_monitoring.limits
     return MainWindow(
         service,
@@ -217,6 +226,7 @@ def build_main_window(
         assignment=assignment,
         forge=forge,
         world_store=world_store,
+        capture_callback=capture_callback,
     )
 
 
