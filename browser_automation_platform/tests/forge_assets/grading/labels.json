@@ -5,297 +5,241 @@
       "file": "frame_000021.png",
       "badges": [
         {
-          "cx": 1263,
-          "cy": 772,
-          "pct": null
+          "cx": 932,
+          "cy": 734,
+          "pct": 60
         },
         {
-          "cx": 1314,
-          "cy": 772,
-          "pct": null
+          "cx": 1223,
+          "cy": 747,
+          "pct": 20
         },
         {
-          "cx": 1369,
+          "cx": 909,
+          "cy": 890,
+          "pct": 60
+        },
+        {
+          "cx": 671,
           "cy": 796,
-          "pct": null
+          "pct": 100
+        },
+        {
+          "cx": 1587,
+          "cy": 641,
+          "pct": 20
         }
       ],
-      "reviewed": false
+      "reviewed": true
     },
     {
       "file": "frame_000070.png",
       "badges": [
         {
-          "cx": 1314,
-          "cy": 770,
-          "pct": null
+          "cx": 966,
+          "cy": 854,
+          "pct": 60
         },
         {
-          "cx": 1263,
-          "cy": 771,
-          "pct": null
+          "cx": 934,
+          "cy": 1010,
+          "pct": 60
         },
         {
-          "cx": 1371,
-          "cy": 796,
-          "pct": null
+          "cx": 1612,
+          "cy": 755,
+          "pct": 20
+        },
+        {
+          "cx": 687,
+          "cy": 916,
+          "pct": 100
         }
       ],
-      "reviewed": false
+      "reviewed": true
     },
     {
       "file": "frame_000183.png",
       "badges": [
         {
-          "cx": 1263,
-          "cy": 772,
-          "pct": null
+          "cx": 1604,
+          "cy": 540,
+          "pct": 20
         },
         {
-          "cx": 1314,
-          "cy": 772,
-          "pct": null
+          "cx": 1080,
+          "cy": 545,
+          "pct": 60
         },
         {
-          "cx": 1369,
-          "cy": 796,
-          "pct": null
+          "cx": 950,
+          "cy": 650,
+          "pct": 60
+        },
+        {
+          "cx": 926,
+          "cy": 792,
+          "pct": 60
+        },
+        {
+          "cx": 1156,
+          "cy": 994,
+          "pct": 20
         }
       ],
-      "reviewed": false
+      "reviewed": true
     },
     {
       "file": "frame_000302.png",
       "badges": [
         {
-          "cx": 1249,
-          "cy": 755,
-          "pct": null
+          "cx": 789,
+          "cy": 847,
+          "pct": 20
         },
         {
-          "cx": 1305,
-          "cy": 755,
-          "pct": null
+          "cx": 901,
+          "cy": 612,
+          "pct": 20
         },
         {
-          "cx": 959,
-          "cy": 757,
-          "pct": null
-        },
-        {
-          "cx": 1367,
-          "cy": 781,
-          "pct": null
-        },
-        {
-          "cx": 900,
-          "cy": 853,
-          "pct": null
+          "cx": 1104,
+          "cy": 555,
+          "pct": 20
         }
       ],
-      "reviewed": false
+      "reviewed": true
+    },
+    {
+      "file": "frame_000346.png",
+      "badges": [
+        {
+          "cx": 1864,
+          "cy": 650,
+          "pct": 20
+        }
+      ],
+      "reviewed": true
     },
     {
       "file": "frame_000348.png",
       "badges": [
         {
-          "cx": 1351,
-          "cy": 664,
-          "pct": null
-        },
-        {
-          "cx": 1248,
-          "cy": 754,
-          "pct": null
-        },
-        {
-          "cx": 1306,
-          "cy": 754,
-          "pct": null
-        },
-        {
-          "cx": 1367,
-          "cy": 781,
-          "pct": null
+          "cx": 1857,
+          "cy": 647,
+          "pct": 20
         }
       ],
-      "reviewed": false
+      "reviewed": true
     },
     {
       "file": "frame_000460.png",
-      "badges": [
-        {
-          "cx": 1566,
-          "cy": 758,
-          "pct": null
-        },
-        {
-          "cx": 1532,
-          "cy": 759,
-          "pct": null
-        },
-        {
-          "cx": 1560,
-          "cy": 761,
-          "pct": null
-        },
-        {
-          "cx": 1469,
-          "cy": 797,
-          "pct": null
-        },
-        {
-          "cx": 1452,
-          "cy": 810,
-          "pct": null
-        },
-        {
-          "cx": 1474,
-          "cy": 814,
-          "pct": null
-        }
-      ],
-      "reviewed": false
+      "badges": [],
+      "reviewed": true
+    },
+    {
+      "file": "frame_000466.png",
+      "badges": [],
+      "reviewed": true
     },
     {
       "file": "frame_000486.png",
       "badges": [
         {
-          "cx": 1249,
-          "cy": 755,
-          "pct": null
+          "cx": 1203,
+          "cy": 753,
+          "pct": 20
         },
         {
-          "cx": 1305,
-          "cy": 755,
-          "pct": null
-        },
-        {
-          "cx": 1367,
-          "cy": 781,
-          "pct": null
+          "cx": 1696,
+          "cy": 517,
+          "pct": 20
         }
       ],
-      "reviewed": false
+      "reviewed": true
     },
     {
       "file": "frame_000536.png",
       "badges": [
         {
-          "cx": 1249,
-          "cy": 755,
-          "pct": null
+          "cx": 940,
+          "cy": 714,
+          "pct": 40
         },
         {
-          "cx": 1305,
-          "cy": 755,
-          "pct": null
+          "cx": 1200,
+          "cy": 918,
+          "pct": 40
         },
         {
-          "cx": 1367,
-          "cy": 781,
-          "pct": null
+          "cx": 1696,
+          "cy": 525,
+          "pct": 20
         }
       ],
-      "reviewed": false
+      "reviewed": true
     },
     {
       "file": "frame_000565.png",
       "badges": [
         {
-          "cx": 585,
-          "cy": 520,
-          "pct": null
+          "cx": 948,
+          "cy": 1019,
+          "pct": 20
         },
         {
-          "cx": 582,
-          "cy": 670,
-          "pct": null
+          "cx": 749,
+          "cy": 1048,
+          "pct": 20
         },
         {
-          "cx": 787,
-          "cy": 696,
-          "pct": null
+          "cx": 936,
+          "cy": 745,
+          "pct": 20
         },
         {
-          "cx": 781,
-          "cy": 709,
-          "pct": null
-        },
-        {
-          "cx": 1466,
-          "cy": 774,
-          "pct": null
+          "cx": 1748,
+          "cy": 794,
+          "pct": 60
         }
       ],
-      "reviewed": false
+      "reviewed": true
     },
     {
       "file": "frame_000596.png",
       "badges": [
         {
-          "cx": 784,
-          "cy": 645,
-          "pct": null
+          "cx": 1751,
+          "cy": 801,
+          "pct": 60
         },
         {
-          "cx": 556,
-          "cy": 659,
-          "pct": null
+          "cx": 941,
+          "cy": 745,
+          "pct": 20
         },
         {
-          "cx": 596,
-          "cy": 676,
-          "pct": null
+          "cx": 947,
+          "cy": 1026,
+          "pct": 20
         },
         {
-          "cx": 787,
-          "cy": 697,
-          "pct": null
-        },
-        {
-          "cx": 778,
-          "cy": 712,
-          "pct": null
-        },
-        {
-          "cx": 1466,
-          "cy": 774,
-          "pct": null
+          "cx": 763,
+          "cy": 1044,
+          "pct": 20
         }
       ],
-      "reviewed": false
+      "reviewed": true
     },
     {
       "file": "frame_000650.png",
-      "badges": [
-        {
-          "cx": 699,
-          "cy": 622,
-          "pct": null
-        },
-        {
-          "cx": 1248,
-          "cy": 753,
-          "pct": null
-        },
-        {
-          "cx": 1305,
-          "cy": 755,
-          "pct": null
-        },
-        {
-          "cx": 761,
-          "cy": 777,
-          "pct": null
-        },
-        {
-          "cx": 1461,
-          "cy": 781,
-          "pct": null
-        }
-      ],
-      "reviewed": false
+      "badges": [],
+      "reviewed": true
+    },
+    {
+      "file": "frame_000654.png",
+      "badges": [],
+      "reviewed": true
     },
     {
       "file": "frame_000687.png",
@@ -326,22 +270,7 @@
           "pct": null
         }
       ],
-      "reviewed": false
-    },
-    {
-      "file": "frame_000346.png",
-      "badges": [],
-      "reviewed": false
-    },
-    {
-      "file": "frame_000466.png",
-      "badges": [],
-      "reviewed": false
-    },
-    {
-      "file": "frame_000654.png",
-      "badges": [],
-      "reviewed": false
+      "reviewed": true
     }
   ]
 }
