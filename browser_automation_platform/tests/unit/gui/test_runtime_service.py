@@ -26,10 +26,20 @@ class FakeApp:
     async def create_sessions(self):
         self.log.append("create")
 
+    async def open_browser(self):
+        self.log.append("open_browser")
+
+    async def close_browser(self):
+        self.log.append("close_browser")
+
     async def start(self):
         if self._fail_start:
             raise RuntimeError("cannot start")
         self.log.append("start")
+
+    async def stop_automation(self):
+        self.log.append("stop_automation")
+        return ()
 
     async def stop(self):
         self.log.append("stop")
@@ -67,7 +77,7 @@ def test_tick_once_is_self_contained(service):
 
     svc.tick_once().result(timeout=5)
 
-    assert app.log == ["create", "run_once", "stop"]
+    assert app.log == ["open_browser", "create", "run_once", "stop_automation"]
 
 
 def test_stop_runtime_sets_state_stopped(service):
@@ -76,7 +86,7 @@ def test_stop_runtime_sets_state_stopped(service):
 
     svc.stop_runtime().result(timeout=5)
 
-    assert app.log[-1] == "stop"
+    assert app.log[-1] == "stop_automation"  # Stop = automation only, browser survives
     # the done-callback that flips state may run just after result(); poll it
     _wait_for(lambda: svc.state == "stopped")
 

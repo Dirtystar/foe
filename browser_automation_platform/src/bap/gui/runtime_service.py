@@ -29,7 +29,10 @@ class _Runnable(Protocol):
 
     async def create_sessions(self) -> None: ...
     async def start(self) -> None: ...
+    async def stop_automation(self): ...
     async def stop(self): ...
+    async def open_browser(self) -> None: ...
+    async def close_browser(self) -> None: ...
 
 
 class RuntimeService:
@@ -81,21 +84,35 @@ class RuntimeService:
         return self._submit(self._app.start())
 
     def stop_runtime(self) -> Future:
+        """Stop automation only. The browser window and its tabs stay open —
+        Stop is not Close Browser and never was meant to be."""
+        future = self._submit(self._app.stop_automation())
+        future.add_done_callback(lambda _f: self._set_state("stopped"))
+        return future
+
+    def shutdown_runtime(self) -> Future:
+        """Full graceful teardown for application exit: stop automation, then
+        close the browser and release the vision executor."""
         future = self._submit(self._app.stop())
         future.add_done_callback(lambda _f: self._set_state("stopped"))
         return future
 
     def tick_once(self) -> Future:
-        """Run exactly one tick per session, self-contained: create sessions,
-        run one round, tear down. Independent of start/stop so it cannot
-        collide with an already-running runtime's session set."""
+        """Run exactly one tick per session, self-contained: ensure the browser
+        is open, create sessions, run one round, detach. Independent of
+        start/stop so it cannot collide with an already-running runtime's
+        session set, and it never closes the browser."""
         return self._submit(self._single_tick())
 
     # --- attended browser controls (thread-safe, non-blocking) --------------
 
     def open_browser(self) -> Future:
-        """Open the visible attended browser. The user then drives it."""
-        return self._submit(self._app.browser.start())
+        """Open the visible attended browser (idempotent). The user then drives it."""
+        return self._submit(self._app.open_browser())
+
+    def close_browser(self) -> Future:
+        """Close the attended browser window explicitly (idempotent)."""
+        return self._submit(self._app.close_browser())
 
     def scan_tabs(self) -> Future:
         """Return the tabs currently open in the attended browser
@@ -103,11 +120,12 @@ class RuntimeService:
         return self._submit(self._app.browser.scan_tabs())
 
     async def _single_tick(self) -> None:
+        await self._app.open_browser()
         await self._app.create_sessions()
         try:
             await self._app.scheduler.run_once()
         finally:
-            await self._app.stop()
+            await self._app.stop_automation()
 
     # --- internals ----------------------------------------------------------
 

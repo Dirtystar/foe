@@ -115,20 +115,23 @@ async def test_create_session_opens_tab_builds_session_and_registers_job():
     profile_id = await manager.create_session(spec("p1"))
 
     assert profile_id == "p1"
-    assert browser.started
     assert browser.open_tab_ids == ["p1"]
     assert factory.calls[0][0].profile_id == "p1"
     assert scheduler.profile_ids == ("p1",)
     assert manager.profile_ids == ("p1",)
 
 
-async def test_browser_starts_once_across_many_sessions():
+async def test_manager_never_starts_or_stops_the_browser():
+    # Browser open/close is BrowserController's job now; the manager only opens
+    # and closes tabs. It must never call browser.start()/stop().
     manager, browser, _, _ = make_manager()
 
     await manager.create_session(spec("p1"))
     await manager.create_session(spec("p2"))
+    await manager.stop_automation()
 
-    assert browser.start_calls == 1
+    assert browser.start_calls == 0
+    assert browser.stop_calls == 0
 
 
 async def test_duplicate_session_rejected_without_touching_the_browser():
@@ -207,12 +210,12 @@ async def test_one_session_failing_to_close_does_not_destroy_the_others():
 
     browser.close_tab = close_tab
 
-    errors = await manager.shutdown()
+    errors = await manager.stop_automation()
 
     assert [pid for pid, _ in errors] == ["p1"]
     assert "p2" in browser.closed_tab_ids  # p2 still got closed
     assert manager.profile_ids == ()
-    assert browser.stop_calls == 1
+    assert browser.stop_calls == 0  # the manager never stops the browser
 
 
 # --- close_session ---------------------------------------------------------------------
@@ -259,40 +262,40 @@ async def test_close_session_while_scheduler_runs_keeps_other_sessions_ticking()
 # --- shutdown and restart ------------------------------------------------------------------
 
 
-async def test_shutdown_closes_everything_and_stops_browser():
+async def test_stop_automation_detaches_everything_but_leaves_browser_open():
     scheduler = Scheduler(sleep=_instant_sleep)
     manager, browser, _, _ = make_manager(scheduler=scheduler)
     await manager.create_session(spec("p1"))
     await manager.create_session(spec("p2"))
     await scheduler.start()
 
-    errors = await manager.shutdown()
+    errors = await manager.stop_automation()
 
     assert errors == ()
     assert not scheduler.running
     assert scheduler.profile_ids == ()
     assert sorted(browser.closed_tab_ids) == ["p1", "p2"]
-    assert browser.stop_calls == 1
+    assert browser.stop_calls == 0  # browser lifecycle is not the manager's job
     assert manager.profile_ids == ()
 
 
-async def test_shutdown_when_nothing_was_created_is_a_no_op():
+async def test_stop_automation_when_nothing_was_created_is_a_no_op():
     manager, browser, _, _ = make_manager()
 
-    errors = await manager.shutdown()
+    errors = await manager.stop_automation()
 
     assert errors == ()
-    assert browser.stop_calls == 0  # browser was never started
+    assert browser.stop_calls == 0
+    assert browser.closed_tab_ids == []
 
 
-async def test_manager_is_restartable_after_shutdown():
+async def test_manager_is_restartable_after_stop_automation():
     manager, browser, scheduler, _ = make_manager()
     await manager.create_session(spec("p1"))
-    await manager.shutdown()
+    await manager.stop_automation()
 
     await manager.create_session(spec("p1"))  # same id is free again
 
-    assert browser.start_calls == 2  # fresh browser lifecycle
     assert manager.profile_ids == ("p1",)
     assert scheduler.profile_ids == ("p1",)
 

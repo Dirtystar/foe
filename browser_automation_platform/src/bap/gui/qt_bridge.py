@@ -24,6 +24,7 @@ class QtReportBridge(QObject):
     health_changed = Signal(str, str, str)   # profile_id, health, reason
     status_changed = Signal(str, str)        # operational status, reason
     browser_ready = Signal()                 # attended browser opened
+    browser_closed = Signal()                # attended browser closed
     tabs_scanned = Signal(object)            # list[BrowserTab]
 
     def on_report(self, report: TickReport) -> None:

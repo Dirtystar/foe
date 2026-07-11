@@ -14,6 +14,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QFormLayout,
     QGroupBox,
@@ -52,15 +53,24 @@ class MainWindow(QMainWindow):
         max_pages: int | None = None,
         attended: bool = False,
         assignment=None,
+        forge: bool = False,
+        world_store=None,
     ) -> None:
         super().__init__()
         self._service = service
         self._bridge = bridge
         self._on_close = on_close
-        self._attended = attended
+        # Forge mode is the product surface: a persistent World Manager. It is a
+        # specialisation of attended mode (the user drives a real browser), so it
+        # reuses the tab-assignment/start-gating machinery and adds world CRUD +
+        # hostname reattachment on top.
+        self._forge = forge
+        self._attended = attended or forge
         self._assignment = assignment
+        self._world_store = world_store
         self._running = False
         self._pickers: dict[str, QComboBox] = {}
+        self._selected_alias: str | None = None
         self._row_index: dict[str, int] = {}
         # Dashboard is optional: only shown when analytics history is available.
         self.dashboard = (
@@ -69,7 +79,10 @@ class MainWindow(QMainWindow):
             else None
         )
 
-        self.setWindowTitle("Browser Automation Platform — Monitor")
+        title = (
+            "Forge of Empires Assistant" if forge else "Browser Automation Platform — Monitor"
+        )
+        self.setWindowTitle(title)
         self._build_ui()
         self._build_menu()
         self._populate_sessions(service.profile_ids)
@@ -100,7 +113,9 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.state_label)
         layout.addLayout(controls)
 
-        if self._attended:
+        if self._forge:
+            layout.addWidget(self._build_forge_panel())
+        elif self._attended:
             layout.addWidget(self._build_attended_panel())
 
         self.table = QTableWidget(0, len(_COLUMNS))
@@ -217,6 +232,189 @@ class MainWindow(QMainWindow):
         self.scan_button.clicked.connect(self._on_scan_clicked)
         return box
 
+    # --- Forge World Manager (primary product UI) ---------------------------
+
+    def _build_forge_panel(self) -> QGroupBox:
+        """The World Manager: persistent worlds + explicit browser lifecycle +
+        hostname reattachment. The runnable set (per-world tab pickers) is the
+        worlds present at launch — service.profile_ids; world CRUD edits the
+        persistent store and takes effect on the next launch."""
+        box = QGroupBox("Worlds")
+        outer = QVBoxLayout(box)
+
+        row = QHBoxLayout()
+        self.open_browser_button = QPushButton("Open Browser")
+        self.close_browser_button = QPushButton("Close Browser")
+        self.close_browser_button.setEnabled(False)
+        self.scan_button = QPushButton("Scan && Reattach")
+        self.scan_button.setEnabled(False)
+        self.attended_hint = QLabel("Open the browser, log in to your worlds, then Scan && Reattach.")
+        self.attended_hint.setObjectName("attendedHint")
+        for widget in (self.open_browser_button, self.close_browser_button, self.scan_button):
+            row.addWidget(widget)
+        row.addWidget(self.attended_hint)
+        row.addStretch(1)
+        outer.addLayout(row)
+
+        self.worlds_table = QTableWidget(0, 5)
+        self.worlds_table.setHorizontalHeaderLabels(
+            ["Alias", "Server", "Cadence", "Max weakening", "Allowed %"]
+        )
+        self.worlds_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.worlds_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.worlds_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.worlds_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.worlds_table.itemSelectionChanged.connect(self._on_world_selection_changed)
+        outer.addWidget(self.worlds_table)
+
+        crud = QHBoxLayout()
+        self.add_world_button = QPushButton("Add World…")
+        self.edit_world_button = QPushButton("Edit…")
+        self.remove_world_button = QPushButton("Remove")
+        self.edit_world_button.setEnabled(False)
+        self.remove_world_button.setEnabled(False)
+        for widget in (self.add_world_button, self.edit_world_button, self.remove_world_button):
+            crud.addWidget(widget)
+        crud.addStretch(1)
+        outer.addLayout(crud)
+
+        # Per-world tab assignment for the launch-time set. Auto-filled by
+        # hostname on scan; the combo is the manual fallback.
+        if self._service.profile_ids:
+            form = QFormLayout()
+            for alias in self._service.profile_ids:
+                combo = QComboBox()
+                combo.setEnabled(False)
+                combo.addItem("— scan to reattach —", None)
+                combo.currentIndexChanged.connect(lambda _i, a=alias: self._on_tab_selected(a))
+                self._pickers[alias] = combo
+                form.addRow(QLabel(f"World “{alias}” — tab"), combo)
+            outer.addLayout(form)
+        else:
+            outer.addWidget(
+                QLabel("No worlds are connected yet. Add a world, then relaunch to run it.")
+            )
+
+        self.open_browser_button.clicked.connect(self._on_open_browser_clicked)
+        self.close_browser_button.clicked.connect(self._on_close_browser_clicked)
+        self.scan_button.clicked.connect(self._on_scan_clicked)
+        self.add_world_button.clicked.connect(self._on_add_world)
+        self.edit_world_button.clicked.connect(self._on_edit_world)
+        self.remove_world_button.clicked.connect(self._on_remove_world)
+        self._refresh_worlds_table()
+        return box
+
+    def _refresh_worlds_table(self) -> None:
+        worlds = self._world_store.list() if self._world_store is not None else []
+        self.worlds_table.setRowCount(len(worlds))
+        for r, world in enumerate(worlds):
+            cells = [
+                world.alias,
+                world.hostname,
+                f"{world.interval_ms} ms",
+                f"{world.max_weakening_pct}%",
+                "/".join(str(p) for p in world.allowed_pcts),
+            ]
+            for c, text in enumerate(cells):
+                self.worlds_table.setItem(r, c, QTableWidgetItem(text))
+
+    def _on_world_selection_changed(self) -> None:
+        rows = self.worlds_table.selectionModel().selectedRows()
+        self._selected_alias = (
+            self.worlds_table.item(rows[0].row(), 0).text() if rows else None
+        )
+        self.edit_world_button.setEnabled(self._selected_alias is not None)
+        self.remove_world_button.setEnabled(self._selected_alias is not None)
+
+    def _on_add_world(self) -> None:
+        from bap.forge.worlds import WorldError
+        from bap.gui.forge_panel import WorldDialog
+
+        world = WorldDialog.get_world(self)
+        if world is None:
+            return
+        try:
+            self._world_store.add(world)
+        except WorldError as exc:
+            QMessageBox.warning(self, "Add World", str(exc))
+            return
+        self._refresh_worlds_table()
+        self._append_log(f"Added world “{world.alias}” ({world.hostname}). Saved.")
+        if world.alias not in self._pickers:
+            self._append_log("New worlds connect on the next launch.")
+
+    def _on_edit_world(self) -> None:
+        from bap.forge.worlds import WorldError
+        from bap.gui.forge_panel import WorldDialog
+
+        if not self._selected_alias:
+            return
+        existing = self._world_store.get(self._selected_alias)
+        if existing is None:
+            return
+        world = WorldDialog.get_world(self, existing=existing)
+        if world is None:
+            return
+        try:
+            self._world_store.update(self._selected_alias, world)
+        except WorldError as exc:
+            QMessageBox.warning(self, "Edit World", str(exc))
+            return
+        self._refresh_worlds_table()
+        self._append_log(f"Updated world “{world.alias}”. Saved.")
+
+    def _on_remove_world(self) -> None:
+        from bap.gui.forge_panel import confirm_remove
+
+        if not self._selected_alias:
+            return
+        if not confirm_remove(self, self._selected_alias):
+            return
+        alias = self._selected_alias
+        self._world_store.remove(alias)
+        self._selected_alias = None
+        self._refresh_worlds_table()
+        self._append_log(f"Removed world “{alias}”. Saved.")
+
+    def _on_close_browser_clicked(self) -> None:
+        self._append_log("Closing browser…")
+        self.close_browser_button.setEnabled(False)
+        future = self._service.close_browser()
+        future.add_done_callback(self._browser_close_done)
+
+    def _browser_close_done(self, future) -> None:
+        try:
+            future.result()
+        except Exception as exc:
+            self._bridge.error_occurred.emit(f"Could not close browser: {exc}")
+            return
+        self._bridge.browser_closed.emit()
+
+    def _on_browser_closed(self) -> None:
+        self.open_browser_button.setEnabled(True)
+        self.open_browser_button.setText("Open Browser")
+        self.scan_button.setEnabled(False)
+        if hasattr(self, "close_browser_button"):
+            self.close_browser_button.setEnabled(False)
+        self.attended_hint.setText("Browser closed. Open it again to reconnect your worlds.")
+        self._append_log("Browser closed.")
+
+    def _on_forge_tabs_scanned(self, tabs) -> None:
+        """Auto-reattach worlds to open tabs by Forge hostname (never tab id),
+        then populate the manual-fallback pickers with the matches preselected."""
+        tabs = list(tabs)
+        matched = 0
+        if self._world_store is not None and self._assignment is not None:
+            for alias, tab in self._world_store.match_tabs(tabs).items():
+                if alias in self._pickers:  # only the runnable (launch-time) set
+                    self._assignment.assign(alias, tab)
+                    matched += 1
+        self._populate_tab_pickers(tabs)
+        self.attended_hint.setText(
+            f"{len(tabs)} tab(s) found — {matched} world(s) auto-reattached by hostname. "
+            "Adjust any manually below."
+        )
+
     def _on_open_browser_clicked(self) -> None:
         self._append_log("Opening browser…")
         self.open_browser_button.setEnabled(False)
@@ -235,8 +433,11 @@ class MainWindow(QMainWindow):
     def _on_browser_ready(self) -> None:
         self.scan_button.setEnabled(True)
         self.open_browser_button.setText("Browser open")
-        self.attended_hint.setText("Open your pages, then click Scan tabs.")
-        self._append_log("Browser open. Open your pages, then Scan tabs.")
+        self.open_browser_button.setEnabled(False)
+        if hasattr(self, "close_browser_button"):
+            self.close_browser_button.setEnabled(True)
+        self.attended_hint.setText("Open your pages, then Scan.")
+        self._append_log("Browser open. Open your pages, then Scan.")
 
     def _on_scan_clicked(self) -> None:
         self._append_log("Scanning open tabs…")
@@ -285,7 +486,13 @@ class MainWindow(QMainWindow):
         assigned = True
         if self._attended:
             profile_ids = list(self._service.profile_ids)
-            assigned = self._assignment is not None and self._assignment.all_assigned(profile_ids)
+            # In forge mode with no worlds at launch there is nothing to run.
+            has_sessions = bool(profile_ids)
+            assigned = (
+                has_sessions
+                and self._assignment is not None
+                and self._assignment.all_assigned(profile_ids)
+            )
         self.start_button.setEnabled(idle and assigned)
         self.tick_button.setEnabled(idle and assigned)
 
@@ -304,7 +511,11 @@ class MainWindow(QMainWindow):
         self._bridge.error_occurred.connect(self._on_error)
         self._bridge.health_changed.connect(self._on_health)
         self._bridge.status_changed.connect(self._apply_status)
-        if self._attended:
+        if self._forge:
+            self._bridge.browser_ready.connect(self._on_browser_ready)
+            self._bridge.browser_closed.connect(self._on_browser_closed)
+            self._bridge.tabs_scanned.connect(self._on_forge_tabs_scanned)
+        elif self._attended:
             self._bridge.browser_ready.connect(self._on_browser_ready)
             self._bridge.tabs_scanned.connect(self._populate_tab_pickers)
 
@@ -371,6 +582,14 @@ class MainWindow(QMainWindow):
     # --- shutdown -----------------------------------------------------------
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        # Exit performs the full graceful teardown that Stop deliberately does
+        # not: stop automation AND close the browser window. Best-effort and
+        # bounded so a hung teardown can never wedge the app-close.
+        try:
+            future = self._service.shutdown_runtime()
+            future.result(timeout=10.0)
+        except Exception:  # a failed teardown must not block the window closing
+            pass
         self._service.stop_loop()
         if self._on_close is not None:
             self._on_close()

@@ -27,6 +27,7 @@ from bap.app.stubs import (
 from bap.app.translation import build_capture_binding, build_rule, build_tab_profile
 from bap.config.config_models import ApplicationConfig
 from bap.core.actions.action_executor import ActionExecutor
+from bap.core.engine.browser_controller import BrowserController
 from bap.core.engine.scheduler import ReportCallback, Scheduler, SleepFn
 from bap.core.engine.session_manager import SessionManager, SessionSpec, TabProvider
 from bap.core.engine.tab_session import TabSession
@@ -47,25 +48,53 @@ class Application:
 
     config: ApplicationConfig
     browser: BrowserPort
+    browser_controller: BrowserController
     scheduler: Scheduler
     manager: SessionManager
     session_specs: tuple[SessionSpec, ...]
     vision_executor: object = None  # ThreadPoolExecutor when vision is offloaded
+
+    async def open_browser(self) -> None:
+        """Open the browser window (idempotent). Explicit browser lifecycle,
+        independent of automation — the user's Open Browser action."""
+        await self.browser_controller.open()
+
+    async def close_browser(self) -> None:
+        """Close the browser window (idempotent). The user's Close Browser
+        action; also the browser half of a full shutdown."""
+        await self.browser_controller.close()
 
     async def create_sessions(self) -> None:
         for spec in self.session_specs:
             await self.manager.create_session(spec)
 
     async def start(self) -> None:
+        """Start automation. Ensures the browser is open first (a no-op if the
+        user already opened it in attended mode), then creates sessions and
+        begins ticking."""
+        await self.browser_controller.open()
         await self.create_sessions()
         await self.scheduler.start()
 
+    async def stop_automation(self) -> tuple[tuple[str, Exception], ...]:
+        """Stop automation only. The browser window and its tabs stay open —
+        this is what the Stop button does. The vision executor is left running
+        because automation may be started again."""
+        return await self.manager.stop_automation()
+
     async def stop(self) -> tuple[tuple[str, Exception], ...]:
-        errors = await self.manager.shutdown()
+        """Full graceful teardown: stop automation, close the browser, and
+        release the vision executor. This is the Exit path (and the headless
+        runner's shutdown)."""
+        errors = list(await self.manager.stop_automation())
+        try:
+            await self.browser_controller.close()
+        except Exception as exc:  # best-effort: report, don't propagate
+            errors.append(("__browser__", exc))
         if self.vision_executor is not None:
             # Wait for in-flight analyzers so no worker thread is leaked.
             self.vision_executor.shutdown(wait=True)
-        return errors
+        return tuple(errors)
 
 
 def create_application(
@@ -160,10 +189,12 @@ def create_application(
         max_sessions=config.settings.max_sessions,
         tab_provider=tab_provider,
     )
+    browser_controller = BrowserController(browser)
 
     return Application(
         config=config,
         browser=browser,
+        browser_controller=browser_controller,
         scheduler=scheduler,
         manager=manager,
         session_specs=session_specs,

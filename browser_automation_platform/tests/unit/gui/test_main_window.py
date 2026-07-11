@@ -1,3 +1,5 @@
+from concurrent.futures import Future
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -7,6 +9,12 @@ from bap.gui.main_window import MainWindow
 from bap.gui.qt_bridge import QtReportBridge
 
 from _reports import make_report, sample_metrics
+
+
+def _done_future():
+    f: Future = Future()
+    f.set_result(None)
+    return f
 
 
 class FakeService:
@@ -23,6 +31,14 @@ class FakeService:
 
     def stop_runtime(self):
         self.calls.append("stop")
+
+    def shutdown_runtime(self):
+        self.calls.append("shutdown")
+        return _done_future()
+
+    def close_browser(self):
+        self.calls.append("close_browser")
+        return _done_future()
 
     def tick_once(self):
         self.calls.append("tick")

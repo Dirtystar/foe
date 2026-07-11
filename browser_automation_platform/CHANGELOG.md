@@ -4,6 +4,43 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge of Empires Assistant, Milestone 1 (P0 fixes)
+
+First milestone of the pivot to a Forge-specific product. Adds a persistent
+World Manager, separates the browser lifecycle from automation, and gives Forge
+its own full-canvas capture. No detector or clicking yet — this is the P0
+product/lifecycle groundwork. The generic engine is unchanged and stays
+site-agnostic; everything Forge-specific lives under a new `bap.forge` package.
+
+### Fixed
+
+- **Stop no longer closes the browser (P0).** Browser open/close is now owned by
+  a dedicated `BrowserController` (app-layer), separate from automation.
+  `SessionManager` no longer starts or stops the browser — its old `shutdown()`
+  is now `stop_automation()` (stops ticking, detaches sessions, leaves the
+  browser and every tab open). **Stop** stops automation only; **Exit** performs
+  the full teardown (stop automation, then close the browser).
+- **Forge capture never uses a DOM selector (P0).** Forge is a WebGL/canvas game,
+  so its capture is always the full game canvas — it can no longer inherit the
+  generic placeholder selectors (e.g. `#status-panel`) that broke capture.
+
+### Added
+
+- **Persistent Worlds** (`bap/forge/worlds.py`): a `World` carries an **alias**
+  (user-facing identity) and a durable **hostname** (technical identity, e.g.
+  `cz8.forgeofempires.com`), plus per-world click cadence, max weakening, and
+  allowed badge percentages. `WorldStore` auto-saves to
+  `data/forge/worlds.json` (atomic write) and restores every setting on the next
+  launch. **Tab reattachment is by hostname, never by transient tab id.**
+- **World Manager GUI** (`bap-gui --forge`): the primary product surface — a
+  worlds table with **Add / Edit / Remove**, explicit **Open Browser / Close
+  Browser** controls, **Scan & Reattach** (auto-matches worlds to open tabs by
+  hostname, with a manual per-world tab picker as fallback), and Start gated
+  until every launch-time world has a tab.
+- **Forge capture config** (`bap/forge/config.py`): builds an attended,
+  full-canvas `ApplicationConfig` from Worlds — one session per world, no
+  selectors, per-world cadence, observe-only (no analyzers wired yet).
+
 ## [Unreleased] — Attended browser mode + browser discovery fix
 
 Move from developer-oriented `start_url` config to user-driven tab assignment,

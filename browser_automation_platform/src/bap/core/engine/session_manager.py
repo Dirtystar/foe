@@ -1,12 +1,18 @@
 """SessionManager: composition layer between browser lifecycle and Scheduler.
 
-Owns the runtime set of sessions: it starts the browser (through BrowserPort,
-never a concrete adapter), opens one tab per profile, asks an injected
-factory to build the session for that tab, and registers the session with
-the Scheduler. It contains zero automation knowledge — how a session is
-assembled (bindings, rules, handlers) is the factory's business, what a
-session does each tick is TabSession's, and when it ticks is the
-Scheduler's. The manager only sequences lifecycles and enforces capacity.
+Owns the runtime set of sessions: it opens one tab per profile (through
+BrowserPort, never a concrete adapter), asks an injected factory to build the
+session for that tab, and registers the session with the Scheduler. It contains
+zero automation knowledge — how a session is assembled (bindings, rules,
+handlers) is the factory's business, what a session does each tick is
+TabSession's, and when it ticks is the Scheduler's. The manager only sequences
+session lifecycles and enforces capacity.
+
+Browser lifecycle is deliberately NOT the manager's job: opening and closing the
+browser window belongs to `BrowserController`, owned by the application layer, so
+that stopping automation never closes the browser. The manager uses the
+BrowserPort only for per-tab operations (open_tab / close_tab) and assumes the
+browser is already open before a session is created.
 
 Failure discipline: create_session either fully succeeds or leaves no trace
 — every partially acquired resource (an opened tab, a registered job) is
@@ -97,7 +103,6 @@ class SessionManager:
         self._max_sessions = max_sessions
         self._tab_provider = tab_provider
         self._entries: dict[str, _SessionEntry] = {}
-        self._browser_started = False
 
     async def _acquire_tab(self, spec: SessionSpec) -> TabHandle:
         """Get the tab for a session: the injected provider (attended mode) or
@@ -127,7 +132,6 @@ class SessionManager:
                 f"Cannot create session '{profile_id}': max_sessions={self._max_sessions} reached."
             )
 
-        await self._ensure_browser_started()
         tab = await self._acquire_tab(spec)
         try:
             session = self._session_factory(spec, tab)
@@ -182,7 +186,6 @@ class SessionManager:
         if entry is None:
             raise SessionNotFoundError(f"Session '{profile_id}' does not exist.")
 
-        await self._ensure_browser_started()
         new_tab = None
         try:
             new_tab = await self._acquire_tab(entry.spec)
@@ -225,10 +228,16 @@ class SessionManager:
         )
         return profile_id
 
-    async def shutdown(self) -> tuple[tuple[str, Exception], ...]:
-        """Stop scheduling, close every tab, stop the browser. Best-effort:
-        one session failing to close never blocks the others; failures are
-        returned as data. The manager is fully restartable afterwards."""
+    async def stop_automation(self) -> tuple[tuple[str, Exception], ...]:
+        """Stop scheduling and detach every session, WITHOUT closing the
+        browser. The scheduler is stopped, jobs removed, and each tab released
+        via `browser.close_tab` — a deliberate no-op for user-owned attended
+        tabs, a real close for tabs the manager opened itself. The browser
+        window stays open (that lifecycle belongs to BrowserController).
+
+        Best-effort: one session failing to detach never blocks the others;
+        failures are returned as data. Fully restartable — a later
+        create_session()/start rebuilds the session set on the same browser."""
         if self._scheduler.running:
             await self._scheduler.stop()
 
@@ -236,29 +245,14 @@ class SessionManager:
         for profile_id, entry in list(self._entries.items()):
             try:
                 self._scheduler.remove_job(profile_id)
-            except Exception as exc:  # keep going; the tab still gets closed
+            except Exception as exc:  # keep going; the tab still gets released
                 errors.append((profile_id, exc))
             try:
                 await self._browser.close_tab(entry.tab)
             except Exception as exc:
                 errors.append((profile_id, exc))
         self._entries.clear()
-
-        if self._browser_started:
-            try:
-                await self._browser.stop()
-            except Exception as exc:  # best-effort: report, don't propagate
-                errors.append(("__browser__", exc))
-            finally:
-                self._browser_started = False
         return tuple(errors)
-
-    # --- internals ---------------------------------------------------------------
-
-    async def _ensure_browser_started(self) -> None:
-        if not self._browser_started:
-            await self._browser.start()
-            self._browser_started = True
 
 
 __all__ = [

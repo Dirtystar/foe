@@ -30,7 +30,7 @@ from bap.ops.validation import validate_startup
 
 def build_main_window(
     config, *, real: bool = False, real_vision: bool = False, store_path: str | None = None,
-    status_observer=None,
+    status_observer=None, forge: bool = False, world_store=None,
 ):
     """Wire config -> application -> service/bridge -> window. Returns the
     window; the caller owns the Qt lifecycle. `status_observer` (e.g. a crash
@@ -94,17 +94,32 @@ def build_main_window(
 
         from bap.adapters.browser.attended_adapter import AttendedBrowserManager
         from bap.adapters.capture.playwright_capture import PlaywrightCaptureAdapter
-        from bap.app.attended import load_assignment, make_tab_provider, save_assignment
+        from bap.app.attended import (
+            TabAssignment,
+            load_assignment,
+            make_tab_provider,
+            save_assignment,
+        )
         from bap.ops.paths import ensure_dirs, get_paths
 
         paths = ensure_dirs(get_paths())
+        # Forge shares one persistent Chromium profile across all worlds (they
+        # are tabs in the same window); the generic attended mode uses its own.
+        profile_dir = "forge-profile" if forge else "attended-profile"
         browser = AttendedBrowserManager(
-            user_data_dir=str(paths.data_dir / "attended-profile"),
+            user_data_dir=str(paths.data_dir / profile_dir),
             browser_engine=config.settings.browser_engine,
             executable_path=os.environ.get("PLAYWRIGHT_EXECUTABLE_PATH"),
         )
-        save_assignment_path = paths.data_dir / "attended-assignment.json"
-        assignment = load_assignment(save_assignment_path)
+        if forge:
+            # Worlds persist (worlds.json); tab assignment does NOT — it is
+            # rebuilt each launch by hostname reattachment, so start with an
+            # empty runtime assignment and never write it to disk.
+            assignment = TabAssignment()
+            save_assignment_path = None
+        else:
+            save_assignment_path = paths.data_dir / "attended-assignment.json"
+            assignment = load_assignment(save_assignment_path)
         extra["browser"] = browser
         extra["capture_port"] = PlaywrightCaptureAdapter()
         extra["tab_provider"] = make_tab_provider(browser, assignment)
@@ -190,7 +205,18 @@ def build_main_window(
         max_pages=limits.max_pages,
         attended=attended,
         assignment=assignment,
+        forge=forge,
+        world_store=world_store,
     )
+
+
+def _load_world_store():
+    """Load the persistent Forge worlds from the per-user data directory."""
+    from bap.forge.worlds import WorldStore
+    from bap.ops.paths import ensure_dirs, get_paths
+
+    paths = ensure_dirs(get_paths())
+    return WorldStore.load(paths.data_dir / "forge" / "worlds.json")
 
 
 def run_gui(
@@ -201,6 +227,7 @@ def run_gui(
     store_path: str | None = None,
     exec_app: bool = True,
     status_observer=None,
+    forge: bool = False,
 ) -> int:
     """Load config, build the window, and run the Qt loop. Returns an exit code.
 
@@ -208,6 +235,10 @@ def run_gui(
     without opening a window. `exec_app=False` builds and shows the window but
     returns immediately without entering the Qt event loop — used by tests to
     verify the entry point wires up without blocking.
+
+    In `forge` mode the config is built from the persistent World store
+    (worlds.json) rather than loaded from a YAML file — the World Manager owns
+    what runs, and a `--forge` launch always uses real attended browser capture.
     """
     from PySide6.QtWidgets import QApplication
 
@@ -215,17 +246,24 @@ def run_gui(
     from bap.ops.validation import OperationalError
 
     logger = logging.getLogger("bap")
-    try:
-        config = load_config(Path(config_path))
-    except ConfigError as exc:
-        logger.error("Configuration error: %s", exc)
-        return 2
+    world_store = None
+    if forge:
+        from bap.forge.config import build_forge_config
+
+        world_store = _load_world_store()
+        config = build_forge_config(world_store.list())
+    else:
+        try:
+            config = load_config(Path(config_path))
+        except ConfigError as exc:
+            logger.error("Configuration error: %s", exc)
+            return 2
 
     qapp = QApplication.instance() or QApplication(sys.argv)
     try:
         window = build_main_window(
             config, real=real, real_vision=real_vision, store_path=store_path,
-            status_observer=status_observer,
+            status_observer=status_observer, forge=forge, world_store=world_store,
         )
     except OperationalError as exc:
         logger.error("Startup aborted: %s", exc)
@@ -274,6 +312,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--real", action="store_true", help="use real Playwright adapters")
     parser.add_argument("--real-vision", action="store_true", help="use real OCR/template analyzers")
     parser.add_argument("--store", default=None, metavar="PATH", help="persist history to SQLite")
+    parser.add_argument(
+        "--forge", action="store_true",
+        help="launch the Forge of Empires World Manager (persistent worlds, real attended browser)",
+    )
     args = parser.parse_args(argv)
 
     # Packaged (windowless) build writes a rotating log file; source runs log to
@@ -295,11 +337,14 @@ def main(argv: list[str] | None = None) -> None:
         set_excepthook=True,
     )
 
-    config_path = _resolve_gui_config(args.config_opt or args.config)
+    # Forge mode builds its config from the World store, so the YAML path is
+    # irrelevant there; pass a harmless default to keep the signature uniform.
+    config_path = None if args.forge else _resolve_gui_config(args.config_opt or args.config)
     sys.exit(
         run_gui(
             config_path, real=args.real, real_vision=args.real_vision,
             store_path=args.store, status_observer=reporter.set_status,
+            forge=args.forge,
         )
     )
 

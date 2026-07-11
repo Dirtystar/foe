@@ -30,6 +30,18 @@ class FakeService:
     def stop_runtime(self):
         self.calls.append("stop")
 
+    def shutdown_runtime(self):
+        self.calls.append("shutdown")
+        f: Future = Future()
+        f.set_result(None)
+        return f
+
+    def close_browser(self):
+        self.calls.append("close_browser")
+        f: Future = Future()
+        f.set_result(None)
+        return f
+
     def tick_once(self):
         self.calls.append("tick")
 

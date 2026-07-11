@@ -73,6 +73,9 @@ def test_construction_does_not_start_anything():
 async def test_profiles_create_expected_sessions():
     app = create_application(load(), scheduler=Scheduler(sleep=_instant_sleep))
 
+    # Browser lifecycle is now explicit (BrowserController), not a side effect
+    # of creating sessions.
+    await app.open_browser()
     await app.create_sessions()
     try:
         assert app.manager.profile_ids == ("profile_01", "profile_02")
