@@ -21,7 +21,7 @@ def project() -> dict:
 
 def test_console_scripts_declared(project):
     scripts = project["scripts"]
-    assert set(scripts) == {"bap", "bap-run", "bap-gui"}
+    assert set(scripts) == {"bap", "bap-run", "bap-gui", "bap-forge-label"}
 
 
 @pytest.mark.parametrize(
@@ -30,6 +30,7 @@ def test_console_scripts_declared(project):
         ("bap", "bap.cli:main"),
         ("bap-run", "bap.main:main"),
         ("bap-gui", "bap.gui.gui_main:main"),
+        ("bap-forge-label", "bap.forge.labeling.__main__:main"),
     ],
 )
 def test_console_script_targets_resolve(project, name, target):

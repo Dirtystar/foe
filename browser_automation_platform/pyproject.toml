@@ -26,6 +26,7 @@ dependencies = [
 bap = "bap.cli:main"
 bap-run = "bap.main:main"
 bap-gui = "bap.gui.gui_main:main"
+bap-forge-label = "bap.forge.labeling.__main__:main"
 
 [project.optional-dependencies]
 # Real vision analyzers (OCR + template matching).

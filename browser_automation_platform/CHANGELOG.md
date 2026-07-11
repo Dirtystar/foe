@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge Milestone 2 (assisted labelling + grading set)
+
+Tooling to build the human-confirmed ground truth the badge detector will be
+graded against. Still no detector, OCR, clicking, or battle logic.
+
+### Added
+
+- **Assisted labelling tool** (`python -m bap.forge.labeling <frames_dir>`,
+  console script `bap-forge-label`): a PySide6 window that shows each frame with
+  **auto-suggested** badge centres, lets you confirm/place centres by clicking,
+  press **1–5** for 20/40/60/80/100 %, handle **multiple badges per frame**,
+  mark negatives, and moves between frames — **autosaving** to `labels.json` and
+  **resuming** at the first unreviewed frame. The state/format
+  (`labeling.model`, `labeling.session`) is Qt-free and fully tested.
+- **CV pre-suggester** (`labeling.suggest`): proposes candidate badge centres
+  from the emblem's bright-red attrition arrow so the user mostly confirms.
+  OpenCV is optional — without it the tool still labels manually.
+- **Grading set** (`tests/forge_assets/grading/`): 15 representative frames
+  (different worlds and screen states, incl. negatives) with a pre-seeded
+  `labels.json` awaiting human confirmation, plus a README describing the review
+  workflow.
+
 ## [Unreleased] — Forge Milestone 1.1 (Windows-testing P0 fixes)
 
 Fixes found in real Windows testing of Milestone 1. Still capture-only — no
