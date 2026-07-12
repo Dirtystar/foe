@@ -53,6 +53,8 @@ class WorldScanResult:
     capture_ok: bool = False
     error: str | None = None
     scan: DebugScan | None = None
+    image: object = None                 # raw BGR capture (for Open result)
+    artifacts_dir: str | None = None     # scan_all/<ts>/<alias>/ when saved
 
     def row(self) -> dict:
         """A summary-table row (one per World) — no cross-World comparison."""
@@ -153,7 +155,7 @@ def scan_world(alias, *, world_store, assignment, browser_open, capture_callback
     rois = derive_rois(geometry, calibration)
     scan = build_scan(img, world=world, classifier=classifier, rois=rois, geometry=geometry)
     return WorldScanResult(alias=alias, hostname=hostname, tab_id=target.tab_id,
-                           capture_ok=True, scan=scan)
+                           capture_ok=True, scan=scan, image=img)
 
 
 def attached_aliases(*, world_store, assignment, browser_open: bool) -> list[str]:
@@ -165,15 +167,36 @@ def attached_aliases(*, world_store, assignment, browser_open: bool) -> list[str
 
 
 def scan_all_attached(*, world_store, assignment, browser_open, capture_callback,
-                      classifier=None, calibration=None) -> list[WorldScanResult]:
+                      classifier=None, calibration=None, artifacts_root=None) -> list[WorldScanResult]:
     """Scan every attached World independently and sequentially. Each World uses
-    its own freshly-resolved tab; no World's result depends on another's."""
+    its own freshly-resolved tab; no World's result depends on another's.
+
+    If ``artifacts_root`` is given, each World's artifacts are saved under
+    ``artifacts_root/<timestamp>/<alias>/`` so every row is independently
+    inspectable and provably came from that World's tab."""
+    from datetime import datetime
+
     results = []
+    run_dir = None
+    if artifacts_root is not None:
+        from pathlib import Path
+
+        run_dir = Path(artifacts_root) / datetime.now().strftime("%Y%m%d_%H%M%S")
     for alias in attached_aliases(world_store=world_store, assignment=assignment,
                                   browser_open=browser_open):
-        results.append(scan_world(alias, world_store=world_store, assignment=assignment,
-                                   browser_open=browser_open, capture_callback=capture_callback,
-                                   classifier=classifier, calibration=calibration))
+        result = scan_world(alias, world_store=world_store, assignment=assignment,
+                            browser_open=browser_open, capture_callback=capture_callback,
+                            classifier=classifier, calibration=calibration)
+        if run_dir is not None and result.capture_ok and result.scan is not None:
+            from bap.forge.detection.scan import save_scan
+
+            world_dir = run_dir / alias
+            try:
+                save_scan(result.image, result.scan, world_dir, classifier=classifier)
+                result.artifacts_dir = str(world_dir)
+            except Exception:  # a failed save must not abort the sweep
+                pass
+        results.append(result)
     return results
 
 

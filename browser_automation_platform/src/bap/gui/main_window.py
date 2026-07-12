@@ -446,15 +446,27 @@ class MainWindow(QMainWindow):
             world_store=self._world_store, assignment=self._assignment,
             browser_open=self._browser_open, capture_callback=self._capture_callback,
             classifier=_bundled_classifier(), calibration=self._forge_calibration(),
+            artifacts_root=self._scan_all_artifacts_root(),
         )
-        self._append_log(f"Scan All: {len(results)} attached World(s) scanned independently.")
+        saved = sum(1 for r in results if r.artifacts_dir)
+        self._append_log(f"Scan All: {len(results)} attached World(s) scanned independently"
+                         f"{f'; artifacts saved for {saved}' if saved else ''}.")
         self._open_scan_all_summary(results)
+
+    def _scan_all_artifacts_root(self):
+        """Where Scan All writes per-World artifacts (scan_all/<ts>/<alias>/)."""
+        try:
+            from bap.ops.paths import ensure_dirs, get_paths
+
+            return ensure_dirs(get_paths()).data_dir / "forge" / "scan_all"
+        except Exception:
+            return None
 
     def _open_scan_all_summary(self, results) -> None:
         from bap.gui.forge_scan_all import ScanAllSummaryWindow
 
         self._scan_all_window = ScanAllSummaryWindow(results)
-        self._scan_all_window.resize(1100, 360)
+        self._scan_all_window.resize(1200, 360)
         self._scan_all_window.show()
 
     def _open_debugger(self, image, *, world=None, source: str = "") -> None:

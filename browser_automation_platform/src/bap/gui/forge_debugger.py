@@ -61,9 +61,15 @@ class DebuggerWindow(QMainWindow):
     """Displays one observe-only scan. `image` is a BGR ndarray."""
 
     def __init__(self, image, *, world=None, classifier=None, source: str = "",
-                 weakening_region=None, rois=None, geometry=None) -> None:
+                 weakening_region=None, rois=None, geometry=None,
+                 live_review_dir=None) -> None:
         super().__init__()
         self._image = image
+        self._classifier = classifier
+        self._world = world
+        self._source = source
+        self._live_review_dir = live_review_dir
+        self._review = None
         self._scan = build_scan(image, world=world, classifier=classifier,
                                 weakening_region=weakening_region, rois=rois,
                                 geometry=geometry)
@@ -95,12 +101,50 @@ class DebuggerWindow(QMainWindow):
         self.save_button = QPushButton("Save artifacts…")
         self.save_button.clicked.connect(self._on_save)
         controls.addWidget(self.save_button)
+        self.review_button = QPushButton("Label in Review Mode…")
+        self.review_button.setToolTip(
+            "Correct these live detections: click to add, right-click to remove, "
+            "keys 1-5 set 20/40/60/80/100. Saved as live ground truth.")
+        self.review_button.clicked.connect(self._on_label_review)
+        controls.addWidget(self.review_button)
         controls.addStretch(1)
         note = QLabel("Real clicking stays disabled until you confirm these detections.")
         controls.addWidget(note)
         root.addLayout(controls)
 
         self.setCentralWidget(central)
+
+    def _on_label_review(self) -> None:
+        """Open the current live capture in Review Mode so the operator can add /
+        correct badges (keys 1-5), remove false positives, and save the result as
+        additional live ground truth — reusing the existing labelling tools, no
+        external editor."""
+        from bap.forge.detection.calibration import WeakeningCalibration
+        from bap.forge.detection.detector import BadgeDetector
+        from bap.forge.labeling.session import LabelSession
+        from bap.gui.forge_review import ForgeReviewWindow
+
+        try:
+            base = self._live_review_dir or self._default_live_review_dir()
+            frames_dir, name = save_live_review_frame(self._image, self._source, base)
+            session = LabelSession.open(frames_dir, Path(base) / "labels.json")
+            for i in range(session.total):
+                session.goto(i)
+                if session.current_file() == name:
+                    break
+            cal = WeakeningCalibration.load(Path(base) / "calibration.json")
+            self._review = ForgeReviewWindow(session, frames_dir, cal, world=self._world,
+                                             detector=BadgeDetector())
+            self._review.resize(1360, 800)
+            self._review.show()
+        except Exception as exc:  # never crash the debugger over a review launch
+            QMessageBox.warning(self, "Review Mode", f"Could not open Review Mode:\n{exc}")
+
+    @staticmethod
+    def _default_live_review_dir() -> Path:
+        from bap.ops.paths import ensure_dirs, get_paths
+
+        return ensure_dirs(get_paths()).data_dir / "forge" / "live_review"
 
     def _on_save(self) -> None:
         from bap.forge.detection.scan import save_scan
@@ -109,7 +153,7 @@ class DebuggerWindow(QMainWindow):
         if not out:
             return
         try:
-            paths = save_scan(self._image, self._scan, out)
+            paths = save_scan(self._image, self._scan, out, classifier=self._classifier)
         except Exception as exc:  # never crash the UI over a save
             QMessageBox.warning(self, "Save", f"Could not save artifacts:\n{exc}")
             return
@@ -117,6 +161,23 @@ class DebuggerWindow(QMainWindow):
             self, "Saved",
             "Saved:\n" + "\n".join(Path(p).name for p in paths.values()),
         )
+
+
+def save_live_review_frame(image, source: str, base_dir) -> tuple[str, str]:
+    """Persist a live capture as a Review-Mode frame under ``base_dir/frames`` and
+    return ``(frames_dir, filename)``. The filename carries the World/source and a
+    timestamp so live scans accumulate as reviewable ground truth."""
+    import re
+    from datetime import datetime
+
+    import cv2
+
+    frames_dir = Path(base_dir) / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    tag = re.sub(r"[^A-Za-z0-9_-]+", "_", (source or "scan").split()[0]) or "scan"
+    name = f"{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
+    cv2.imwrite(str(frames_dir / name), image)
+    return str(frames_dir), name
 
 
 def _bundled_classifier():

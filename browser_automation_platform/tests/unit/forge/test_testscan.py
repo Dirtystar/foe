@@ -9,6 +9,8 @@ independent 4/8-World collections.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 np = pytest.importorskip("numpy")
@@ -197,6 +199,32 @@ def test_attached_aliases_requires_browser_and_tab():
     assert attached_aliases(world_store=store, assignment=asn, browser_open=False) == []
     asn.clear("H")
     assert attached_aliases(world_store=store, assignment=asn, browser_open=True) == ["F"]
+
+
+def test_scan_all_saves_per_world_artifacts(tmp_path):
+    store, asn = _hf()
+    cap = FakeCapture(sizes={"tab-H": (1920, 1080), "tab-F": (1920, 1080)})
+    results = scan_all_attached(world_store=store, assignment=asn, browser_open=True,
+                                capture_callback=cap, artifacts_root=tmp_path)
+    # Each World's artifacts land in its OWN alias directory — provably per-World.
+    for r in results:
+        assert r.artifacts_dir is not None
+        d = Path(r.artifacts_dir)
+        assert d.name == r.alias                       # scan_all/<ts>/<alias>/
+        assert (d / "scan.json").exists()
+        assert (d / "01_full_raw_capture.png").exists()
+    # The H and F runs are in the same timestamped run but distinct alias dirs.
+    parents = {Path(r.artifacts_dir).parent for r in results}
+    assert len(parents) == 1
+    assert {Path(r.artifacts_dir).name for r in results} == {"H", "F"}
+
+
+def test_scan_all_result_carries_its_own_image():
+    store, asn = _hf()
+    cap = FakeCapture()
+    results = scan_all_attached(world_store=store, assignment=asn, browser_open=True,
+                                capture_callback=cap)
+    assert all(r.image is not None for r in results)   # for the Open-result button
 
 
 def test_scan_world_row_is_tagged_to_its_world():

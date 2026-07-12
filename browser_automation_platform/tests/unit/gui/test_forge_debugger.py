@@ -121,10 +121,43 @@ def test_scan_all_opens_summary_with_one_row_per_world(qapp):
         assert table.rowCount() == 2
         aliases = {table.item(r, 0).text() for r in range(2)}
         assert aliases == {"H", "F"}
+        # Each row has an inspectable "Open result" button (last column).
+        assert win._scan_all_window.table.cellWidget(0, table.columnCount() - 1) is not None
     finally:
         if getattr(win, "_scan_all_window", None) is not None:
             win._scan_all_window.close()
         win._browser_open = False
+        win.close()
+
+
+def test_annotate_preview_has_no_banner_over_top_bar(qapp):
+    # The debugger's rendered image must not paint a banner over the top rows —
+    # that is where the Forge weakening top bar lives.
+    from bap.forge.detection.scan import annotate
+    img = np.full((900, 1600, 3), 180, np.uint8)
+    win = DebuggerWindow(img, source="live")
+    try:
+        vis = annotate(img, win._scan)
+        assert np.array_equal(vis[0:6, :, :], img[0:6, :, :])   # top strip untouched
+        # Observe-only status still present outside the image.
+        assert "OBSERVE ONLY" in win.details.toPlainText()
+        assert "OBSERVE ONLY" in win.windowTitle()
+    finally:
+        win.close()
+
+
+def test_label_in_review_mode_saves_frame_and_opens_review(qapp, tmp_path):
+    img = _frame_with_emblem()
+    win = DebuggerWindow(img, source="H (live)", live_review_dir=tmp_path)
+    try:
+        win._on_label_review()
+        # The live capture was persisted as a Review-Mode frame under the world tag.
+        frames = list((tmp_path / "frames").glob("H_*.png"))
+        assert len(frames) == 1
+        assert win._review is not None                 # Review Mode window opened
+    finally:
+        if win._review is not None:
+            win._review.close()
         win.close()
 
 

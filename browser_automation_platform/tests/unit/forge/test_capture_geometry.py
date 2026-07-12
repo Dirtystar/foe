@@ -130,6 +130,26 @@ def test_no_false_panel_on_empty_terrain():
     assert vis.shape == blank.shape                # renders, but no panel box
 
 
+def test_annotate_leaves_top_bar_uncovered_no_banner():
+    # The OBSERVE-ONLY banner must NOT be painted over the image — it used to
+    # cover the top ~40 px where the Forge top bar (weakening) sits. A textured
+    # top strip must survive annotation unchanged.
+    img = np.full((1080, 1920, 3), 200, np.uint8)   # uniform bright top bar
+    # No weakening ROI: the default map ROI starts ~6% down, so the top strip has
+    # no annotation at all — it must be byte-identical (the old red banner would
+    # have overwritten it).
+    scan = build_scan(img, world=H)
+    vis = annotate(img, scan)
+    assert np.array_equal(vis[0:40, :, :], img[0:40, :, :])
+
+
+def test_panel_state_not_in_explanation_but_in_scan_json():
+    img = np.zeros((1080, 1920, 3), np.uint8)
+    scan = build_scan(img, world=H)
+    assert "Province panel" not in scan.explanation()   # not in the debugger text
+    assert scan.to_dict()["panel"] is not None          # kept for diagnosis
+
+
 # --- classification diagnosis -------------------------------------------------
 
 
@@ -206,3 +226,28 @@ def test_regression_full_capture_pipeline(tmp_path):
     # The saved full raw capture is the unmodified input — no banner/boxes baked in.
     raw = cv2.imread(str(tmp_path / "01_full_raw_capture.png"))
     assert np.array_equal(raw, img)
+
+
+@pytest.mark.skipif(not FIXTURE.exists(), reason="grading fixture frame missing")
+def test_contact_sheet_and_per_candidate_crops(tmp_path):
+    img = cv2.imread(str(FIXTURE))
+    cal = WeakeningCalibration.load(GRADING / "calibration.json")
+    clf = train_from_labels(GRADING / "frames", GRADING / "labels.json")
+    scan = build_scan(img, world=H, classifier=clf,
+                      rois=derive_rois(CaptureGeometry.from_image(img), cal))
+    save_scan(img, scan, tmp_path, classifier=clf)
+    # Contact sheet (live vs nearest exemplars) + per-candidate emblem/percent crops.
+    assert (tmp_path / "08_classifier_contact_sheet.png").exists()
+    crops = tmp_path / "06_badge_classifier_crops"
+    assert (crops / "cand00_emblem.png").exists()
+    assert (crops / "cand00_percent.png").exists()
+    assert (crops / "cand00_classifier_input.png").exists()
+
+
+def test_classifier_nearest_returns_labelled_images():
+    p20 = np.zeros(24 * 40, np.float32); p20[0] = 1.0
+    p40 = np.zeros(24 * 40, np.float32); p40[1] = 1.0
+    clf = PercentClassifier().fit([(p20, 20), (p40, 40)])
+    nearest = clf.nearest(p20, 5)
+    assert nearest[0][0] == 20 and nearest[0][1] > 0.9       # best is 20% pill
+    assert nearest[0][2].shape == (24, 40)                   # rendered exemplar image

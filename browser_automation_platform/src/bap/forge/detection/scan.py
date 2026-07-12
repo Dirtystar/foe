@@ -158,10 +158,8 @@ class DebugScan:
         else:
             lines.append("Ignored: none")
 
-        # Panel state — never a false box on empty terrain.
-        if self.panel_result is not None:
-            state = "OPEN" if self.panel_result.get("present") else "not open"
-            lines.append(f"Province panel: {state} ({self.panel_result.get('reason', '')})")
+        # Province-panel state is diagnostic only — kept in scan.json, not shown
+        # in the main debugger text (unused by the current decision slice).
 
         # 5-6. Selected target + reason + would-click (gated by the safety gate).
         sel = self.selection.detection
@@ -420,10 +418,14 @@ def build_scan(image, *, world=None, detector: BadgeDetector | None = None,
 
 
 def annotate(image, scan: DebugScan):
-    """Return a BGR copy of `image` with BOTH ROIs, the detections, the panel
-    pill (only when the panel is corroborated open), the weakening region, and
-    the proposed click cross — under the OBSERVE-ONLY banner. The input image is
-    never modified: analysis runs on the raw capture, drawing on a copy."""
+    """Return a BGR copy of `image` with BOTH ROIs, the detections, the weakening
+    region, and the proposed click cross drawn on it.
+
+    Deliberately draws **no** OBSERVE-ONLY banner over the image: the banner used
+    to cover the top ~40 px — exactly where the Forge top bar (current weakening)
+    sits — hiding it from view and calibration. Observe-only status lives in the
+    window title, the side text panel, and the GUI chrome instead. The input image
+    is never modified: analysis runs on the raw capture, drawing on a copy."""
     import cv2
 
     vis = image.copy()
@@ -453,12 +455,8 @@ def annotate(image, scan: DebugScan):
         cv2.putText(vis, f"{label} {d.confidence:.2f}", (d.x, d.y - 6),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
 
-    # Panel pill only when the province-detail panel is corroborated open.
-    if scan.panel is not None:
-        p = scan.panel
-        cv2.rectangle(vis, (p.x, p.y), (p.x + p.w, p.y + p.h), (235, 170, 40), 2)
-        cv2.putText(vis, "panel (open)", (p.x, p.y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
-                    (235, 170, 40), 2, cv2.LINE_AA)
+    # Province panel is diagnostic-only (kept in scan.json); it is not drawn on
+    # the map — a fixed-point pill box was noise on the main debugger view.
 
     # Weakening region + decision.
     wr = scan.weakening_region
@@ -480,9 +478,6 @@ def annotate(image, scan: DebugScan):
         cv2.putText(vis, label, (cx + 26, cy + 6),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, cyan, 2, cv2.LINE_AA)
 
-    cv2.rectangle(vis, (0, 0), (vis.shape[1], 40), (0, 0, 160), -1)
-    cv2.putText(vis, OBSERVE_ONLY_BANNER, (16, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
-                (255, 255, 255), 2, cv2.LINE_AA)
     return vis
 
 
@@ -498,10 +493,52 @@ def _crop(img, rect: Rect):
     return img[y0:y1, x0:x1].copy()
 
 
-def save_scan(image, scan: DebugScan, out_dir: Path | str, *, stem: str = "scan") -> dict:
+def _classifier_contact_sheet(img, detections, classifier):
+    """A stacked side-by-side: each candidate's normalized live %-crop next to its
+    top-5 nearest grading exemplars (with predicted % + similarity), so a live vs
+    training scale/offset mismatch is visible at a glance."""
+    import cv2
+    import numpy as np
+
+    nearest = getattr(classifier, "nearest", None)
+    if nearest is None or not detections:
+        return None
+    cell_w, cell_h, pad = 80, 56, 4
+    rows = []
+    for i, d in enumerate(detections):
+        patch = percent_patch(img, d.cx, d.cy)
+        if patch is None:
+            continue
+        from bap.forge.detection.classify import vec_to_image
+
+        cells = [("live", None, vec_to_image(patch))]
+        for pct, sim, ex_img in nearest(patch, 5):
+            cells.append((f"{pct}%", sim, ex_img))
+        strip = np.full((cell_h, cell_w * len(cells), 3), 30, np.uint8)
+        for j, (label, sim, cimg) in enumerate(cells):
+            g = cv2.resize(cimg, (cell_w - 2 * pad, cell_h - 20), interpolation=cv2.INTER_NEAREST)
+            bgr = cv2.cvtColor(g, cv2.COLOR_GRAY2BGR)
+            x0 = j * cell_w + pad
+            strip[16:16 + bgr.shape[0], x0:x0 + bgr.shape[1]] = bgr
+            txt = label if sim is None else f"{label} {sim:.2f}"
+            cv2.putText(strip, txt, (j * cell_w + 2, 12), cv2.FONT_HERSHEY_SIMPLEX, 0.35,
+                        (230, 230, 230), 1, cv2.LINE_AA)
+        cv2.putText(strip, f"#{i} ({d.cx},{d.cy})", (2, cell_h - 3),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (140, 200, 255), 1, cv2.LINE_AA)
+        rows.append(strip)
+    if not rows:
+        return None
+    width = max(r.shape[1] for r in rows)
+    rows = [np.pad(r, ((0, 0), (0, width - r.shape[1]), (0, 0)), constant_values=30) for r in rows]
+    return np.vstack(rows)
+
+
+def save_scan(image, scan: DebugScan, out_dir: Path | str, *, stem: str = "scan",
+              classifier=None) -> dict:
     """Save the full Test-Scan artifact set for review: the unmodified full raw
     capture, both weakening crops (raw + processed), the battle-map ROI crop, a
-    candidate overlay, per-candidate classifier crops, the final annotated
+    candidate overlay, per-candidate classifier crops (raw / emblem / percent /
+    normalized input), a live-vs-exemplar contact sheet, the final annotated
     output, and scan.json with the whole trace."""
     import cv2
     import numpy as np
@@ -538,14 +575,19 @@ def save_scan(image, scan: DebugScan, out_dir: Path | str, *, stem: str = "scan"
             cv2.circle(overlay, (int(c["cx"]), int(c["cy"])), 16, col, 2)
         write("05_badge_candidate_overlay.png", overlay)
 
-    # 06 — per-candidate classifier crops + the normalized classifier input.
+    # 06 — per-candidate crops: raw / emblem / percent-only / normalized input.
     crops_dir = out / "06_badge_classifier_crops"
     if img is not None and scan.detections:
         crops_dir.mkdir(parents=True, exist_ok=True)
         for i, d in enumerate(scan.detections):
-            raw = _crop(img, Rect(d.cx - 4, d.cy - 18, 70, 36))
-            if raw is not None:
-                cv2.imwrite(str(crops_dir / f"cand{i:02d}_raw.png"), raw)
+            for suffix, rect in (
+                ("raw", Rect(d.cx - 24, d.cy - 20, 94, 40)),
+                ("emblem", Rect(d.cx - 20, d.cy - 20, 40, 40)),
+                ("percent", Rect(d.cx + 16, d.cy - 16, 54, 32)),
+            ):
+                crop = _crop(img, rect)
+                if crop is not None:
+                    cv2.imwrite(str(crops_dir / f"cand{i:02d}_{suffix}.png"), crop)
             patch = percent_patch(img, d.cx, d.cy)
             if patch is not None:
                 vis = patch - patch.min()
@@ -556,6 +598,11 @@ def save_scan(image, scan: DebugScan, out_dir: Path | str, *, stem: str = "scan"
 
     # 07 — the final annotated output.
     write("07_final_annotated_output.png", annotate(img, scan) if img is not None else None)
+
+    # 08 — live-vs-exemplar contact sheet (why the % reads UNKNOWN).
+    if img is not None and classifier is not None:
+        write("08_classifier_contact_sheet.png",
+              _classifier_contact_sheet(img, scan.detections, classifier))
 
     scan_json = out / "scan.json"
     scan_json.write_text(json.dumps(scan.to_dict(), indent=2), encoding="utf-8")

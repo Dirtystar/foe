@@ -4,6 +4,45 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge Milestone 4.6 (Windows stabilization, round 2)
+
+Second Windows-review pass, still observe-only (no mouse/keyboard/game action).
+Fixes the capture that excluded the weakening top bar, surfaces the live
+classifier failure, and makes multi-World scans independently inspectable.
+
+### Fixed
+
+- **The capture no longer hides the Forge top bar.** `annotate()` drew the red
+  OBSERVE-ONLY banner across the top ~40 px of the image — exactly where the
+  current-weakening top bar sits — so it could never be seen or calibrated. The
+  banner is removed from the image entirely; observe-only status stays in the
+  window title, the side text panel, and the GUI chrome. The full-viewport CDP
+  capture already contained the top bar, which is now visible and calibratable.
+
+### Added
+
+- **Label in Review Mode** on the debugger — opens the current live capture in
+  the existing Review Mode (click to add/move, right-click to remove, keys 1–5
+  set 20/40/60/80/100, autosave) and stores it under
+  `data/forge/live_review/frames/` as additional ground truth. This is the path
+  to fix live percentage classification with real live crops, no external editor.
+- **Live-vs-training classifier diagnostics**: `save_scan` now writes
+  `08_classifier_contact_sheet.png` (each live %-crop beside its 5 nearest
+  grading exemplars) and per-candidate `raw / emblem / percent / classifier_input`
+  crops; `scan.json` carries each badge's top-5 exemplars + threshold.
+  `LIVE_SCAN_DIAGNOSIS.md` explains why live reads come back UNKNOWN (crop
+  scale/offset, dPR/zoom, background) — a classifier-input mismatch, not a
+  detection failure.
+- **Scan All per-World artifacts**: each attached World's scan is saved under
+  `scan_all/<timestamp>/<alias>/`, and the summary table gains a per-row **Open
+  result** button that opens that World's own capture in the debugger — proving
+  the H row came from the H tab and F from F.
+
+### Changed
+
+- The province-panel detector is now **diagnostic-only**: no box on the map and
+  no line in the debugger text; its score stays in `scan.json`.
+
 ## [Unreleased] — Forge Milestone 4.5 (Windows stabilization sprint)
 
 Stabilize the observe-only pipeline across multiple Worlds. No new gameplay; no

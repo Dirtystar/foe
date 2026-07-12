@@ -94,6 +94,28 @@ class PercentClassifier:
         )
         return scored[:k]
 
+    def nearest(self, patch, k: int = 5) -> list[tuple[int, float, object]]:
+        """The k nearest exemplars as (pct, similarity, image), best first, where
+        image is the exemplar's normalized vector rendered back to an 8-bit grid —
+        for a side-by-side contact sheet against the live crop."""
+        if patch is None or not self._exemplars:
+            return []
+        scored = sorted(self._exemplars, key=lambda ex: -float((patch * ex.vec).sum()))[:k]
+        return [(ex.pct, float((patch * ex.vec).sum()), vec_to_image(ex.vec)) for ex in scored]
+
+
+def vec_to_image(vec):
+    """Render a normalized patch/exemplar vector back to an 8-bit grayscale image
+    (the classifier's `_NORM_SIZE` grid) for inspection/contact sheets."""
+    if not _CV:  # pragma: no cover
+        return None
+    arr = np.asarray(vec, dtype="float32")
+    if arr.ndim == 1:
+        arr = arr.reshape(_NORM_SIZE[1], _NORM_SIZE[0])  # (h, w)
+    arr = arr - arr.min()
+    span = float(arr.max()) or 1.0
+    return (arr / span * 255).astype("uint8")
+
 
 def train_from_labels(frames_dir, labels_path) -> PercentClassifier | None:
     """Build a classifier from every classified badge in the reviewed grading
@@ -123,4 +145,4 @@ def train_from_labels(frames_dir, labels_path) -> PercentClassifier | None:
     return PercentClassifier().fit(examples)
 
 
-__all__ = ["PercentClassifier", "percent_patch", "train_from_labels"]
+__all__ = ["PercentClassifier", "percent_patch", "train_from_labels", "vec_to_image"]
