@@ -4,6 +4,45 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge Milestone 3.5 (weakening gate + Review Mode)
+
+Adds the second required Forge signal — **current weakening** — as a safety gate,
+and extends the Vision Debugger into an interactive Review Mode. Still
+observe-only; no clicking or battle logic.
+
+### Changed
+
+- **`World.max_weakening`** (was `max_weakening_pct`): the current-weakening
+  safety threshold is the top-bar **attrition counter**, an integer that can
+  exceed 100 — not a badge percentage. Persistence reads the old key for
+  back-compat. Badge target selection now filters purely by `allowed_pcts`; the
+  weakening gate is applied separately, before badges are considered.
+
+### Added
+
+- **Weakening region calibration** (`detection.calibration.WeakeningCalibration`):
+  a per-resolution rectangle for the current-weakening number, drawn by the user
+  (Debugger → *Set Weakening Region*) and persisted.
+- **Weakening reader + fail-safe** (`detection.weakening`): two readers — OCR with
+  a numeric whitelist, and deterministic digit-template matching — plus a
+  conservative gate: unreadable / low-confidence → **UNKNOWN (no action)**;
+  value ≥ world limit → **STOP**; only a confident value below → **CONTINUE**. It
+  never continues blindly. Integrated into `DebugScan` (weakening is checked
+  before any badge is selected).
+- **Reader spike** (`detection.weakening_eval`,
+  `tests/forge_assets/grading/WEAKENING_REPORT.md`): OCR vs template matching on
+  the reviewed values. Measured on auto-located regions: OCR 33% exact with
+  well-calibrated confidence (correct reads score high, wrong reads ~0, so the
+  fail-safe rejects them); template matching needs a tight calibrated region.
+  Region location is the bottleneck — a single-setup calibration removes it.
+- **Review Mode** (`bap.gui.forge_review`, `bap-forge-review`): steps through
+  frames showing the detector overlay and, per frame, lets a human confirm both
+  signals — badge correction (left-click add, right-click remove, keys 1-5 set
+  20/40/60/80/100) and the current-weakening value (Set Weakening Region + enter
+  the value), with the raw/processed crop, OCR read + confidence, world limit,
+  and CONTINUE/STOP/UNKNOWN decision shown. Everything autosaves and resumes.
+  Ground-truth weakening values are recorded on `FrameLabel.weakening`.
+
 ## [Unreleased] — Forge Milestone 3 (badge detector + Vision Debugger)
 
 The weakening-badge detector, graded against the human-confirmed set, plus an

@@ -74,11 +74,11 @@ class WorldDialog(QDialog):
         form.addRow("Click cadence", self.interval_spin)
 
         self.maxweak_spin = QSpinBox()
-        self.maxweak_spin.setRange(0, 100)
-        self.maxweak_spin.setSingleStep(20)
-        self.maxweak_spin.setSuffix(" %")
-        self.maxweak_spin.setValue(existing.max_weakening_pct if existing else 100)
-        form.addRow("Max weakening", self.maxweak_spin)
+        self.maxweak_spin.setRange(0, 100000)
+        self.maxweak_spin.setSingleStep(1)
+        self.maxweak_spin.setValue(existing.max_weakening if existing else 100)
+        self.maxweak_spin.setToolTip("Stop this world when current weakening (attrition) reaches this value")
+        form.addRow("Max weakening (attrition)", self.maxweak_spin)
 
         pct_row = QWidget()
         pct_layout = QHBoxLayout(pct_row)
@@ -126,7 +126,7 @@ class WorldDialog(QDialog):
             alias=self.alias_edit.text(),
             hostname=self.host_edit.text(),
             interval_ms=self.interval_spin.value(),
-            max_weakening_pct=self.maxweak_spin.value(),
+            max_weakening=self.maxweak_spin.value(),
             allowed_pcts=allowed,
             title=self.title_edit.text().strip(),
             last_url=self._last_url,

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from bap.core.domain.models import Rect
 from bap.forge.detection.classify import PercentClassifier, percent_patch
 from bap.forge.detection.detector import (
     DEFAULT_REGION,
@@ -21,6 +22,7 @@ from bap.forge.detection.detector import (
     BadgeDetector,
     Detection,
 )
+from bap.forge.detection.weakening import Decision, WeakeningRead, decide, read_ocr
 
 OBSERVE_ONLY_BANNER = "OBSERVE ONLY — NO CLICK PERFORMED"
 
@@ -45,9 +47,27 @@ class DebugScan:
     width: int = 0
     height: int = 0
     created_at: str = ""
+    # Current-weakening safety gate.
+    weakening: WeakeningRead | None = None
+    weakening_region: Rect | None = None
+    world_limit: int | None = None
+    decision: Decision = Decision.UNKNOWN
 
     def explanation(self) -> str:
         lines = [OBSERVE_ONLY_BANNER, ""]
+        # Safety gate first — it decides whether badges are even considered.
+        if self.weakening is not None:
+            val = self.weakening.value if self.weakening.value is not None else "unreadable"
+            lines.append(
+                f"Current weakening: {val} (conf {self.weakening.confidence:.2f}, "
+                f"{self.weakening.method})   limit: {self.world_limit}"
+            )
+            lines.append(f"Safety decision: {self.decision.value}")
+            if self.decision is Decision.STOP:
+                lines.append("  → at/over the limit: this World would STOP (no badges considered)")
+            elif self.decision is Decision.UNKNOWN:
+                lines.append("  → weakening not confidently read: NO ACTION (fail-safe)")
+            lines.append("")
         lines.append(f"Badges detected: {len(self.detections)}")
         if self.panel is not None:
             pct = f"{self.panel.pct}%" if self.panel.pct is not None else "unknown %"
@@ -69,12 +89,19 @@ class DebugScan:
         return "\n".join(lines)
 
     def to_dict(self) -> dict:
+        wr = self.weakening_region
         return {
             "observe_only": True,
             "created_at": self.created_at,
             "world": self.world_alias,
             "size": [self.width, self.height],
             "analyzed_region": list(self.region),
+            "weakening": {
+                "read": self.weakening.to_dict() if self.weakening else None,
+                "region": [wr.x, wr.y, wr.w, wr.h] if wr else None,
+                "world_limit": self.world_limit,
+                "decision": self.decision.value,
+            },
             "detections": [d.to_dict() for d in self.detections],
             "panel_pill": self.panel.to_dict() if self.panel else None,
             "selection": {
@@ -109,26 +136,30 @@ def select_target(detections: list[Detection], world=None) -> Selection:
             f"{best.pct}% at ({best.cx},{best.cy})",
         ])
 
+    # Badge eligibility is purely the world's allowed percentages. The current-
+    # weakening safety gate is applied separately (before badges are considered)
+    # — it is NOT a filter on badge percentage.
     allowed = set(getattr(world, "allowed_pcts", ()))
-    max_weak = getattr(world, "max_weakening_pct", 100)
-    eligible = [d for d in classified if d.pct in allowed and d.pct <= max_weak]
+    eligible = [d for d in classified if d.pct in allowed]
     if not eligible:
         return Selection(None, [
-            f"no badge is both enabled for World '{getattr(world, 'alias', '?')}' "
-            f"(allowed {sorted(allowed)}) and ≤ max weakening {max_weak}%",
+            f"no detected badge percentage is enabled for World "
+            f"'{getattr(world, 'alias', '?')}' (allowed {sorted(allowed)})",
         ])
     best = max(eligible, key=lambda d: d.pct)
     return Selection(best, [
         f"{best.pct}% is enabled for World '{getattr(world, 'alias', '?')}'",
-        f"current weakening {best.pct}% ≤ world limit {max_weak}%",
         f"confidence {best.confidence:.2f}",
-        "highest allowed weakening among candidates",
+        "highest allowed badge percentage among candidates",
     ])
 
 
 def build_scan(image, *, world=None, detector: BadgeDetector | None = None,
-               classifier: PercentClassifier | None = None) -> DebugScan:
-    """Run detection (+ optional classification) and strategy over one image."""
+               classifier: PercentClassifier | None = None,
+               weakening_region: Rect | None = None) -> DebugScan:
+    """Run the safety gate (weakening) + detection (+ optional classification) +
+    strategy over one image. If the weakening gate is not CONTINUE, no badge
+    target is selected — the gate is checked before badges are considered."""
     import cv2
 
     img = cv2.imread(str(image)) if isinstance(image, (str, Path)) else image
@@ -146,15 +177,36 @@ def build_scan(image, *, world=None, detector: BadgeDetector | None = None,
             pguess, _ = classifier.predict(percent_patch(img, panel.cx, panel.cy))
             panel = panel.with_pct(pguess)
 
+    # Weakening safety gate.
+    weak_read = None
+    decision = Decision.UNKNOWN
+    world_limit = getattr(world, "max_weakening", None) if world is not None else None
+    if weakening_region is not None and img is not None:
+        weak_read = read_ocr(img, weakening_region)
+        decision = decide(weak_read, world)
+
+    # Badges are only selectable when the gate says CONTINUE.
+    if decision is Decision.CONTINUE or weakening_region is None:
+        selection = select_target(detections, world)
+    else:
+        why = ("weakening at/over the limit — World would STOP"
+               if decision is Decision.STOP else
+               "weakening not confidently read — fail-safe, no action")
+        selection = Selection(None, [why])
+
     h, w = (img.shape[0], img.shape[1]) if img is not None else (0, 0)
     return DebugScan(
         detections=detections,
         panel=panel,
         region=DEFAULT_REGION,
-        selection=select_target(detections, world),
+        selection=selection,
         world_alias=getattr(world, "alias", None),
         width=w, height=h,
         created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        weakening=weak_read,
+        weakening_region=weakening_region,
+        world_limit=world_limit,
+        decision=decision,
     )
 
 
@@ -179,6 +231,14 @@ def annotate(image, scan: DebugScan):
         cv2.rectangle(vis, (p.x, p.y), (p.x + p.w, p.y + p.h), (235, 170, 40), 2)
         cv2.putText(vis, "panel", (p.x, p.y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                     (235, 170, 40), 2, cv2.LINE_AA)
+
+    # Weakening region + decision.
+    wr = scan.weakening_region
+    if wr is not None:
+        cv2.rectangle(vis, (wr.x, wr.y), (wr.x + wr.w, wr.y + wr.h), (40, 220, 235), 2)
+        val = scan.weakening.value if (scan.weakening and scan.weakening.value is not None) else "?"
+        cv2.putText(vis, f"weak={val} {scan.decision.value}", (wr.x, wr.y - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (40, 220, 235), 2, cv2.LINE_AA)
 
     click = scan.selection.click_point
     if click is not None:

@@ -68,7 +68,10 @@ class World:
     alias: str
     hostname: str
     interval_ms: int = 1000
-    max_weakening_pct: int = 100
+    # Safety gate: the maximum *current weakening* (the top-bar attrition counter,
+    # which can exceed 100) at which this world keeps fighting. At or above it the
+    # world is stopped. This is NOT a badge percentage — see allowed_pcts for that.
+    max_weakening: int = 100
     allowed_pcts: tuple[int, ...] = BADGE_PCTS
     strategy: dict = field(default_factory=dict)
     # Display/recognition metadata captured from the scanned tab (NOT identity —
@@ -95,8 +98,8 @@ class World:
 
         if self.interval_ms <= 0:
             raise WorldError(f"World '{alias}': interval_ms must be > 0.")
-        if not 0 <= self.max_weakening_pct <= 100:
-            raise WorldError(f"World '{alias}': max_weakening_pct must be in 0..100.")
+        if not 0 <= self.max_weakening <= 100000:
+            raise WorldError(f"World '{alias}': max_weakening must be in 0..100000.")
 
         pcts = tuple(sorted({int(p) for p in self.allowed_pcts}))
         bad = [p for p in pcts if p not in BADGE_PCTS]
@@ -115,7 +118,7 @@ class World:
             "alias": self.alias,
             "hostname": self.hostname,
             "interval_ms": self.interval_ms,
-            "max_weakening_pct": self.max_weakening_pct,
+            "max_weakening": self.max_weakening,
             "allowed_pcts": list(self.allowed_pcts),
             "strategy": dict(self.strategy),
             "title": self.title,
@@ -129,7 +132,8 @@ class World:
                 alias=data["alias"],
                 hostname=data["hostname"],
                 interval_ms=int(data.get("interval_ms", 1000)),
-                max_weakening_pct=int(data.get("max_weakening_pct", 100)),
+                # Back-compat: earlier stores used the (0..100) key max_weakening_pct.
+                max_weakening=int(data.get("max_weakening", data.get("max_weakening_pct", 100))),
                 allowed_pcts=tuple(data.get("allowed_pcts", BADGE_PCTS)),
                 strategy=dict(data.get("strategy", {})),
                 title=str(data.get("title", "")),

@@ -373,7 +373,7 @@ class MainWindow(QMainWindow):
                 world.alias,
                 world.hostname,
                 f"{world.interval_ms} ms",
-                f"{world.max_weakening_pct}%",
+                str(world.max_weakening),
                 "/".join(str(p) for p in world.allowed_pcts),
                 "0",  # rules configured — capture-only
                 "0",  # actions configured — capture-only

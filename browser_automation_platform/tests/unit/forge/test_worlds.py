@@ -45,7 +45,7 @@ def test_world_defaults():
     assert w.alias == "Main"
     assert w.hostname == "cz8.forgeofempires.com"  # normalized from the URL
     assert w.allowed_pcts == BADGE_PCTS
-    assert w.max_weakening_pct == 100
+    assert w.max_weakening == 100
     assert w.interval_ms == 1000
 
 
@@ -62,8 +62,10 @@ def test_world_rejects_non_forge_host():
 def test_world_rejects_bad_pcts_and_ranges():
     with pytest.raises(WorldError, match="allowed_pcts"):
         World(alias="X", hostname="cz1.forgeofempires.com", allowed_pcts=(20, 33))
-    with pytest.raises(WorldError, match="max_weakening_pct"):
-        World(alias="X", hostname="cz1.forgeofempires.com", max_weakening_pct=150)
+    with pytest.raises(WorldError, match="max_weakening"):
+        World(alias="X", hostname="cz1.forgeofempires.com", max_weakening=-1)
+    # max_weakening is an attrition counter, not a percentage: >100 is valid.
+    assert World(alias="Y", hostname="cz2.forgeofempires.com", max_weakening=250).max_weakening == 250
     with pytest.raises(WorldError, match="interval_ms"):
         World(alias="X", hostname="cz1.forgeofempires.com", interval_ms=0)
 
@@ -75,8 +77,8 @@ def test_world_normalizes_pcts_order_and_dedupes():
 
 def test_with_changes_revalidates():
     w = World(alias="X", hostname="cz1.forgeofempires.com")
-    w2 = w.with_changes(max_weakening_pct=60)
-    assert w2.max_weakening_pct == 60
+    w2 = w.with_changes(max_weakening=60)
+    assert w2.max_weakening == 60
     with pytest.raises(WorldError):
         w.with_changes(hostname="example.com")
 
@@ -115,9 +117,9 @@ def test_update_allows_rename_and_preserves_order():
     store = WorldStore()
     store.add(_world("A", "cz1.forgeofempires.com"))
     store.add(_world("B", "cz2.forgeofempires.com"))
-    store.update("A", _world("Main", "cz1.forgeofempires.com", max_weakening_pct=40))
+    store.update("A", _world("Main", "cz1.forgeofempires.com", max_weakening=40))
     assert store.aliases() == ["Main", "B"]  # order kept, alias renamed
-    assert store.get("Main").max_weakening_pct == 40
+    assert store.get("Main").max_weakening == 40
 
 
 def test_remove():

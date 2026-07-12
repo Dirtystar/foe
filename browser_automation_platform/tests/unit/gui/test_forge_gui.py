@@ -151,7 +151,7 @@ def test_start_gate_when_a_world_has_no_matching_tab(forge_window):
 
 def test_add_world_is_live_no_restart(forge_window, monkeypatch):
     win, service, store = forge_window
-    new = World(alias="H", hostname="cz3.forgeofempires.com", max_weakening_pct=40)
+    new = World(alias="H", hostname="cz3.forgeofempires.com", max_weakening=40)
     monkeypatch.setattr(WorldDialog, "get_world", staticmethod(lambda *a, **k: new))
 
     win._on_add_world()

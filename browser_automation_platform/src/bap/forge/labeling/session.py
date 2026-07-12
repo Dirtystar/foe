@@ -131,6 +131,14 @@ class LabelSession:
         self.current().reviewed = reviewed
         self._save()
 
+    def weakening(self) -> int | None:
+        return self.current().weakening
+
+    def set_weakening(self, value: int | None) -> None:
+        """Set the ground-truth current-weakening value for this frame; autosave."""
+        self.current().weakening = int(value) if value is not None else None
+        self._save()
+
     def accept_suggestions(self, candidates: list[tuple[int, int]]) -> int:
         """Add any suggested centres not already near an existing badge (pct
         left None for the user to classify). Returns how many were added."""

@@ -30,7 +30,8 @@
           "pct": 20
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 86
     },
     {
       "file": "frame_000070.png",
@@ -56,7 +57,8 @@
           "pct": 100
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 92
     },
     {
       "file": "frame_000183.png",
@@ -87,7 +89,8 @@
           "pct": 20
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 111
     },
     {
       "file": "frame_000302.png",
@@ -108,7 +111,8 @@
           "pct": 20
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 5
     },
     {
       "file": "frame_000346.png",
@@ -119,7 +123,8 @@
           "pct": 20
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 5
     },
     {
       "file": "frame_000348.png",
@@ -130,17 +135,20 @@
           "pct": 20
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 5
     },
     {
       "file": "frame_000460.png",
       "badges": [],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 8
     },
     {
       "file": "frame_000466.png",
       "badges": [],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 8
     },
     {
       "file": "frame_000486.png",
@@ -156,7 +164,8 @@
           "pct": 20
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 12
     },
     {
       "file": "frame_000536.png",
@@ -177,7 +186,8 @@
           "pct": 20
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 16
     },
     {
       "file": "frame_000565.png",
@@ -203,7 +213,8 @@
           "pct": 60
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 0
     },
     {
       "file": "frame_000596.png",
@@ -229,17 +240,20 @@
           "pct": 20
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 1
     },
     {
       "file": "frame_000650.png",
       "badges": [],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 0
     },
     {
       "file": "frame_000654.png",
       "badges": [],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 0
     },
     {
       "file": "frame_000687.png",
@@ -270,7 +284,8 @@
           "pct": null
         }
       ],
-      "reviewed": true
+      "reviewed": true,
+      "weakening": 4
     }
   ]
 }

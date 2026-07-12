@@ -59,20 +59,26 @@ class FrameLabel:
     file: str
     badges: list[Badge] = field(default_factory=list)
     reviewed: bool = False
+    # Ground-truth current-weakening value read from the top bar for this frame
+    # (the attrition counter, an integer that can exceed 100), or None if not set.
+    weakening: int | None = None
 
     def to_dict(self) -> dict:
         return {
             "file": self.file,
             "badges": [b.to_dict() for b in self.badges],
             "reviewed": self.reviewed,
+            "weakening": self.weakening,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "FrameLabel":
+        weak = data.get("weakening")
         return cls(
             file=data["file"],
             badges=[Badge.from_dict(b) for b in data.get("badges", [])],
             reviewed=bool(data.get("reviewed", False)),
+            weakening=int(weak) if weak is not None else None,
         )
 
     @property

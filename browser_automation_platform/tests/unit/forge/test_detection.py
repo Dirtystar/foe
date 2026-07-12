@@ -108,11 +108,11 @@ def test_build_scan_and_explanation():
 def test_select_target_respects_world_rules():
     d20 = Detection(100, 100, 90, 90, 20, 20, 0.9, pct=20)
     d80 = Detection(200, 200, 190, 190, 20, 20, 0.9, pct=80)
-    world = World(alias="H", hostname="cz8.forgeofempires.com", allowed_pcts=(20, 40), max_weakening_pct=60)
+    world = World(alias="H", hostname="cz8.forgeofempires.com", allowed_pcts=(20, 40), max_weakening=60)
     sel = select_target([d20, d80], world)
     assert sel.detection is d20  # 80 not allowed / above max
     # none eligible
-    world2 = World(alias="X", hostname="cz1.forgeofempires.com", allowed_pcts=(100,), max_weakening_pct=100)
+    world2 = World(alias="X", hostname="cz1.forgeofempires.com", allowed_pcts=(100,), max_weakening=100)
     assert select_target([d20, d80], world2).detection is None
 
 
