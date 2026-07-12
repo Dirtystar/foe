@@ -8,6 +8,7 @@ from bap.forge.detection.calibration import WeakeningCalibration, resolution_key
 from bap.forge.detection.weakening import (
     Decision,
     WeakeningRead,
+    WeakeningTracker,
     build_digit_templates,
     decide,
     read_ocr,
@@ -104,6 +105,77 @@ def test_build_digit_templates_from_labelled_samples():
 
 
 # --- scan integration + gate --------------------------------------------------
+
+
+# --- per-World runtime tracker ------------------------------------------------
+
+
+def _read(v, conf=0.9):
+    return WeakeningRead(v, conf, "ocr")
+
+
+def test_tracker_confirms_on_consensus():
+    t = WeakeningTracker(consensus=2)
+    assert t.observe("H", _read(40)).accepted is False   # first read: awaiting consensus
+    st = t.observe("H", _read(40))
+    assert st.accepted is True and st.confirmed == 40
+    assert t.last_confirmed("H") == 40
+
+
+def test_tracker_suspicious_drop_becomes_unknown():
+    # World H: 86 -> 36 is a suspicious drop and must NOT overwrite the value.
+    t = WeakeningTracker(consensus=2, max_plausible_drop=20)
+    t.observe("H", _read(86)); t.observe("H", _read(86))  # confirm 86
+    st = t.observe("H", _read(36))                        # lone suspicious drop
+    assert st.accepted is False and st.suspicious is True
+    assert st.confirmed == 86                             # unchanged
+    assert t.last_confirmed("H") == 86
+
+
+def test_tracker_sustained_change_eventually_confirms():
+    # A real, sustained drop (not a single misread) is accepted with more consensus.
+    t = WeakeningTracker(consensus=2, max_plausible_drop=20)
+    t.observe("H", _read(86)); t.observe("H", _read(86))
+    for _ in range(4):
+        st = t.observe("H", _read(36))
+    assert st.accepted is True and t.last_confirmed("H") == 36
+
+
+def test_tracker_low_confidence_is_unknown_and_breaks_streak():
+    t = WeakeningTracker(consensus=2)
+    t.observe("H", _read(40))
+    st = t.observe("H", _read(40, conf=0.1))  # low confidence
+    assert st.accepted is False
+    assert t.last_confirmed("H") is None       # never confirmed
+    assert "low-confidence" in st.reason
+
+
+def test_tracker_never_compares_across_worlds():
+    t = WeakeningTracker(consensus=2)
+    t.observe("H", _read(86)); t.observe("H", _read(86))
+    # Farm's independent value must not be influenced by H.
+    t.observe("Farm", _read(12)); t.observe("Farm", _read(12))
+    assert t.last_confirmed("H") == 86
+    assert t.last_confirmed("Farm") == 12
+    assert t.last_confirmed_by_world == {"H": 86, "Farm": 12}
+
+
+def test_tracker_decide_uses_confirmed_value_per_world():
+    world = World(alias="H", hostname="cz8.forgeofempires.com", max_weakening=80)
+    t = WeakeningTracker(consensus=2)
+    assert t.decide("H", world) is Decision.UNKNOWN     # nothing confirmed yet
+    t.observe("H", _read(40)); t.observe("H", _read(40))
+    assert t.decide("H", world) is Decision.CONTINUE    # 40 < 80
+    t.observe("H", _read(90)); t.observe("H", _read(90))
+    assert t.decide("H", world) is Decision.STOP        # 90 >= 80
+
+
+def test_tracker_reset_to_zero_not_flagged_suspicious():
+    # A round reset toward 0 is plausible, not a suspicious misread.
+    t = WeakeningTracker(consensus=2, max_plausible_drop=20, reset_threshold=5)
+    t.observe("H", _read(60)); t.observe("H", _read(60))
+    st1 = t.observe("H", _read(0))
+    assert st1.suspicious is False
 
 
 def test_weakening_spike_uses_calibration(tmp_path):

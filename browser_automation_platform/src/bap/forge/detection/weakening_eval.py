@@ -7,6 +7,11 @@ confidence for each method. Digit templates for the template reader are built
 leave-one-frame-out so a frame is never read with a glyph cut from itself.
 
 Kept separate from badge classification — this is the attrition-counter reader.
+
+The grading frames are independent snapshots from different Worlds and unrelated
+moments, so this evaluates PER-FRAME reading accuracy only. It applies no
+temporal, monotonicity, or downward-jump logic — that lives in the runtime
+`WeakeningTracker`, per World.
 """
 
 from __future__ import annotations

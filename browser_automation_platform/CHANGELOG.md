@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge weakening: per-World runtime validation
+
+Clarifies that the 15-frame grading set is **per-frame OCR accuracy only** — the
+snapshots come from different Worlds and unrelated moments, so no temporal /
+monotonicity / downward-jump logic is applied to it.
+
+### Added
+
+- **`WeakeningTracker`** (`detection.weakening`): temporal validation of weakening
+  reads at **runtime, independently per World** (`last_confirmed_weakening_by_world`,
+  keyed by world id / alias). A value is confirmed only when consecutive confident
+  reads *for that World* agree (consensus); a large unexplained drop (e.g. an
+  86 → 36 OCR misread) is treated as suspicious and does **not** overwrite the
+  confirmed value — it stays UNKNOWN until stronger consensus. No global history
+  across tabs; values from different Worlds are never compared. `decide()` uses
+  the confirmed value, not a raw read.
+
 ## [Unreleased] — Forge Milestone 3.5 (weakening gate + Review Mode)
 
 Adds the second required Forge signal — **current weakening** — as a safety gate,

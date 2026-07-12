@@ -18,6 +18,7 @@ confident value below the limit yields CONTINUE. It never continues blindly.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -151,6 +152,92 @@ def decide(read: WeakeningRead, world, *, min_confidence: float = DEFAULT_MIN_CO
     return Decision.STOP if read.value >= limit else Decision.CONTINUE
 
 
+@dataclass
+class WorldWeakeningStatus:
+    """Result of feeding one read into a World's tracker."""
+
+    world_id: str
+    confirmed: int | None       # the World's currently-confirmed weakening, or None
+    accepted: bool              # did this read confirm/update the value?
+    reason: str
+    suspicious: bool = False     # a large, unexplained change (likely a misread)
+
+
+class WeakeningTracker:
+    """Per-World temporal validation of weakening reads at runtime.
+
+    Weakening is only meaningful as a series *within a single World* — the value
+    for World H and the value for World Farm are unrelated and must never be
+    compared. This tracker keeps one independent history per ``world_id`` and
+    confirms a value only when consecutive confident reads agree (consensus),
+    treating a large unexplained drop (e.g. 86 → 36 from an OCR misread) as
+    suspicious so it does not become the confirmed value.
+
+    It holds no global history across tabs. The grading dataset is NOT fed
+    through this — those 15 frames are independent snapshots, not a series.
+    """
+
+    def __init__(self, *, consensus: int = 2, max_plausible_drop: int = 20,
+                 reset_threshold: int = 5, min_confidence: float = DEFAULT_MIN_CONFIDENCE):
+        self._consensus = max(1, consensus)
+        self._max_drop = max_plausible_drop
+        self._reset_threshold = reset_threshold
+        self._min_conf = min_confidence
+        self._confirmed: dict[str, int] = {}
+        self._streak: dict[str, list[int]] = defaultdict(list)
+
+    @property
+    def last_confirmed_by_world(self) -> dict[str, int]:
+        """last_confirmed_weakening_by_world — a copy, keyed by World id."""
+        return dict(self._confirmed)
+
+    def last_confirmed(self, world_id: str) -> int | None:
+        return self._confirmed.get(world_id)
+
+    def _is_suspicious(self, world_id: str, value: int) -> bool:
+        prev = self._confirmed.get(world_id)
+        if prev is None:
+            return False
+        # A big decrease that is not a plausible round reset (toward ~0).
+        return value < prev - self._max_drop and value > self._reset_threshold
+
+    def observe(self, world_id: str, read: WeakeningRead) -> WorldWeakeningStatus:
+        """Feed one read for `world_id`; return the World's validated status.
+
+        A read is confirmed only once `consensus` consecutive confident reads
+        agree. A suspicious drop requires twice that many, so a lone misread never
+        flips the confirmed value — it yields UNKNOWN and leaves the prior value."""
+        confirmed = self._confirmed.get(world_id)
+        if read.value is None or read.confidence < self._min_conf:
+            self._streak[world_id] = []  # a bad read breaks the run
+            return WorldWeakeningStatus(world_id, confirmed, False, "unreadable/low-confidence")
+
+        streak = self._streak[world_id]
+        if streak and streak[-1] != read.value:
+            streak = []  # value changed — restart the agreement run
+        streak.append(read.value)
+        self._streak[world_id] = streak
+
+        suspicious = self._is_suspicious(world_id, read.value)
+        needed = self._consensus * (2 if suspicious else 1)
+        if len(streak) >= needed:
+            self._confirmed[world_id] = read.value
+            return WorldWeakeningStatus(world_id, read.value, True,
+                                        "confirmed by consensus", suspicious=suspicious)
+        reason = ("suspicious drop — awaiting stronger consensus" if suspicious
+                  else "awaiting consensus")
+        return WorldWeakeningStatus(world_id, confirmed, False, reason, suspicious=suspicious)
+
+    def decide(self, world_id: str, world) -> Decision:
+        """Fail-safe decision for a World from its CONFIRMED value (not a raw
+        read). No confirmed value → UNKNOWN; ≥ limit → STOP; below → CONTINUE."""
+        confirmed = self._confirmed.get(world_id)
+        if confirmed is None:
+            return Decision.UNKNOWN
+        limit = getattr(world, "max_weakening", 100) if world is not None else 100
+        return Decision.STOP if confirmed >= limit else Decision.CONTINUE
+
+
 def build_digit_templates(samples: list[tuple[object, int]]) -> dict:
     """Build digit glyph templates from labelled (region_crop_bgr, value) samples:
     segment each sample's digits left-to-right and pair them with the value's
@@ -184,4 +271,5 @@ def build_digit_templates(samples: list[tuple[object, int]]) -> dict:
 __all__ = [
     "Decision", "WeakeningRead", "DEFAULT_MIN_CONFIDENCE",
     "read_ocr", "read_template", "decide", "build_digit_templates",
+    "WeakeningTracker", "WorldWeakeningStatus",
 ]

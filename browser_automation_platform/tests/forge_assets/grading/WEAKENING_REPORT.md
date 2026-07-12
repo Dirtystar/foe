@@ -3,6 +3,14 @@
 Both readers evaluated on the 15 reviewed weakening values, using the corrected
 per-resolution region in `calibration.json` (`1920x1080 → x678 y477 w56 h25`).
 
+> **The 15 grading frames are independent snapshots from different Worlds and
+> unrelated moments — NOT a time series.** They are used only for *per-frame* OCR
+> accuracy. No monotonicity, downward-jump, or temporal check is applied across
+> this dataset, and the sequence of values (86, 92, 111, 5, …) carries no
+> temporal meaning. Temporal plausibility exists only at **runtime**, tracked
+> **independently per World** (`WeakeningTracker`, keyed by world id / alias) —
+> values from different Worlds are never compared.
+
 Reproduce: `python -m bap.forge.detection.weakening_eval tests/forge_assets/grading/frames`
 
 ## Results
@@ -39,9 +47,16 @@ region than OCR; OCR is the reader to use.
 Tesseract's confidence on these tiny digits is low even when the read is correct
 (mean ~0.18, sometimes 0 for single glyphs). So a strict confidence threshold is
 **over-conservative but safe**: it errs toward UNKNOWN → no action, never toward
-acting on a bad read. A stronger gate signal (e.g. agreement between two reads,
-or plausibility bounds) is a sensible follow-up before any action is enabled — it
-does not affect safety today.
+acting on a bad read.
+
+At runtime the stronger gate signal is **per-World consensus + temporal
+plausibility** (`WeakeningTracker`): a value is confirmed only when consecutive
+confident reads *for that World* agree, and a large unexplained drop (the exact
+86 → 36 / 92 → 36 misreads above) is treated as suspicious and does **not** become
+the confirmed value — it stays UNKNOWN. This runs per `world_id`; there is no
+global history across tabs. The two genuine per-frame OCR errors therefore remain
+documented reading errors, but at runtime they would be rejected by consensus
+rather than acted on.
 
 ## Fail-safe (unchanged)
 
