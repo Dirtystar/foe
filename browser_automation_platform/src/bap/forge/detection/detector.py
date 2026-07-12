@@ -19,7 +19,7 @@ state signal, reported separately. Pure over pixels — no clicking, no page acc
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 try:
@@ -68,6 +68,17 @@ class Detection:
             "confidence": round(self.confidence, 4),
             "pct": self.pct, "kind": self.kind,
         }
+
+
+@dataclass
+class DetectResult:
+    """Full stage-1 → stage-2 detection trace for one image. ``detections`` are
+    the kept badges (post-threshold, post-NMS); ``candidates`` records **every**
+    stage-1 colour proposal with its best emblem score and why it was kept or
+    rejected — for the Vision Debugger's diagnosis, never for acting."""
+
+    detections: list["Detection"] = field(default_factory=list)
+    candidates: list[dict] = field(default_factory=list)  # {cx,cy,score,kept,reason}
 
 
 def _emblem_mask(tpl):
@@ -155,22 +166,55 @@ class BadgeDetector:
 
     # --- public API ---------------------------------------------------------
 
-    def detect(self, image) -> list[Detection]:
+    def detect(self, image, region: tuple[int, int, int, int] | None = None) -> list[Detection]:
+        """Kept map badges. ``region`` (x0,y0,x1,y1) overrides the search area —
+        Test Scan passes the calibrated battle-map ROI so the whole visible map
+        is analyzed rather than a fixed sub-rectangle."""
+        return self.scan(image, region=region).detections
+
+    def scan(self, image, region: tuple[int, int, int, int] | None = None) -> DetectResult:
+        """Full trace: every stage-1 colour candidate with its emblem score and
+        keep/reject reason, plus the kept detections after threshold + NMS."""
         img = self._as_image(image)
         if img is None or not self._templates:
-            return []
+            return DetectResult()
         px, py = PANEL_PILL_CENTER
         pr2 = PANEL_PILL_RADIUS * PANEL_PILL_RADIUS
+        candidates: list[dict] = []
         dets = []
-        for cx, cy in self._arrow_candidates(img):
+        for cx, cy in self._arrow_candidates(img, region):
             if (cx - px) ** 2 + (cy - py) ** 2 <= pr2:
+                candidates.append({"cx": cx, "cy": cy, "score": None, "kept": False,
+                                   "reason": "inside fixed panel-pill exclusion zone"})
                 continue  # the fixed panel pill is reported separately
             score = self._emblem_score(img, cx, cy)
             if score >= self._threshold:
                 dets.append(self._make(cx, cy, score, "map"))
-        return self._nms(dets)
+                candidates.append({"cx": cx, "cy": cy, "score": round(score, 4),
+                                   "kept": True, "reason": "emblem score >= threshold"})
+            else:
+                candidates.append({"cx": cx, "cy": cy, "score": round(score, 4), "kept": False,
+                                   "reason": f"emblem score {score:.2f} < {self._threshold:.2f}"})
+        kept = self._nms(dets)
+        kept_ids = {id(d) for d in kept}
+        for d in dets:
+            if id(d) not in kept_ids:
+                candidates.append({"cx": d.cx, "cy": d.cy, "score": round(d.confidence, 4),
+                                   "kept": False, "reason": "suppressed by NMS (near a stronger badge)"})
+        return DetectResult(detections=kept, candidates=candidates)
+
+    def score_at(self, image, cx: int, cy: int) -> float:
+        """Public best masked-emblem score in the window around an arrow centre.
+        Used by the scan to score the fixed panel-pill spot for diagnosis."""
+        img = self._as_image(image)
+        if img is None or not self._templates:
+            return 0.0
+        return self._emblem_score(img, cx, cy)
 
     def detect_panel(self, image) -> Detection | None:
+        """Raw panel-pill candidate by emblem score at the fixed spot. NOTE: a
+        bare score here is not evidence the province-detail panel is *open* — the
+        scan corroborates it before reporting a panel (see build_scan)."""
         img = self._as_image(image)
         if img is None or not self._templates:
             return None
@@ -182,8 +226,8 @@ class BadgeDetector:
 
     # --- stage 1: locate ----------------------------------------------------
 
-    def _arrow_candidates(self, img) -> list[tuple[int, int]]:
-        x0, y0, x1, y1 = self._clamped_region(img)
+    def _arrow_candidates(self, img, region: tuple[int, int, int, int] | None = None) -> list[tuple[int, int]]:
+        x0, y0, x1, y1 = self._clamped_region(img, region)
         roi = img[y0:y1, x0:x1]
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
         hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
@@ -245,10 +289,12 @@ class BadgeDetector:
 
     # --- helpers ------------------------------------------------------------
 
-    def _clamped_region(self, img):
+    def _clamped_region(self, img, region: tuple[int, int, int, int] | None = None):
         h, w = img.shape[:2]
-        x0, y0, x1, y1 = self._region
-        return min(x0, w), min(y0, h), min(x1, w), min(y1, h)
+        x0, y0, x1, y1 = region if region is not None else self._region
+        x0, y0 = max(0, min(x0, w)), max(0, min(y0, h))
+        x1, y1 = max(x0, min(x1, w)), max(y0, min(y1, h))
+        return x0, y0, x1, y1
 
     def _as_image(self, image):
         if isinstance(image, (str, Path)):
@@ -257,6 +303,6 @@ class BadgeDetector:
 
 
 __all__ = [
-    "BadgeDetector", "Detection", "DEFAULT_REGION", "PANEL_PILL_CENTER",
+    "BadgeDetector", "Detection", "DetectResult", "DEFAULT_REGION", "PANEL_PILL_CENTER",
     "TEMPLATE_SIZE", "load_bundled_templates",
 ]

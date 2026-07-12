@@ -4,6 +4,56 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge Test-Scan capture-geometry fix (Windows review)
+
+The Windows review found the Test Scan analyzed only a fixed lower rectangle
+(marked by a grey boundary) that excluded the top bar, so the current weakening
+could never be read; badge percentages came back `?`; and a false "panel" box was
+drawn on empty terrain. This reworks the Test-Scan pipeline so it starts from one
+full raw capture and reasons in explicit, correctly-offset coordinates. Still
+**observe-only** — nothing clicks.
+
+### Added
+
+- **`detection.geometry`** — `CaptureGeometry` (raw size, viewport, device-pixel
+  ratio, zoom) and `ScanRois` (two ROIs in full-capture pixels). Every Test Scan
+  now derives a **weakening ROI** (top bar) and a **battle-map ROI** that covers
+  the whole usable map below the top bar, instead of a hardcoded sub-rectangle.
+  Calibration keys by exact geometry so a region drawn for one capture setup is
+  never silently reused for a different one.
+- **Full debug-artifact set** from `save_scan`: `01_full_raw_capture.png` (the
+  unmodified capture), `02/03_weakening_roi_raw/processed.png`,
+  `04_battle_map_roi_raw.png`, `05_badge_candidate_overlay.png`,
+  `06_badge_classifier_crops/` (per-candidate crop + normalized classifier
+  input), `07_final_annotated_output.png`, and `scan.json` with the whole trace
+  (geometry, both ROIs, every stage-1 candidate + emblem score + keep/reject
+  reason, classifier inputs/results, panel state, weakening read, final decision).
+- **Set Battle-Map Region** tool in Review Mode (persisted per resolution),
+  alongside the existing Set Weakening Region.
+
+### Changed
+
+- **Coordinate contract** — detections are reported in full-capture pixels with
+  both `bbox_full` and `bbox_roi` (ROI origin removed exactly once), plus
+  `center_full` and `click_point_full`. A test proves the offset is applied once.
+- **Percentage classification no longer silently accepts a guess** — a prediction
+  is accepted only above a similarity bar (`MIN_PCT_SIM`); below it the badge
+  stays UNKNOWN with a recorded reason (e.g. the open-panel pill at similarity
+  0.28). Each candidate carries a classification diagnostic (crop centre,
+  prediction, similarity, accepted, reason).
+- **Panel detection is corroborated** — a bare emblem score at a fixed point is
+  no longer enough. The province panel is reported open (and boxed) only when the
+  pill spot both scores as an emblem and classifies as a confident percentage;
+  otherwise `panel_present = false`, no box is drawn, and the raw score is kept
+  for diagnosis. This removes the false panel box on empty terrain.
+- **`annotate()` draws both ROIs** (battle-map + weakening) on the output copy
+  only; analysis always runs on the untouched raw capture.
+
+### Fixed
+
+- The weakening (top bar) is now inside the analyzed area — the Test Scan reads
+  it instead of being blind to it.
+
 ## [Unreleased] — Forge Milestone 4 (first gameplay decision slice)
 
 The first complete Forge decision loop, end to end and **observe-only** — no

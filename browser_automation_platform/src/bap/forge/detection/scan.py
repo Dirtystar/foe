@@ -1,10 +1,18 @@
 """Observe-only Vision Debugger core.
 
-Turns one captured frame into a `DebugScan`: the detected map badges (centre,
-bbox, %, confidence), the fixed side-panel pill reported separately, the sector a
-strategy *would* select for a World, a proposed click point, and a
-human-readable explanation. It renders an annotated image and can save the
-artifacts. It never clicks — the proposed click point is drawn, never performed.
+Turns ONE unmodified full raw capture into a `DebugScan`. The capture contains
+the whole Forge top bar (current weakening) AND the whole visible battleground
+map at once. Two ROIs — both in full-capture pixels — are derived from it:
+
+  * ``weakening_roi``  → the safety gate (current weakening).
+  * ``battle_map_roi`` → the whole usable map, where badges are detected.
+
+The scan reports, for every badge candidate, its ROI-local box, its full-image
+box and centre, and the click point a strategy *would* choose — all in
+full-capture coordinates, with the ROI offset applied exactly once. It renders an
+annotated copy (ROIs, badges, weakening, would-click) under a permanent OBSERVE
+ONLY banner and can save the full artifact set. It never clicks — the proposed
+click point is drawn, never performed.
 """
 
 from __future__ import annotations
@@ -17,14 +25,32 @@ from pathlib import Path
 from bap.core.domain.models import Rect
 from bap.forge.detection.classify import PercentClassifier, percent_patch
 from bap.forge.detection.detector import (
-    DEFAULT_REGION,
     PANEL_PILL_CENTER,
     BadgeDetector,
     Detection,
 )
+from bap.forge.detection.geometry import (
+    CaptureGeometry,
+    ScanRois,
+    default_battle_map,
+)
 from bap.forge.detection.weakening import Decision, WeakeningRead, decide, read_ocr
 
 OBSERVE_ONLY_BANNER = "OBSERVE ONLY — NO CLICK PERFORMED"
+
+# A percentage guess is only accepted when the nearest-exemplar cosine similarity
+# clears this bar; below it the badge stays UNKNOWN with a recorded reason rather
+# than being silently treated as a valid percentage.
+MIN_PCT_SIM = 0.55
+# The province-detail panel is reported open only when the fixed pill spot both
+# scores as an emblem AND classifies as a confident percentage — a bare emblem
+# score at a fixed point is not evidence the panel is open (it false-positived on
+# empty terrain in the Windows review).
+PANEL_SCORE_MIN = 0.55
+
+
+def _rect_to_box(rect: Rect) -> tuple[int, int, int, int]:
+    return (rect.x, rect.y, rect.x + rect.w, rect.y + rect.h)
 
 
 @dataclass
@@ -54,11 +80,38 @@ class DebugScan:
     weakening_region: Rect | None = None
     world_limit: int | None = None
     decision: Decision = Decision.UNKNOWN
+    # Capture geometry + the two analysis ROIs (full-capture pixels).
+    geometry: CaptureGeometry | None = None
+    rois: ScanRois | None = None
+    # Per-candidate classification trace and the panel-open result.
+    classify_diag: list[dict] = field(default_factory=list)
+    panel_result: dict | None = None
+    stage1_candidates: list[dict] = field(default_factory=list)
+
+    @property
+    def battle_map_roi(self) -> Rect:
+        if self.rois is not None:
+            return self.rois.battle_map
+        x0, y0, x1, y1 = self.region
+        return Rect(x=x0, y=y0, w=x1 - x0, h=y1 - y0)
 
     def explanation(self) -> str:
         """The full per-World decision, in the order the pipeline runs it."""
         lines = [OBSERVE_ONLY_BANNER, ""]
         lines.append(f"World: {self.world_alias or '(none)'}")
+
+        # Capture + ROI context — the analyzed area is explicit, not implied.
+        bm = self.battle_map_roi
+        wr = self.weakening_region
+        bm_cal = self.rois.battle_map_calibrated if self.rois else False
+        wr_cal = self.rois.weakening_calibrated if self.rois else (wr is not None)
+        lines.append(f"Map ROI: x={bm.x} y={bm.y} w={bm.w} h={bm.h}"
+                     f"{'' if bm_cal else '  (default — whole map below top bar; not calibrated)'}")
+        if wr is not None:
+            lines.append(f"Weakening ROI: x={wr.x} y={wr.y} w={wr.w} h={wr.h}"
+                         f"{'' if wr_cal else '  (uncalibrated)'}")
+        else:
+            lines.append("Weakening ROI: (not calibrated — set it before the gate can read)")
 
         # 1-2. Safety gate — decides whether badges are even considered.
         if self.weakening is not None:
@@ -80,6 +133,11 @@ class DebugScan:
                 lines.append(f"Ignored: {pct} ({reason})")
         else:
             lines.append("Ignored: none")
+
+        # Panel state — never a false box on empty terrain.
+        if self.panel_result is not None:
+            state = "OPEN" if self.panel_result.get("present") else "not open"
+            lines.append(f"Province panel: {state} ({self.panel_result.get('reason', '')})")
 
         # 5-6. Selected target + reason + would-click (gated by the safety gate).
         sel = self.selection.detection
@@ -104,28 +162,49 @@ class DebugScan:
         lines.append(OBSERVE_ONLY_BANNER)
         return "\n".join(lines)
 
+    def _detection_dict(self, d: Detection) -> dict:
+        """Detection serialized in the coordinate contract: full-image box/centre
+        plus the ROI-local box (offset removed exactly once)."""
+        bm = self.battle_map_roi
+        base = d.to_dict()
+        base["center_full"] = [d.cx, d.cy]
+        base["bbox_full"] = [d.x, d.y, d.w, d.h]
+        base["bbox_roi"] = [d.x - bm.x, d.y - bm.y, d.w, d.h]
+        return base
+
     def to_dict(self) -> dict:
         wr = self.weakening_region
+        click = self.selection.click_point
         return {
             "observe_only": True,
             "created_at": self.created_at,
             "world": self.world_alias,
             "size": [self.width, self.height],
-            "analyzed_region": list(self.region),
+            "geometry": self.geometry.to_dict() if self.geometry else None,
+            "rois": self.rois.to_dict() if self.rois else {
+                "battle_map_roi": list(self.region), "weakening_roi":
+                    [wr.x, wr.y, wr.w, wr.h] if wr else None,
+            },
+            "analyzed_region": _rect_to_box(self.battle_map_roi),
             "weakening": {
                 "read": self.weakening.to_dict() if self.weakening else None,
                 "region": [wr.x, wr.y, wr.w, wr.h] if wr else None,
                 "world_limit": self.world_limit,
                 "decision": self.decision.value,
             },
-            "detections": [d.to_dict() for d in self.detections],
-            "panel_pill": self.panel.to_dict() if self.panel else None,
+            "stage1_candidates": self.stage1_candidates,
+            "detections": [self._detection_dict(d) for d in self.detections],
+            "classification": self.classify_diag,
+            "panel": self.panel_result,
             "selection": {
-                "click_point": list(self.selection.click_point) if self.selection.click_point else None,
-                "detection": self.selection.detection.to_dict() if self.selection.detection else None,
+                "click_point_full": list(click) if click else None,
+                "click_point": list(click) if click else None,
+                "detection": self._detection_dict(self.selection.detection)
+                    if self.selection.detection else None,
                 "reasons": self.selection.reasons,
-                "considered": [d.to_dict() for d in self.selection.considered],
-                "ignored": [{**d.to_dict(), "ignored_reason": r} for d, r in self.selection.ignored],
+                "considered": [self._detection_dict(d) for d in self.selection.considered],
+                "ignored": [{**self._detection_dict(d), "ignored_reason": r}
+                            for d, r in self.selection.ignored],
             },
         }
 
@@ -179,67 +258,151 @@ def select_target(detections: list[Detection], world=None,
     return Selection(best, reasons, considered=considered, ignored=ignored)
 
 
+def _classify(img, detections, classifier) -> tuple[list[Detection], list[dict]]:
+    """Classify each detection's percentage, accepting a guess only when its
+    similarity clears MIN_PCT_SIM. Returns the pct-annotated detections and a
+    per-candidate diagnostic trace (crop centre, prediction, similarity, whether
+    accepted, and the rejection reason when unknown)."""
+    out, diag = [], []
+    for d in detections:
+        patch = percent_patch(img, d.cx, d.cy)
+        if patch is None:
+            out.append(d.with_pct(None))
+            diag.append({"cx": d.cx, "cy": d.cy, "predicted": None, "similarity": None,
+                         "accepted": False,
+                         "reason": "classifier crop fell outside the image (crop misaligned)"})
+            continue
+        guess, sim = classifier.predict(patch)
+        accepted = guess is not None and sim >= MIN_PCT_SIM
+        if accepted:
+            reason = f"nearest exemplar {guess}% at similarity {sim:.2f} >= {MIN_PCT_SIM:.2f}"
+        elif guess is None:
+            reason = "classifier returned no match"
+        else:
+            reason = (f"best match {guess}% but similarity {sim:.2f} < {MIN_PCT_SIM:.2f} "
+                      "— left UNKNOWN (not treated as valid)")
+        out.append(d.with_pct(guess if accepted else None))
+        diag.append({"cx": d.cx, "cy": d.cy, "predicted": guess,
+                     "similarity": round(float(sim), 4), "accepted": accepted, "reason": reason})
+    return out, diag
+
+
+def _panel_state(img, detector: BadgeDetector, classifier) -> tuple[dict, Detection | None]:
+    """Report the province-detail panel as open only when the fixed pill spot
+    both scores as an emblem and classifies as a confident percentage. Otherwise
+    ``present=False`` and no box is drawn — the raw score is still recorded for
+    diagnosis."""
+    px, py = PANEL_PILL_CENTER
+    ox, oy = detector._offset
+    ax, ay = px - ox, py - oy
+    score = detector.score_at(img, ax, ay)
+    pct, sim = (None, 0.0)
+    if classifier is not None and len(classifier):
+        pct, sim = classifier.predict(percent_patch(img, px, py))
+    present = score >= PANEL_SCORE_MIN and pct is not None and sim >= MIN_PCT_SIM
+    if present:
+        reason = f"emblem {score:.2f} + {pct}% at similarity {sim:.2f} — panel corroborated open"
+    elif score < PANEL_SCORE_MIN:
+        reason = f"emblem score {score:.2f} < {PANEL_SCORE_MIN:.2f} — no panel pill here"
+    else:
+        reason = (f"emblem {score:.2f} but no confident percentage "
+                  "— province-detail panel not corroborated as open")
+    result = {"center": [px, py], "score": round(float(score), 4), "pct": pct,
+              "pct_similarity": round(float(sim), 4), "present": present, "reason": reason}
+    panel = None
+    if present:
+        panel = Detection(cx=px, cy=py, x=px - 20, y=py - 12, w=40, h=24,
+                          confidence=min(1.0, score), pct=pct, kind="panel")
+    return result, panel
+
+
 def build_scan(image, *, world=None, detector: BadgeDetector | None = None,
                classifier: PercentClassifier | None = None,
-               weakening_region: Rect | None = None) -> DebugScan:
-    """Run the safety gate (weakening) + detection (+ optional classification) +
-    strategy over one image. If the weakening gate is not CONTINUE, no badge
-    target is selected — the gate is checked before badges are considered."""
+               weakening_region: Rect | None = None,
+               rois: ScanRois | None = None,
+               geometry: CaptureGeometry | None = None) -> DebugScan:
+    """Run the whole observe-only pipeline over one full raw capture: derive the
+    two ROIs, read the weakening gate, detect + classify badges inside the
+    battle-map ROI, decide the panel-open state, and compute the strategy's best
+    candidate. Actionability is governed by the weakening gate — nothing clicks."""
     import cv2
 
     img = cv2.imread(str(image)) if isinstance(image, (str, Path)) else image
     detector = detector or BadgeDetector()
-    detections = detector.detect(img)
-    panel = detector.detect_panel(img)
 
+    geometry = geometry or (CaptureGeometry.from_image(img) if img is not None
+                            else CaptureGeometry(0, 0))
+    if rois is None:
+        battle = default_battle_map(geometry, weakening_region)
+        rois = ScanRois(battle_map=battle, weakening=weakening_region,
+                        weakening_calibrated=weakening_region is not None,
+                        battle_map_calibrated=False)
+    weak_roi = rois.weakening
+
+    # Detection over the battle-map ROI (whole usable map), with the full trace.
+    result = detector.scan(img, region=_rect_to_box(rois.battle_map))
+    detections = result.detections
+
+    # Percentage classification with an acceptance threshold + per-candidate trace.
+    classify_diag: list[dict] = []
     if classifier is not None and len(classifier) and img is not None:
-        classified = []
-        for d in detections:
-            guess, _sim = classifier.predict(percent_patch(img, d.cx, d.cy))
-            classified.append(d.with_pct(guess))
-        detections = classified
-        if panel is not None:
-            pguess, _ = classifier.predict(percent_patch(img, panel.cx, panel.cy))
-            panel = panel.with_pct(pguess)
+        detections, classify_diag = _classify(img, detections, classifier)
+
+    # Province-detail panel — corroborated, never a bare fixed-point box.
+    panel_result, panel = (None, None)
+    if img is not None:
+        panel_result, panel = _panel_state(img, detector, classifier)
 
     # Weakening safety gate.
     weak_read = None
     decision = Decision.UNKNOWN
     world_limit = getattr(world, "max_weakening", None) if world is not None else None
-    if weakening_region is not None and img is not None:
-        weak_read = read_ocr(img, weakening_region)
+    if weak_roi is not None and img is not None:
+        weak_read = read_ocr(img, weak_roi)
         decision = decide(weak_read, world)
 
     h, w = (img.shape[0], img.shape[1]) if img is not None else (0, 0)
 
-    # Always run the strategy so the debugger can show the full analysis and the
-    # best candidate. Whether that candidate is ACTIONABLE is governed by the
-    # weakening gate (decision) — the explanation/annotation make that explicit,
-    # and nothing is ever clicked.
-    selection = select_target(detections, world, frame_center=(w // 2, h // 2))
+    # Always compute the best candidate over the map ROI centre; the weakening
+    # gate governs whether that candidate is ACTIONABLE (explanation/annotation
+    # make it explicit) and nothing is ever clicked.
+    bm = rois.battle_map
+    center = (bm.x + bm.w // 2, bm.y + bm.h // 2)
+    selection = select_target(detections, world, frame_center=center)
     return DebugScan(
         detections=detections,
         panel=panel,
-        region=DEFAULT_REGION,
+        region=_rect_to_box(bm),
         selection=selection,
         world_alias=getattr(world, "alias", None),
         width=w, height=h,
         created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         weakening=weak_read,
-        weakening_region=weakening_region,
+        weakening_region=weak_roi,
         world_limit=world_limit,
         decision=decision,
+        geometry=geometry,
+        rois=rois,
+        classify_diag=classify_diag,
+        panel_result=panel_result,
+        stage1_candidates=result.candidates,
     )
 
 
 def annotate(image, scan: DebugScan):
-    """Return a BGR copy of `image` with the region, detections, panel pill,
-    proposed click cross, and OBSERVE-ONLY banner drawn on it."""
+    """Return a BGR copy of `image` with BOTH ROIs, the detections, the panel
+    pill (only when the panel is corroborated open), the weakening region, and
+    the proposed click cross — under the OBSERVE-ONLY banner. The input image is
+    never modified: analysis runs on the raw capture, drawing on a copy."""
     import cv2
 
     vis = image.copy()
-    x0, y0, x1, y1 = scan.region
-    cv2.rectangle(vis, (x0, y0), (x1, y1), (90, 90, 90), 1)
+
+    # Battle-map ROI (the analyzed map area) + weakening ROI, drawn on output only.
+    bm = scan.battle_map_roi
+    cv2.rectangle(vis, (bm.x, bm.y), (bm.x + bm.w, bm.y + bm.h), (90, 180, 90), 1)
+    cv2.putText(vis, "battle map ROI", (bm.x + 6, bm.y + 22),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (90, 180, 90), 2, cv2.LINE_AA)
 
     selected = scan.selection.detection
     ignored_ids = {id(d) for d, _ in scan.selection.ignored}
@@ -255,10 +418,11 @@ def annotate(image, scan: DebugScan):
         cv2.putText(vis, f"{label} {d.confidence:.2f}", (d.x, d.y - 6),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
 
+    # Panel pill only when the province-detail panel is corroborated open.
     if scan.panel is not None:
         p = scan.panel
         cv2.rectangle(vis, (p.x, p.y), (p.x + p.w, p.y + p.h), (235, 170, 40), 2)
-        cv2.putText(vis, "panel", (p.x, p.y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+        cv2.putText(vis, "panel (open)", (p.x, p.y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                     (235, 170, 40), 2, cv2.LINE_AA)
 
     # Weakening region + decision.
@@ -287,34 +451,84 @@ def annotate(image, scan: DebugScan):
     return vis
 
 
+def _crop(img, rect: Rect):
+    """Safe crop of a Rect from a full-capture image, clamped to bounds."""
+    if img is None or rect is None:
+        return None
+    h, w = img.shape[:2]
+    x0, y0 = max(0, rect.x), max(0, rect.y)
+    x1, y1 = min(w, rect.x + rect.w), min(h, rect.y + rect.h)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return img[y0:y1, x0:x1].copy()
+
+
 def save_scan(image, scan: DebugScan, out_dir: Path | str, *, stem: str = "scan") -> dict:
-    """Save the original screenshot, annotated screenshot, detection JSON, and
-    calibration metadata. Returns the written paths."""
+    """Save the full Test-Scan artifact set for review: the unmodified full raw
+    capture, both weakening crops (raw + processed), the battle-map ROI crop, a
+    candidate overlay, per-candidate classifier crops, the final annotated
+    output, and scan.json with the whole trace."""
     import cv2
+    import numpy as np
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     img = cv2.imread(str(image)) if isinstance(image, (str, Path)) else image
-    paths = {
-        "original": out / f"{stem}_original.png",
-        "annotated": out / f"{stem}_annotated.png",
-        "detections": out / f"{stem}_detections.json",
-        "calibration": out / f"{stem}_calibration.json",
-    }
-    cv2.imwrite(str(paths["original"]), img)
-    cv2.imwrite(str(paths["annotated"]), annotate(img, scan))
-    paths["detections"].write_text(json.dumps(scan.to_dict(), indent=2), encoding="utf-8")
-    paths["calibration"].write_text(json.dumps({
-        "analyzed_region": list(scan.region),
-        "panel_pill_center": list(PANEL_PILL_CENTER),
-        "size": [scan.width, scan.height],
-        "created_at": scan.created_at,
-        "observe_only": True,
-    }, indent=2), encoding="utf-8")
+    paths: dict[str, Path] = {}
+
+    def write(name: str, arr) -> None:
+        p = out / name
+        if arr is not None:
+            cv2.imwrite(str(p), arr)
+            paths[name] = p
+
+    # 01 — the unmodified full raw capture (top bar + full map, no overlays).
+    write("01_full_raw_capture.png", img)
+
+    # 02/03 — weakening ROI raw + processed OCR crop.
+    write("02_weakening_roi_raw.png", _crop(img, scan.weakening_region))
+    if scan.weakening is not None and scan.weakening.processed_crop is not None:
+        write("03_weakening_roi_processed.png", scan.weakening.processed_crop)
+
+    # 04 — the battle-map ROI (the whole analyzed map area).
+    write("04_battle_map_roi_raw.png", _crop(img, scan.battle_map_roi))
+
+    # 05 — badge candidates only (no decision), for locating verification.
+    if img is not None:
+        overlay = img.copy()
+        bm = scan.battle_map_roi
+        cv2.rectangle(overlay, (bm.x, bm.y), (bm.x + bm.w, bm.y + bm.h), (90, 180, 90), 1)
+        for c in scan.stage1_candidates:
+            col = (60, 200, 90) if c.get("kept") else (120, 120, 120)
+            cv2.circle(overlay, (int(c["cx"]), int(c["cy"])), 16, col, 2)
+        write("05_badge_candidate_overlay.png", overlay)
+
+    # 06 — per-candidate classifier crops + the normalized classifier input.
+    crops_dir = out / "06_badge_classifier_crops"
+    if img is not None and scan.detections:
+        crops_dir.mkdir(parents=True, exist_ok=True)
+        for i, d in enumerate(scan.detections):
+            raw = _crop(img, Rect(d.cx - 4, d.cy - 18, 70, 36))
+            if raw is not None:
+                cv2.imwrite(str(crops_dir / f"cand{i:02d}_raw.png"), raw)
+            patch = percent_patch(img, d.cx, d.cy)
+            if patch is not None:
+                vis = patch - patch.min()
+                span = float(vis.max()) or 1.0
+                cv2.imwrite(str(crops_dir / f"cand{i:02d}_classifier_input.png"),
+                            (vis / span * 255).astype(np.uint8))
+        paths["06_badge_classifier_crops"] = crops_dir
+
+    # 07 — the final annotated output.
+    write("07_final_annotated_output.png", annotate(img, scan) if img is not None else None)
+
+    scan_json = out / "scan.json"
+    scan_json.write_text(json.dumps(scan.to_dict(), indent=2), encoding="utf-8")
+    paths["scan.json"] = scan_json
     return {k: str(v) for k, v in paths.items()}
 
 
 __all__ = [
-    "OBSERVE_ONLY_BANNER", "DebugScan", "Selection",
+    "OBSERVE_ONLY_BANNER", "MIN_PCT_SIM", "PANEL_SCORE_MIN", "DebugScan", "Selection",
     "build_scan", "annotate", "save_scan", "select_target",
 ]

@@ -128,10 +128,11 @@ def test_annotate_and_save(tmp_path):
     scan = build_scan(img)
     vis = annotate(img, scan)
     assert vis.shape == img.shape
-    paths = save_scan(img, scan, tmp_path)
-    for key in ("original", "annotated", "detections", "calibration"):
-        assert (tmp_path / f"scan_{key}.png").exists() or (tmp_path / f"scan_{key}.json").exists()
-    data = json.loads((tmp_path / "scan_detections.json").read_text())
+    save_scan(img, scan, tmp_path)
+    for name in ("01_full_raw_capture.png", "04_battle_map_roi_raw.png",
+                 "07_final_annotated_output.png", "scan.json"):
+        assert (tmp_path / name).exists()
+    data = json.loads((tmp_path / "scan.json").read_text())
     assert data["observe_only"] is True
 
 

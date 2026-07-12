@@ -61,11 +61,12 @@ class DebuggerWindow(QMainWindow):
     """Displays one observe-only scan. `image` is a BGR ndarray."""
 
     def __init__(self, image, *, world=None, classifier=None, source: str = "",
-                 weakening_region=None) -> None:
+                 weakening_region=None, rois=None, geometry=None) -> None:
         super().__init__()
         self._image = image
         self._scan = build_scan(image, world=world, classifier=classifier,
-                                weakening_region=weakening_region)
+                                weakening_region=weakening_region, rois=rois,
+                                geometry=geometry)
         self.setWindowTitle(f"Forge Vision Debugger — {source or 'scan'}  ·  OBSERVE ONLY")
 
         central = QWidget()

@@ -60,16 +60,19 @@ class ReviewCanvas(QWidget):
         self._badges: list = []
         self._detections: list = []
         self._weak_rect: Rect | None = None
+        self._map_rect: Rect | None = None
         self.region_mode = False
+        self.region_target = "weakening"  # or "battle_map"
         self._scale = 1.0
         self._ox = self._oy = 0.0
         self._drag_start: QPointF | None = None
         self._drag_now: QPointF | None = None
 
-    def set_state(self, image, badges, detections, weak_rect) -> None:
+    def set_state(self, image, badges, detections, weak_rect, map_rect=None) -> None:
         self._image, self._badges, self._detections, self._weak_rect = (
             image, badges, detections, weak_rect,
         )
+        self._map_rect = map_rect
         self.update()
 
     def _fit(self) -> None:
@@ -138,6 +141,13 @@ class ReviewCanvas(QWidget):
             p.drawEllipse(c, 13, 13)
             p.drawText(QPointF(c.x() + 15, c.y() - 9), f"{b.pct}%" if b.pct is not None else "?")
 
+        # Battle-map ROI (the whole analyzed map area).
+        if self._map_rect is not None:
+            r = self._map_rect
+            tl = self._to_widget(r.x, r.y)
+            p.setPen(QPen(QColor(90, 200, 110), 2))
+            p.drawRect(QRectF(tl.x(), tl.y(), r.w * self._scale, r.h * self._scale))
+
         # Weakening region.
         if self._weak_rect is not None:
             r = self._weak_rect
@@ -179,7 +189,7 @@ class ForgeReviewWindow(QMainWindow):
         root.addLayout(body)
 
         legend = QLabel("Badges: left-click add/select · right-click remove · 1-5 set 20/40/60/80/100"
-                        "   |   ←/→ frame   ·   Set Weakening Region → drag a box")
+                        "   |   ←/→ frame   ·   Set Weakening / Battle-Map Region → drag a box")
         legend.setWordWrap(True)
         root.addWidget(legend)
         self.setCentralWidget(central)
@@ -195,9 +205,13 @@ class ForgeReviewWindow(QMainWindow):
         self.detect_button.clicked.connect(self._load)
         self.region_button = QPushButton("Set Weakening Region")
         self.region_button.setCheckable(True)
-        self.region_button.toggled.connect(self._toggle_region_mode)
+        self.region_button.toggled.connect(lambda on: self._toggle_region_mode(on, "weakening"))
+        self.map_region_button = QPushButton("Set Battle-Map Region")
+        self.map_region_button.setCheckable(True)
+        self.map_region_button.toggled.connect(lambda on: self._toggle_region_mode(on, "battle_map"))
         row.addWidget(self.detect_button)
         row.addWidget(self.region_button)
+        row.addWidget(self.map_region_button)
         v.addLayout(row)
 
         v.addWidget(QLabel("<b>Current weakening</b>"))
@@ -236,15 +250,30 @@ class ForgeReviewWindow(QMainWindow):
 
     # --- state --------------------------------------------------------------
 
-    def _toggle_region_mode(self, on: bool) -> None:
+    def _toggle_region_mode(self, on: bool, target: str) -> None:
+        # Only one region tool active at a time.
+        if on:
+            other = self.map_region_button if target == "weakening" else self.region_button
+            if other.isChecked():
+                other.setChecked(False)
+            self.canvas.region_target = target
         self.canvas.region_mode = on
-        self.region_button.setText("Drawing… (drag a box)" if on else "Set Weakening Region")
+        self.region_button.setText(
+            "Drawing… (drag a box)" if (on and target == "weakening") else "Set Weakening Region")
+        self.map_region_button.setText(
+            "Drawing… (drag a box)" if (on and target == "battle_map") else "Set Battle-Map Region")
 
     def _weak_region(self) -> Rect | None:
         if self._img is None:
             return None
         h, w = self._img.shape[:2]
         return self._cal.get(w, h)
+
+    def _map_region(self) -> Rect | None:
+        if self._img is None:
+            return None
+        h, w = self._img.shape[:2]
+        return self._cal.get_battle_map(w, h)
 
     def _load(self) -> None:
         import cv2
@@ -258,7 +287,7 @@ class ForgeReviewWindow(QMainWindow):
         rect = self._weak_region()
         if self._img is not None:
             self.canvas.set_state(_bgr_to_qimage(self._img), self._session.badges(),
-                                  detections, rect)
+                                  detections, rect, self._map_region())
         self._refresh_weakening(rect)
         gt = self._session.weakening()
         self.gt_edit.setText("" if gt is None else str(gt))
@@ -309,8 +338,12 @@ class ForgeReviewWindow(QMainWindow):
         if self._img is None:
             return
         h, w = self._img.shape[:2]
-        self._cal.set(w, h, rect)   # persists per-resolution
-        self.region_button.setChecked(False)
+        if self.canvas.region_target == "battle_map":
+            self._cal.set_battle_map(w, h, rect)  # persists per-resolution
+            self.map_region_button.setChecked(False)
+        else:
+            self._cal.set(w, h, rect)             # persists per-resolution
+            self.region_button.setChecked(False)
         self._load()
 
     def _on_gt_entered(self) -> None:

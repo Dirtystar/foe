@@ -355,25 +355,25 @@ class MainWindow(QMainWindow):
 
     def _open_debugger(self, image, *, world=None, source: str = "") -> None:
         from bap.gui.forge_debugger import DebuggerWindow, _bundled_classifier
+        from bap.forge.detection.geometry import CaptureGeometry, derive_rois
 
+        geometry = CaptureGeometry.from_image(image)
         self._debugger = DebuggerWindow(
             image, world=world, classifier=_bundled_classifier(), source=source,
-            weakening_region=self._weakening_region_for(image),
+            geometry=geometry, rois=derive_rois(geometry, self._forge_calibration()),
         )
         self._debugger.resize(1280, 760)
         self._debugger.show()
 
-    def _weakening_region_for(self, image):
-        """The calibrated weakening region for this image's resolution, from the
-        per-user Forge calibration (Debugger → Set Weakening Region persists it)."""
+    def _forge_calibration(self):
+        """The per-user Forge calibration (weakening + battle-map regions),
+        persisted by the Debugger's Set-Region tools. None if unavailable."""
         try:
             from bap.forge.detection.calibration import WeakeningCalibration
             from bap.ops.paths import ensure_dirs, get_paths
 
             path = ensure_dirs(get_paths()).data_dir / "forge" / "calibration.json"
-            cal = WeakeningCalibration.load(path)
-            h, w = image.shape[:2]
-            return cal.get(w, h)
+            return WeakeningCalibration.load(path)
         except Exception:
             return None
 
