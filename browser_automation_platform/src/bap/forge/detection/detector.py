@@ -142,7 +142,11 @@ class BadgeDetector:
         templates: list | None = None,
         region: tuple[int, int, int, int] = DEFAULT_REGION,
         scales: tuple[float, ...] = (0.85, 1.0, 1.15),
-        score_threshold: float = 0.55,
+        # 0.62 is between the true-badge score floor (~0.64 historical, ~0.76
+        # live) and the false-positive ceiling on live captures (~0.61), so it
+        # drops every live red-banner/lava false positive with zero recall cost.
+        # Justified by the TP/FP score distributions in LIVE_VISION_REPORT.md.
+        score_threshold: float = 0.62,
         sat_min: int = 140,
         val_min: int = 80,
         min_area: int = 5,

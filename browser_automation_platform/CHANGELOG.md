@@ -4,6 +4,42 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge Milestone 4.7 (live-data re-evaluation)
+
+Used the committed reviewed live scans (Worlds H, F) to honestly re-evaluate and
+improve the vision pipeline, still observe-only. Every change is justified by
+score distributions; the primary safety metric (wrong-accepted percentage) is
+**0** on every set.
+
+### Added
+
+- **`detection.dataset`** — one loading contract for the two disjoint labelled
+  sources (historical `grading/`, reviewed live `live_review/`), each Sample
+  tagged with source, World alias, capture geometry, both ROIs, badges, and
+  weakening GT. No duplicate sources, no silent fallback, images unmodified.
+- **`detection.live_eval`** — leakage-free evaluation (frame-grouped
+  leave-one-frame-out) of localization, percentage classification, and the full
+  slice, reported per source (historical / live-H / live-F / combined). Run with
+  `python -m bap.forge.detection.live_eval`.
+- **`tests/forge_assets/LIVE_VISION_REPORT.md`** — dataset counts, split,
+  before/after metrics, per-World results, confusion matrix, FP categories,
+  remaining blockers, and the next Windows test checklist. Small annotated
+  regression fixtures under `live_review/annotated/`.
+- **Handoff docs**: root `CLAUDE.md` and `docs/handoffs/CURRENT_FORGE_STATE.md`.
+
+### Changed
+
+- **Detector template threshold 0.55 → 0.62** — between the true-badge score
+  floor (0.64 hist / 0.76 live) and the live false-positive ceiling (0.61).
+  Localization precision 0.51 → 0.81 combined, live-H/F 0.37 → **1.00**, FP/frame
+  1.9 → 0.44, **recall unchanged** (0.92).
+- **Classifier accept threshold `MIN_PCT_SIM` 0.55 → 0.62** — removes the only
+  wrong-accepted percentage at no cost to the correct count (a raise, keeping
+  UNKNOWN safer).
+- **Percentage exemplar bank now folds in reviewed live crops**
+  (`train_from_sources`; the bundled classifier loads grading + live_review), so
+  live-scale badges classify (live-H 0 → 4/4 under LOFO).
+
 ## [Unreleased] — Forge Milestone 4.6 (Windows stabilization, round 2)
 
 Second Windows-review pass, still observe-only (no mouse/keyboard/game action).

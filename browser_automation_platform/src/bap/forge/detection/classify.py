@@ -117,19 +117,14 @@ def vec_to_image(vec):
     return (arr / span * 255).astype("uint8")
 
 
-def train_from_labels(frames_dir, labels_path) -> PercentClassifier | None:
-    """Build a classifier from every classified badge in the reviewed grading
-    frames. Returns None if OpenCV is missing or nothing is reviewed/classified
-    yet (so the debugger simply shows detections without percentages)."""
-    if not _CV:  # pragma: no cover
-        return None
+def _examples_from(frames_dir, labels_path) -> list[tuple[object, int]]:
     from pathlib import Path
 
     from bap.forge.labeling.model import LabelStore
 
     frames_dir = Path(frames_dir)
     store = LabelStore.load(labels_path)
-    examples: list[tuple[object, int]] = []
+    out: list[tuple[object, int]] = []
     for name in store.files():
         fl = store.get(name)
         if fl is None or not fl.reviewed:
@@ -139,10 +134,34 @@ def train_from_labels(frames_dir, labels_path) -> PercentClassifier | None:
             continue
         for b in fl.badges:
             if b.pct is not None:
-                examples.append((percent_patch(img, b.cx, b.cy), b.pct))
-    if not examples:
+                out.append((percent_patch(img, b.cx, b.cy), b.pct))
+    return out
+
+
+def train_from_labels(frames_dir, labels_path) -> PercentClassifier | None:
+    """Build a classifier from every classified badge in one reviewed label set.
+    Returns None if OpenCV is missing or nothing is reviewed/classified yet."""
+    if not _CV:  # pragma: no cover
         return None
-    return PercentClassifier().fit(examples)
+    examples = _examples_from(frames_dir, labels_path)
+    return PercentClassifier().fit(examples) if examples else None
 
 
-__all__ = ["PercentClassifier", "percent_patch", "train_from_labels", "vec_to_image"]
+def train_from_sources(sources) -> PercentClassifier | None:
+    """Build one classifier from several reviewed label sets — used to fold the
+    reviewed **live** crops in alongside the historical grading set, so live-scale
+    badges have same-scale exemplars to match against. `sources` is an iterable of
+    ``(frames_dir, labels_path)``."""
+    if not _CV:  # pragma: no cover
+        return None
+    examples: list[tuple[object, int]] = []
+    for frames_dir, labels_path in sources:
+        try:
+            examples.extend(_examples_from(frames_dir, labels_path))
+        except Exception:
+            continue
+    return PercentClassifier().fit(examples) if examples else None
+
+
+__all__ = ["PercentClassifier", "percent_patch", "train_from_labels",
+           "train_from_sources", "vec_to_image"]

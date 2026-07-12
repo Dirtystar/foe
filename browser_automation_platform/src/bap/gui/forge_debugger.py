@@ -181,17 +181,21 @@ def save_live_review_frame(image, source: str, base_dir) -> tuple[str, str]:
 
 
 def _bundled_classifier():
-    """A classifier trained from the repo grading set, if it has been reviewed;
-    otherwise None (the debugger then shows detections without percentages)."""
+    """A classifier trained from the reviewed grading set **and** the reviewed
+    live-browser scans, so live-scale badges have same-scale exemplars. Returns
+    None if nothing is reviewed (the debugger then shows detections without %)."""
     try:
-        from bap.forge.detection.classify import train_from_labels
+        from bap.forge.detection.classify import train_from_sources
 
-        base = Path(__file__).resolve().parents[2] / "tests" / "forge_assets" / "grading"
-        if (base / "labels.json").exists():
-            return train_from_labels(base / "frames", base / "labels.json")
+        root = Path(__file__).resolve().parents[2] / "tests" / "forge_assets"
+        sources = []
+        for name in ("grading", "live_review"):
+            base = root / name
+            if (base / "labels.json").exists():
+                sources.append((base / "frames", base / "labels.json"))
+        return train_from_sources(sources) if sources else None
     except Exception:
         return None
-    return None
 
 
 def run_over_folder(frames_dir: str, world=None) -> int:
