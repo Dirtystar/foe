@@ -31,6 +31,8 @@ OBSERVE_ONLY_BANNER = "OBSERVE ONLY — NO CLICK PERFORMED"
 class Selection:
     detection: Detection | None
     reasons: list[str] = field(default_factory=list)
+    considered: list[Detection] = field(default_factory=list)     # eligible (allowed %) badges
+    ignored: list[tuple[Detection, str]] = field(default_factory=list)  # (badge, reason)
 
     @property
     def click_point(self) -> tuple[int, int] | None:
@@ -54,36 +56,50 @@ class DebugScan:
     decision: Decision = Decision.UNKNOWN
 
     def explanation(self) -> str:
+        """The full per-World decision, in the order the pipeline runs it."""
         lines = [OBSERVE_ONLY_BANNER, ""]
-        # Safety gate first — it decides whether badges are even considered.
+        lines.append(f"World: {self.world_alias or '(none)'}")
+
+        # 1-2. Safety gate — decides whether badges are even considered.
         if self.weakening is not None:
             val = self.weakening.value if self.weakening.value is not None else "unreadable"
-            lines.append(
-                f"Current weakening: {val} (conf {self.weakening.confidence:.2f}, "
-                f"{self.weakening.method})   limit: {self.world_limit}"
-            )
-            lines.append(f"Safety decision: {self.decision.value}")
+            lines.append(f"Weakening: {val}   (confidence {self.weakening.confidence:.2f})")
+            lines.append(f"Limit: {self.world_limit if self.world_limit is not None else '(none)'}")
+            lines.append(f"Decision: {self.decision.value}")
             if self.decision is Decision.STOP:
-                lines.append("  → at/over the limit: this World would STOP (no badges considered)")
+                lines.append("  → at/over the limit: this World would STOP (no target)")
             elif self.decision is Decision.UNKNOWN:
                 lines.append("  → weakening not confidently read: NO ACTION (fail-safe)")
-            lines.append("")
-        lines.append(f"Badges detected: {len(self.detections)}")
-        if self.panel is not None:
-            pct = f"{self.panel.pct}%" if self.panel.pct is not None else "unknown %"
-            lines.append(f"Side panel: province selected (pill {pct}, conf {self.panel.confidence:.2f})")
+
+        # 3-4. Detected + ignored badges.
+        detected = "  ".join(f"{d.pct}%" if d.pct is not None else "?" for d in self.detections) or "none"
+        lines.append(f"Detected: {detected}")
+        if self.selection.ignored:
+            for d, reason in self.selection.ignored:
+                pct = f"{d.pct}%" if d.pct is not None else "?"
+                lines.append(f"Ignored: {pct} ({reason})")
         else:
-            lines.append("Side panel: no province selected")
-        for d in self.detections:
-            pct = f"{d.pct}%" if d.pct is not None else "?"
-            lines.append(f"  • {pct} at ({d.cx},{d.cy})  conf {d.confidence:.2f}")
-        lines.append("")
-        if self.selection.detection is not None:
-            d = self.selection.detection
-            lines.append(f"Strategy would select: {d.pct}% at ({d.cx},{d.cy})")
+            lines.append("Ignored: none")
+
+        # 5-6. Selected target + reason + would-click (gated by the safety gate).
+        sel = self.selection.detection
+        if sel is not None:
+            lines.append(f"Selected: {sel.pct}%  confidence {sel.confidence:.2f}")
+            lines.append("Reason: " + " ".join(self.selection.reasons))
+            if self.weakening is None:
+                lines.append(f"Would click: x={sel.cx} y={sel.cy}   "
+                             "(weakening region not calibrated — gate not evaluated)")
+            elif self.decision is Decision.CONTINUE:
+                lines.append(f"Would click: x={sel.cx} y={sel.cy}")
+            else:
+                lines.append(f"Would click: BLOCKED by gate ({self.decision.value}) — no action.  "
+                             f"candidate x={sel.cx} y={sel.cy}")
         else:
-            lines.append("Strategy would select: none")
-        lines.extend(f"  - {r}" for r in self.selection.reasons)
+            lines.append("Selected: none")
+            if self.selection.reasons:
+                lines.append("Reason: " + " ".join(self.selection.reasons))
+            lines.append("Would click: (nothing — no target)")
+
         lines.append("")
         lines.append(OBSERVE_ONLY_BANNER)
         return "\n".join(lines)
@@ -105,53 +121,62 @@ class DebugScan:
             "detections": [d.to_dict() for d in self.detections],
             "panel_pill": self.panel.to_dict() if self.panel else None,
             "selection": {
-                "click_point": self.selection.click_point,
+                "click_point": list(self.selection.click_point) if self.selection.click_point else None,
                 "detection": self.selection.detection.to_dict() if self.selection.detection else None,
                 "reasons": self.selection.reasons,
+                "considered": [d.to_dict() for d in self.selection.considered],
+                "ignored": [{**d.to_dict(), "ignored_reason": r} for d, r in self.selection.ignored],
             },
         }
 
 
-def select_target(detections: list[Detection], world=None) -> Selection:
-    """Which weakened sector a strategy would engage — computed, never clicked.
+def select_target(detections: list[Detection], world=None,
+                  frame_center: tuple[int, int] | None = None) -> Selection:
+    """Which weakened sector a deterministic strategy would engage — computed,
+    never clicked.
 
-    A world's rules: only percentages the world enables, and only at or below its
-    max weakening. Among eligible badges, prefer the highest allowed percentage
-    (most weakened → easiest fight). Explains itself either way.
+    Filter to the world's allowed percentages, then pick the **lowest allowed
+    weakening** (cheapest fight), breaking ties by **highest confidence** and
+    then **nearest to the frame centre**. Unclassified badges and disabled
+    percentages are recorded in `ignored` with a reason so the debugger can show
+    exactly what was skipped and why.
     """
     if not detections:
         return Selection(None, ["no weakening badges detected"])
 
-    classified = [d for d in detections if d.pct is not None]
-    if not classified:
-        return Selection(None, [
-            "percentages not available (classifier not trained yet)",
-            "detections shown for verification only",
-        ])
+    alias = getattr(world, "alias", "?") if world is not None else None
+    allowed = set(getattr(world, "allowed_pcts", ())) if world is not None else None
 
-    if world is None:
-        best = max(classified, key=lambda d: d.pct)
-        return Selection(best, [
-            "no world settings supplied — picked the most-weakened badge",
-            f"{best.pct}% at ({best.cx},{best.cy})",
-        ])
+    considered: list[Detection] = []
+    ignored: list[tuple[Detection, str]] = []
+    for d in detections:
+        if d.pct is None:
+            ignored.append((d, "percentage unknown"))
+        elif allowed is not None and d.pct not in allowed:
+            ignored.append((d, "disabled in settings"))
+        else:
+            considered.append(d)
 
-    # Badge eligibility is purely the world's allowed percentages. The current-
-    # weakening safety gate is applied separately (before badges are considered)
-    # — it is NOT a filter on badge percentage.
-    allowed = set(getattr(world, "allowed_pcts", ()))
-    eligible = [d for d in classified if d.pct in allowed]
-    if not eligible:
-        return Selection(None, [
-            f"no detected badge percentage is enabled for World "
-            f"'{getattr(world, 'alias', '?')}' (allowed {sorted(allowed)})",
-        ])
-    best = max(eligible, key=lambda d: d.pct)
-    return Selection(best, [
-        f"{best.pct}% is enabled for World '{getattr(world, 'alias', '?')}'",
-        f"confidence {best.confidence:.2f}",
-        "highest allowed badge percentage among candidates",
-    ])
+    if not considered:
+        if all(d.pct is None for d in detections):
+            reasons = ["percentages not available (classifier could not read them)",
+                       "detections shown for verification only"]
+        else:
+            reasons = [f"no detected badge percentage is enabled for World "
+                       f"'{alias}' (allowed {sorted(allowed or ())})"]
+        return Selection(None, reasons, considered=[], ignored=ignored)
+
+    cx0, cy0 = frame_center or (960, 540)
+
+    def key(d: Detection):
+        dist = ((d.cx - cx0) ** 2 + (d.cy - cy0) ** 2) ** 0.5
+        return (d.pct, -d.confidence, dist)  # lowest %, then highest conf, then nearest
+
+    best = min(considered, key=key)
+    reasons = ["Lowest allowed weakening with highest confidence."]
+    if allowed is None:
+        reasons = ["No world settings — lowest weakening with highest confidence."]
+    return Selection(best, reasons, considered=considered, ignored=ignored)
 
 
 def build_scan(image, *, world=None, detector: BadgeDetector | None = None,
@@ -185,16 +210,13 @@ def build_scan(image, *, world=None, detector: BadgeDetector | None = None,
         weak_read = read_ocr(img, weakening_region)
         decision = decide(weak_read, world)
 
-    # Badges are only selectable when the gate says CONTINUE.
-    if decision is Decision.CONTINUE or weakening_region is None:
-        selection = select_target(detections, world)
-    else:
-        why = ("weakening at/over the limit — World would STOP"
-               if decision is Decision.STOP else
-               "weakening not confidently read — fail-safe, no action")
-        selection = Selection(None, [why])
-
     h, w = (img.shape[0], img.shape[1]) if img is not None else (0, 0)
+
+    # Always run the strategy so the debugger can show the full analysis and the
+    # best candidate. Whether that candidate is ACTIONABLE is governed by the
+    # weakening gate (decision) — the explanation/annotation make that explicit,
+    # and nothing is ever clicked.
+    selection = select_target(detections, world, frame_center=(w // 2, h // 2))
     return DebugScan(
         detections=detections,
         panel=panel,
@@ -219,8 +241,15 @@ def annotate(image, scan: DebugScan):
     x0, y0, x1, y1 = scan.region
     cv2.rectangle(vis, (x0, y0), (x1, y1), (90, 90, 90), 1)
 
+    selected = scan.selection.detection
+    ignored_ids = {id(d) for d, _ in scan.selection.ignored}
     for d in scan.detections:
-        color = (60, 200, 90)
+        if selected is not None and d is selected:
+            color = (60, 90, 240)      # selected target — red
+        elif id(d) in ignored_ids:
+            color = (140, 140, 140)    # ignored — grey
+        else:
+            color = (60, 200, 90)      # considered — green
         cv2.rectangle(vis, (d.x, d.y), (d.x + d.w, d.y + d.h), color, 2)
         label = f"{d.pct}%" if d.pct is not None else "?"
         cv2.putText(vis, f"{label} {d.confidence:.2f}", (d.x, d.y - 6),
@@ -243,8 +272,14 @@ def annotate(image, scan: DebugScan):
     click = scan.selection.click_point
     if click is not None:
         cx, cy = click
-        cv2.drawMarker(vis, (cx, cy), (0, 0, 255), cv2.MARKER_CROSS, 40, 3)
-        cv2.circle(vis, (cx, cy), 22, (0, 0, 255), 2)
+        actionable = scan.weakening is None or scan.decision is Decision.CONTINUE
+        color = (0, 0, 255) if actionable else (0, 190, 235)  # red vs amber (gated)
+        label = (f"Would click x={cx} y={cy}" if actionable
+                 else f"candidate x={cx} y={cy} (gate {scan.decision.value})")
+        cv2.drawMarker(vis, (cx, cy), color, cv2.MARKER_CROSS, 44, 3)
+        cv2.circle(vis, (cx, cy), 24, color, 2)
+        cv2.putText(vis, label, (cx + 26, cy + 6),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
 
     cv2.rectangle(vis, (0, 0), (vis.shape[1], 40), (0, 0, 160), -1)
     cv2.putText(vis, OBSERVE_ONLY_BANNER, (16, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.9,

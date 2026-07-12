@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge Milestone 4 (first gameplay decision slice)
+
+The first complete Forge decision loop, end to end and **observe-only** — no
+real mouse, no keyboard, no clicking. For each frame the pipeline now: reads the
+current weakening, detects every badge, filters badges against the World's
+allowed percentages, chooses the best target deterministically, and renders a
+full human-readable explanation. This is what lets a reviewer finally *see* that
+the app understands the game.
+
+### Changed
+
+- **`select_target()`** (`detection.scan`) rewritten as the deterministic
+  strategy: among badges whose percentage is enabled for the World, prefer the
+  **lowest allowed %**, then **highest confidence**, then **nearest frame
+  centre**. It records every badge it `considered` and every one it `ignored`
+  (with a reason: `"disabled in settings"` / `"percentage unknown"`), so the
+  debugger can show the full reasoning, not just the winner.
+- **`build_scan()`** now *always* computes the best candidate; the **safety gate
+  governs actionability**, not visibility. A STOP / UNKNOWN weakening gate still
+  shows the candidate for review but marks it `BLOCKED by gate` — nothing becomes
+  actionable. Only a CONTINUE gate yields a `Would click: x=… y=…`.
+- **`DebugScan.explanation()`** renders the full Milestone-4 format
+  (`World / Weakening / Limit / Decision / Detected / Ignored / Selected /
+  Reason / Would click`), and **`annotate()`** colour-codes badges
+  (selected / considered / ignored) with a would-click marker that turns amber
+  and reads `candidate … (gate X)` whenever the gate blocks action.
+
 ## [Unreleased] — Forge weakening: per-World runtime validation
 
 Clarifies that the 15-frame grading set is **per-frame OCR accuracy only** — the
