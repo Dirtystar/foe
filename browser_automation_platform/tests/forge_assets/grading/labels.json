@@ -257,33 +257,7 @@
     },
     {
       "file": "frame_000687.png",
-      "badges": [
-        {
-          "cx": 822,
-          "cy": 683,
-          "pct": null
-        },
-        {
-          "cx": 684,
-          "cy": 746,
-          "pct": null
-        },
-        {
-          "cx": 1249,
-          "cy": 755,
-          "pct": null
-        },
-        {
-          "cx": 1305,
-          "cy": 755,
-          "pct": null
-        },
-        {
-          "cx": 1461,
-          "cy": 781,
-          "pct": null
-        }
-      ],
+      "badges": [],
       "reviewed": true,
       "weakening": 4
     }
