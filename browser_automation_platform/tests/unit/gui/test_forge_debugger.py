@@ -67,9 +67,10 @@ class _FakeService:
     def stop_loop(self): pass
 
 
-def _forge_window(qapp, capture_callback=None):
+def _forge_window(qapp, capture_callback=None, worlds=(("Main", "cz8.forgeofempires.com"),)):
     store = WorldStore()
-    store.add(World(alias="Main", hostname="cz8.forgeofempires.com"))
+    for alias, host in worlds:
+        store.add(World(alias=alias, hostname=host))
     win = MainWindow(
         _FakeService(), QtReportBridge(), forge=True, world_store=store,
         assignment=TabAssignment(), capture_callback=capture_callback,
@@ -77,10 +78,62 @@ def _forge_window(qapp, capture_callback=None):
     return win, store
 
 
-def test_test_scan_button_exists(qapp):
+def test_test_scan_combo_routes_to_explicitly_selected_world(qapp):
+    # With H and F both attached, selecting F must scan F — never the first World.
+    calls = []
+
+    def cb(tab_id):
+        calls.append(tab_id)
+        return cv2.imencode(".png", _frame_with_emblem())[1].tobytes()
+
+    win, _ = _forge_window(qapp, capture_callback=cb,
+                           worlds=(("H", "cz8.forgeofempires.com"), ("F", "cz6.forgeofempires.com")))
+    try:
+        win._assignment.assign("H", BrowserTab("tab-H", "cz8", "https://cz8.forgeofempires.com/"))
+        win._assignment.assign("F", BrowserTab("tab-F", "cz6", "https://cz6.forgeofempires.com/"))
+        win._browser_open = True
+        win._refresh_test_scan_combo()
+        idx = win.test_scan_combo.findData("F")
+        win.test_scan_combo.setCurrentIndex(idx)
+        assert "Alias: F" in win.test_scan_target_label.text()
+        win._on_test_scan_live()
+        assert calls == ["tab-F"]                  # F scanned F, not the first World
+    finally:
+        if win._debugger is not None:
+            win._debugger.close()
+        win._browser_open = False
+        win.close()
+
+
+def test_scan_all_opens_summary_with_one_row_per_world(qapp):
+    def cb(tab_id):
+        return cv2.imencode(".png", _frame_with_emblem())[1].tobytes()
+
+    win, _ = _forge_window(qapp, capture_callback=cb,
+                           worlds=(("H", "cz8.forgeofempires.com"), ("F", "cz6.forgeofempires.com")))
+    try:
+        win._assignment.assign("H", BrowserTab("tab-H", "cz8", "https://cz8.forgeofempires.com/"))
+        win._assignment.assign("F", BrowserTab("tab-F", "cz6", "https://cz6.forgeofempires.com/"))
+        win._browser_open = True
+        win._refresh_test_scan_combo()
+        win._on_scan_all()
+        table = win._scan_all_window.table
+        assert table.rowCount() == 2
+        aliases = {table.item(r, 0).text() for r in range(2)}
+        assert aliases == {"H", "F"}
+    finally:
+        if getattr(win, "_scan_all_window", None) is not None:
+            win._scan_all_window.close()
+        win._browser_open = False
+        win.close()
+
+
+def test_test_scan_buttons_exist(qapp):
     win, _ = _forge_window(qapp)
     try:
-        assert win.test_scan_button.text().startswith("Test Scan")
+        assert win.test_scan_live_button.text() == "Test Scan Live World"
+        assert win.open_offline_button.text().startswith("Open Offline")
+        assert win.scan_all_button.text().startswith("Scan All")
     finally:
         win._browser_open = False
         win.close()
@@ -96,16 +149,42 @@ def test_test_scan_live_capture_opens_debugger(qapp):
 
     win, _ = _forge_window(qapp, capture_callback=cb)
     try:
-        # Assign a tab to the world and mark the browser open, then Test Scan.
+        # Assign a tab to the world and mark the browser open, then Test Scan Live.
         win._assignment.assign("Main", BrowserTab("tab-7", "cz8", "https://cz8.forgeofempires.com/"))
         win._browser_open = True
-        win._selected_alias = "Main"
-        win._on_test_scan()
+        win._refresh_test_scan_combo()
+        win._on_test_scan_live()
         assert captured["tab"] == "tab-7"          # live read-only capture used
         assert win._debugger is not None            # observe-only debugger opened
         assert len(win._debugger._scan.detections) == 1
     finally:
         if win._debugger is not None:
             win._debugger.close()
+        win._browser_open = False
+        win.close()
+
+
+def test_test_scan_live_disabled_and_errors_when_unattached(qapp, monkeypatch):
+    # No tab assigned: Live is disabled, and invoking it never opens a file
+    # picker or scans another World — it reports a clear error.
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    def _no_picker(*a, **k):
+        raise AssertionError("offline file picker must not open for a broken live mapping")
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(_no_picker))
+    warnings = {}
+    monkeypatch.setattr(QMessageBox, "warning",
+                        staticmethod(lambda *a, **k: warnings.setdefault("shown", a)))
+
+    win, _ = _forge_window(qapp)
+    try:
+        win._browser_open = True
+        win._refresh_test_scan_combo()
+        assert win.test_scan_live_button.isEnabled() is False   # unattached -> disabled
+        win._on_test_scan_live()
+        assert win._debugger is None
+        assert "shown" in warnings                              # clear error surfaced
+    finally:
         win._browser_open = False
         win.close()

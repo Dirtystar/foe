@@ -95,6 +95,22 @@ class DebugScan:
         x0, y0, x1, y1 = self.region
         return Rect(x=x0, y=y0, w=x1 - x0, h=y1 - y0)
 
+    @property
+    def counts(self) -> dict:
+        """The detector pipeline stage counts, for the debugger summary."""
+        stage1 = len(self.stage1_candidates)
+        confirmed = sum(1 for c in self.stage1_candidates if c.get("confirmed"))
+        accepted = len(self.detections)
+        classified = sum(1 for d in self.detections if d.pct is not None)
+        return {
+            "stage1_candidates": stage1,
+            "template_confirmed": confirmed,
+            "rejected": stage1 - accepted,
+            "final_detections": accepted,
+            "percentage_classified": classified,
+            "percentage_unknown": accepted - classified,
+        }
+
     def explanation(self) -> str:
         """The full per-World decision, in the order the pipeline runs it."""
         lines = [OBSERVE_ONLY_BANNER, ""]
@@ -123,6 +139,14 @@ class DebugScan:
                 lines.append("  → at/over the limit: this World would STOP (no target)")
             elif self.decision is Decision.UNKNOWN:
                 lines.append("  → weakening not confidently read: NO ACTION (fail-safe)")
+
+        # Detector pipeline stage counts — where every candidate went.
+        c = self.counts
+        lines.append(
+            f"Pipeline: stage-1 {c['stage1_candidates']} · template-confirmed "
+            f"{c['template_confirmed']} · rejected {c['rejected']} · accepted "
+            f"{c['final_detections']} (classified {c['percentage_classified']}, "
+            f"unknown {c['percentage_unknown']})")
 
         # 3-4. Detected + ignored badges.
         detected = "  ".join(f"{d.pct}%" if d.pct is not None else "?" for d in self.detections) or "none"
@@ -192,8 +216,10 @@ class DebugScan:
                 "world_limit": self.world_limit,
                 "decision": self.decision.value,
             },
+            "counts": self.counts,
             "stage1_candidates": self.stage1_candidates,
             "detections": [self._detection_dict(d) for d in self.detections],
+            "classifier_min_similarity": MIN_PCT_SIM,
             "classification": self.classify_diag,
             "panel": self.panel_result,
             "selection": {
@@ -261,18 +287,21 @@ def select_target(detections: list[Detection], world=None,
 def _classify(img, detections, classifier) -> tuple[list[Detection], list[dict]]:
     """Classify each detection's percentage, accepting a guess only when its
     similarity clears MIN_PCT_SIM. Returns the pct-annotated detections and a
-    per-candidate diagnostic trace (crop centre, prediction, similarity, whether
-    accepted, and the rejection reason when unknown)."""
+    per-candidate diagnostic trace: crop centre, prediction, similarity, the top-5
+    nearest labelled exemplars, whether accepted, and the rejection reason when
+    unknown."""
+    topk = getattr(classifier, "predict_topk", None)
     out, diag = [], []
     for d in detections:
         patch = percent_patch(img, d.cx, d.cy)
         if patch is None:
             out.append(d.with_pct(None))
             diag.append({"cx": d.cx, "cy": d.cy, "predicted": None, "similarity": None,
-                         "accepted": False,
-                         "reason": "classifier crop fell outside the image (crop misaligned)"})
+                         "top5": [], "accepted": False,
+                         "reason": "classifier crop fell outside the image / uniform (crop invalid)"})
             continue
         guess, sim = classifier.predict(patch)
+        nearest = [[p, round(float(s), 4)] for p, s in topk(patch, 5)] if topk else []
         accepted = guess is not None and sim >= MIN_PCT_SIM
         if accepted:
             reason = f"nearest exemplar {guess}% at similarity {sim:.2f} >= {MIN_PCT_SIM:.2f}"
@@ -283,7 +312,8 @@ def _classify(img, detections, classifier) -> tuple[list[Detection], list[dict]]
                       "— left UNKNOWN (not treated as valid)")
         out.append(d.with_pct(guess if accepted else None))
         diag.append({"cx": d.cx, "cy": d.cy, "predicted": guess,
-                     "similarity": round(float(sim), 4), "accepted": accepted, "reason": reason})
+                     "similarity": round(float(sim), 4), "top5": nearest,
+                     "accepted": accepted, "reason": reason})
     return out, diag
 
 
@@ -404,15 +434,20 @@ def annotate(image, scan: DebugScan):
     cv2.putText(vis, "battle map ROI", (bm.x + 6, bm.y + 22),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (90, 180, 90), 2, cv2.LINE_AA)
 
+    # Rejected stage-1 candidates: thin red markers (not badges — shown for
+    # verification). Detected badge centres are drawn as boxes below.
+    detected_pts = {(d.cx, d.cy) for d in scan.detections}
+    for cand in scan.stage1_candidates:
+        if cand.get("kept"):
+            continue
+        pt = (int(cand["cx"]), int(cand["cy"]))
+        if pt in detected_pts:
+            continue
+        cv2.drawMarker(vis, pt, (0, 0, 210), cv2.MARKER_TILTED_CROSS, 12, 1)
+
     selected = scan.selection.detection
-    ignored_ids = {id(d) for d, _ in scan.selection.ignored}
     for d in scan.detections:
-        if selected is not None and d is selected:
-            color = (60, 90, 240)      # selected target — red
-        elif id(d) in ignored_ids:
-            color = (140, 140, 140)    # ignored — grey
-        else:
-            color = (60, 200, 90)      # considered — green
+        color = (60, 200, 90) if d.pct is not None else (0, 190, 235)  # accepted green / unknown amber
         cv2.rectangle(vis, (d.x, d.y), (d.x + d.w, d.y + d.h), color, 2)
         label = f"{d.pct}%" if d.pct is not None else "?"
         cv2.putText(vis, f"{label} {d.confidence:.2f}", (d.x, d.y - 6),
@@ -436,14 +471,14 @@ def annotate(image, scan: DebugScan):
     click = scan.selection.click_point
     if click is not None:
         cx, cy = click
+        cyan = (255, 255, 0)  # selected target — cyan cross
         actionable = scan.weakening is None or scan.decision is Decision.CONTINUE
-        color = (0, 0, 255) if actionable else (0, 190, 235)  # red vs amber (gated)
         label = (f"Would click x={cx} y={cy}" if actionable
                  else f"candidate x={cx} y={cy} (gate {scan.decision.value})")
-        cv2.drawMarker(vis, (cx, cy), color, cv2.MARKER_CROSS, 44, 3)
-        cv2.circle(vis, (cx, cy), 24, color, 2)
+        cv2.drawMarker(vis, (cx, cy), cyan, cv2.MARKER_CROSS, 44, 3)
+        cv2.circle(vis, (cx, cy), 24, cyan, 2)
         cv2.putText(vis, label, (cx + 26, cy + 6),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, cyan, 2, cv2.LINE_AA)
 
     cv2.rectangle(vis, (0, 0), (vis.shape[1], 40), (0, 0, 160), -1)
     cv2.putText(vis, OBSERVE_ONLY_BANNER, (16, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.9,

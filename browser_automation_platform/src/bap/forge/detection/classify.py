@@ -82,6 +82,18 @@ class PercentClassifier:
                 best_sim, best_pct = sim, ex.pct
         return best_pct, best_sim
 
+    def predict_topk(self, patch, k: int = 5) -> list[tuple[int, float]]:
+        """The k nearest labelled exemplars as (pct, similarity), best first —
+        for diagnosing why a badge reads as UNKNOWN. Empty if the classifier is
+        empty or the patch is None."""
+        if patch is None or not self._exemplars:
+            return []
+        scored = sorted(
+            ((ex.pct, float((patch * ex.vec).sum())) for ex in self._exemplars),
+            key=lambda t: -t[1],
+        )
+        return scored[:k]
+
 
 def train_from_labels(frames_dir, labels_path) -> PercentClassifier | None:
     """Build a classifier from every classified badge in the reviewed grading

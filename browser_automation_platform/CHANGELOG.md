@@ -4,6 +4,49 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge Milestone 4.5 (Windows stabilization sprint)
+
+Stabilize the observe-only pipeline across multiple Worlds. No new gameplay; no
+clicking, mouse, keyboard, or battle logic. Fixes the four Windows blockers:
+Test Scan implicitly using the first World, a stale live-capture mapping falling
+back to a file picker, unproven multi-World behavior, and opaque detector output.
+
+### Added
+
+- **`detection.testscan`** — Qt-free Test-Scan orchestration: `resolve_target`,
+  `capture_world_image`, `scan_world`, `scan_all_attached`. The tab is resolved
+  **fresh from the assignment at scan time**, so no stale first-World closure or
+  removed World can redirect a scan. Fully unit-tested (routing, stale-callback
+  prevention, delete/reorder, 4/8-World independence).
+- **Explicit Test Scan World selector** in the World Manager, with a target
+  panel (`Alias / Hostname / Tab title / Tab URL`) shown before capture. Live is
+  enabled only for the attached World.
+- **Separate live vs offline actions**: *Test Scan Live World* (requires an
+  attached World; clear error otherwise — never a file picker) and *Open Offline
+  Screenshot…* (a distinct action that never touches live assignment).
+- **Scan All Attached Worlds** — observe-only diagnostic that scans every
+  attached World independently and opens a one-row-per-World summary
+  (alias, hostname, capture status, weakening + decision, stage-1 candidates,
+  accepted detections, unknown %, rejected candidates, selected, error).
+- **Detector diagnostics**: `scan.json` now records every stage-1 candidate once
+  with colour-prior area, template score, ROI + full coords, and keep/reject
+  reason; each badge carries its top-5 nearest percentage exemplars and the
+  classifier threshold. The debugger explanation shows a **Pipeline** line
+  (stage-1 · template-confirmed · rejected · accepted / classified / unknown).
+- **`DETECTOR_DIAGNOSIS.md`** — attributes the Windows H/F misses (stage-1
+  colour-prior, e.g. a badge with only 5 red px → no candidate) and false
+  positives (red banners/terrain in the 0.55–0.65 band; open-panel pills), with
+  the TP/FP score distributions and the recall/precision cost of each threshold.
+  `test_detector_regression.py` locks a missed badge, a false positive, and the
+  TP/FP separation as fixtures. No thresholds were changed.
+
+### Changed
+
+- **Overlay colours** per the review: accepted badge = green, unknown % = amber,
+  rejected stage-1 candidate = thin red marker, selected target = cyan cross.
+- The Test Scan selector, live button, and Scan All refresh on every world/tab/
+  browser-state change, so the selector can never point at a stale World or tab.
+
 ## [Unreleased] — Forge Test-Scan capture-geometry fix (Windows review)
 
 The Windows review found the Test Scan analyzed only a fixed lower rectangle

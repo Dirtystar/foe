@@ -291,14 +291,37 @@ class MainWindow(QMainWindow):
         self.add_world_button = QPushButton("Add World…")
         self.edit_world_button = QPushButton("Edit…")
         self.remove_world_button = QPushButton("Remove")
-        self.test_scan_button = QPushButton("Test Scan (observe-only)…")
         self.edit_world_button.setEnabled(False)
         self.remove_world_button.setEnabled(False)
         for widget in (self.add_world_button, self.edit_world_button, self.remove_world_button):
             crud.addWidget(widget)
         crud.addStretch(1)
-        crud.addWidget(self.test_scan_button)
         outer.addLayout(crud)
+
+        # Test Scan (observe-only): an EXPLICIT World selector — the scan always
+        # runs against the chosen World, never implicitly the first one. Live and
+        # offline are separate actions; the file picker is never an implicit
+        # fallback for a broken live mapping.
+        scan_row = QHBoxLayout()
+        scan_row.addWidget(QLabel("Test Scan World:"))
+        self.test_scan_combo = QComboBox()
+        self.test_scan_combo.currentIndexChanged.connect(self._on_test_scan_world_changed)
+        scan_row.addWidget(self.test_scan_combo)
+        self.test_scan_live_button = QPushButton("Test Scan Live World")
+        self.test_scan_live_button.clicked.connect(self._on_test_scan_live)
+        self.scan_all_button = QPushButton("Scan All Attached Worlds")
+        self.scan_all_button.clicked.connect(self._on_scan_all)
+        self.open_offline_button = QPushButton("Open Offline Screenshot…")
+        self.open_offline_button.clicked.connect(self._on_open_offline)
+        for widget in (self.test_scan_live_button, self.scan_all_button, self.open_offline_button):
+            scan_row.addWidget(widget)
+        scan_row.addStretch(1)
+        outer.addLayout(scan_row)
+
+        self.test_scan_target_label = QLabel("")
+        self.test_scan_target_label.setObjectName("testScanTarget")
+        self.test_scan_target_label.setWordWrap(True)
+        outer.addWidget(self.test_scan_target_label)
 
         # Per-world tab pickers live in a rebuildable form so add/remove updates
         # the picker set immediately, with no restart.
@@ -311,47 +334,128 @@ class MainWindow(QMainWindow):
         self.add_world_button.clicked.connect(self._on_add_world)
         self.edit_world_button.clicked.connect(self._on_edit_world)
         self.remove_world_button.clicked.connect(self._on_remove_world)
-        self.test_scan_button.clicked.connect(self._on_test_scan)
         self._refresh_worlds_table()
         self._rebuild_pickers()
+        self._refresh_test_scan_combo()
         return box
 
-    def _on_test_scan(self) -> None:
-        """Open the observe-only Vision Debugger on a live world capture (if a
-        world tab is assigned and the browser is open) or a chosen screenshot
-        file. Never clicks — the debugger only shows what the detector sees."""
-        try:
-            import cv2
-            import numpy as np
-        except Exception:
-            QMessageBox.warning(self, "Test Scan", "Vision libraries (OpenCV) are not installed.")
-            return
+    def _current_test_scan_alias(self) -> str | None:
+        """The World explicitly chosen for Test Scan — never the first by
+        default."""
+        combo = getattr(self, "test_scan_combo", None)
+        if combo is None or combo.count() == 0:
+            return None
+        return combo.currentData()
 
-        alias = self._selected_alias or (self._world_aliases()[0] if self._world_aliases() else None)
+    def _refresh_test_scan_combo(self) -> None:
+        """Rebuild the Test Scan World selector from the current world set,
+        preserving the selection, and enable Live only for the attached World.
+        Called whenever worlds, tabs, or browser state change so the selector can
+        never point at a stale World or tab."""
+        combo = getattr(self, "test_scan_combo", None)
+        if combo is None:
+            return
+        previous = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        for alias in self._world_aliases():
+            combo.addItem(alias, alias)
+        if previous is not None:
+            idx = combo.findData(previous)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
+        self._on_test_scan_world_changed()
+
+    def _resolve_test_scan_target(self, alias):
+        from bap.forge.detection.testscan import resolve_target
+
+        return resolve_target(alias, world_store=self._world_store,
+                              assignment=self._assignment, browser_open=self._browser_open)
+
+    def _on_test_scan_world_changed(self, *_args) -> None:
+        alias = self._current_test_scan_alias()
+        has_worlds = alias is not None
+        if not has_worlds:
+            self.test_scan_target_label.setText("No worlds yet — add a World to Test Scan.")
+            self.test_scan_live_button.setEnabled(False)
+            self.scan_all_button.setEnabled(bool(self._attached_aliases()))
+            return
+        target = self._resolve_test_scan_target(alias)
+        self.test_scan_target_label.setText(target.summary())
+        self.test_scan_live_button.setEnabled(target.attached)
+        self.scan_all_button.setEnabled(bool(self._attached_aliases()))
+
+    def _attached_aliases(self) -> list[str]:
+        from bap.forge.detection.testscan import attached_aliases
+
+        return attached_aliases(world_store=self._world_store, assignment=self._assignment,
+                                browser_open=self._browser_open)
+
+    def _on_test_scan_live(self) -> None:
+        """Capture the EXPLICITLY selected World's live tab and open the
+        observe-only debugger. If that World is not attached, show a clear error —
+        never open a file picker, never scan another World."""
+        from bap.forge.detection.testscan import capture_world_image
+
+        alias = self._current_test_scan_alias()
+        if alias is None:
+            QMessageBox.warning(self, "Test Scan", "No World selected.")
+            return
+        world = self._world_store.get(alias) if self._world_store else None
+        img, err = capture_world_image(
+            alias, world_store=self._world_store, assignment=self._assignment,
+            browser_open=self._browser_open, capture_callback=self._capture_callback,
+        )
+        if img is None:
+            QMessageBox.warning(self, "Test Scan (live)",
+                                f"Cannot live-scan World “{alias}”:\n{err}\n\n"
+                                "Use “Open Offline Screenshot…” to review a saved image instead.")
+            return
+        self._append_log(f"Live Test Scan of World “{alias}”.")
+        self._open_debugger(img, world=world, source=f"{alias} (live)")
+
+    def _on_open_offline(self) -> None:
+        """Explicitly review a saved screenshot. Has no effect on any World's live
+        tab assignment — it is a separate action, never a live-scan fallback."""
+        import cv2
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getOpenFileName(self, "Open offline Forge screenshot", "", "PNG (*.png)")
+        if not path:
+            return
+        img = cv2.imread(path)
+        if img is None:
+            QMessageBox.warning(self, "Open Offline Screenshot", "Could not load that image.")
+            return
+        # Use the selected World's settings for context only; assignment untouched.
+        alias = self._current_test_scan_alias()
         world = self._world_store.get(alias) if (alias and self._world_store) else None
-        tab = self._assignment.get(alias) if (alias and self._assignment) else None
+        self._open_debugger(img, world=world, source=path.rsplit("/", 1)[-1] + " (offline)")
 
-        img = None
-        source = alias or "screenshot"
-        if self._capture_callback is not None and tab is not None and self._browser_open:
-            try:
-                png = self._capture_callback(tab.tab_id)
-                if png:
-                    img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
-            except Exception as exc:
-                self._append_log(f"Live capture failed ({exc}); pick a screenshot instead.")
-        if img is None:
-            from PySide6.QtWidgets import QFileDialog
+    def _on_scan_all(self) -> None:
+        """Scan every attached World independently and open a summary table."""
+        from bap.forge.detection.testscan import scan_all_attached
+        from bap.gui.forge_debugger import _bundled_classifier
 
-            path, _ = QFileDialog.getOpenFileName(self, "Choose a Forge screenshot", "", "PNG (*.png)")
-            if not path:
-                return
-            img = cv2.imread(path)
-            source = path.rsplit("/", 1)[-1]
-        if img is None:
-            QMessageBox.warning(self, "Test Scan", "Could not load an image to scan.")
+        if not self._attached_aliases():
+            QMessageBox.information(self, "Scan All Worlds",
+                                    "No attached Worlds. Open the browser and Scan && Reattach first.")
             return
-        self._open_debugger(img, world=world, source=source)
+        results = scan_all_attached(
+            world_store=self._world_store, assignment=self._assignment,
+            browser_open=self._browser_open, capture_callback=self._capture_callback,
+            classifier=_bundled_classifier(), calibration=self._forge_calibration(),
+        )
+        self._append_log(f"Scan All: {len(results)} attached World(s) scanned independently.")
+        self._open_scan_all_summary(results)
+
+    def _open_scan_all_summary(self, results) -> None:
+        from bap.gui.forge_scan_all import ScanAllSummaryWindow
+
+        self._scan_all_window = ScanAllSummaryWindow(results)
+        self._scan_all_window.resize(1100, 360)
+        self._scan_all_window.show()
 
     def _open_debugger(self, image, *, world=None, source: str = "") -> None:
         from bap.gui.forge_debugger import DebuggerWindow, _bundled_classifier
@@ -418,6 +522,7 @@ class MainWindow(QMainWindow):
         if self._scanned_tabs is not None:
             self._apply_scanned_to_pickers()
         self._update_start_gate()
+        self._refresh_test_scan_combo()
 
     def _on_world_selection_changed(self) -> None:
         rows = self.worlds_table.selectionModel().selectedRows()
@@ -517,6 +622,7 @@ class MainWindow(QMainWindow):
             self.close_browser_button.setEnabled(False)
         self.attended_hint.setText("Browser closed. Open it again to reconnect your worlds.")
         self._append_log("Browser closed.")
+        self._refresh_test_scan_combo()
 
     def _on_forge_tabs_scanned(self, tabs) -> None:
         """Remember the scan (also used to prefill Add World), then auto-reattach
@@ -564,6 +670,7 @@ class MainWindow(QMainWindow):
             self.close_browser_button.setEnabled(True)
         self.attended_hint.setText("Open your pages, then Scan.")
         self._append_log("Browser open. Open your pages, then Scan.")
+        self._refresh_test_scan_combo()
 
     def _on_scan_clicked(self) -> None:
         self._append_log("Scanning open tabs…")
@@ -606,6 +713,7 @@ class MainWindow(QMainWindow):
         else:
             self._assignment.assign(profile_id, tab)
         self._update_start_gate()
+        self._refresh_test_scan_combo()
 
     def _update_start_gate(self) -> None:
         idle = not self._running

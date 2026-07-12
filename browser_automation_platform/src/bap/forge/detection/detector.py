@@ -173,34 +173,46 @@ class BadgeDetector:
         return self.scan(image, region=region).detections
 
     def scan(self, image, region: tuple[int, int, int, int] | None = None) -> DetectResult:
-        """Full trace: every stage-1 colour candidate with its emblem score and
-        keep/reject reason, plus the kept detections after threshold + NMS."""
+        """Full trace: every stage-1 colour candidate recorded EXACTLY ONCE with
+        its colour-prior area, best emblem/template score, ROI-local coordinates,
+        and final keep/reject reason, plus the kept detections after threshold +
+        NMS. A candidate that clears the template threshold but is then dropped by
+        NMS is reported once, as NMS-suppressed."""
         img = self._as_image(image)
         if img is None or not self._templates:
             return DetectResult()
         px, py = PANEL_PILL_CENTER
         pr2 = PANEL_PILL_RADIUS * PANEL_PILL_RADIUS
-        candidates: list[dict] = []
-        dets = []
-        for cx, cy in self._arrow_candidates(img, region):
+        rx0, ry0 = (region[0], region[1]) if region is not None else self._region[:2]
+        entries: list[dict] = []
+        for cx, cy, area in self._arrow_candidates(img, region):
+            e = {"cx": cx, "cy": cy, "roi_cx": cx - rx0, "roi_cy": cy - ry0,
+                 "color_area": int(area), "template_score": None, "confirmed": False,
+                 "kept": False, "reason": ""}
             if (cx - px) ** 2 + (cy - py) ** 2 <= pr2:
-                candidates.append({"cx": cx, "cy": cy, "score": None, "kept": False,
-                                   "reason": "inside fixed panel-pill exclusion zone"})
+                e["reason"] = "inside fixed panel-pill exclusion zone"
+                entries.append(e)
                 continue  # the fixed panel pill is reported separately
             score = self._emblem_score(img, cx, cy)
+            e["template_score"] = round(score, 4)
             if score >= self._threshold:
-                dets.append(self._make(cx, cy, score, "map"))
-                candidates.append({"cx": cx, "cy": cy, "score": round(score, 4),
-                                   "kept": True, "reason": "emblem score >= threshold"})
+                e["confirmed"] = True
+                e["_det"] = self._make(cx, cy, score, "map")
+                e["reason"] = "template-confirmed"
             else:
-                candidates.append({"cx": cx, "cy": cy, "score": round(score, 4), "kept": False,
-                                   "reason": f"emblem score {score:.2f} < {self._threshold:.2f}"})
-        kept = self._nms(dets)
+                e["reason"] = f"template score {score:.2f} < {self._threshold:.2f}"
+            entries.append(e)
+
+        confirmed = [e for e in entries if e.get("_det") is not None]
+        kept = self._nms([e["_det"] for e in confirmed])
         kept_ids = {id(d) for d in kept}
-        for d in dets:
-            if id(d) not in kept_ids:
-                candidates.append({"cx": d.cx, "cy": d.cy, "score": round(d.confidence, 4),
-                                   "kept": False, "reason": "suppressed by NMS (near a stronger badge)"})
+        for e in confirmed:
+            if id(e["_det"]) in kept_ids:
+                e["kept"] = True
+                e["reason"] = "template-confirmed; kept"
+            else:
+                e["reason"] = "suppressed by NMS (near a stronger badge)"
+        candidates = [{k: v for k, v in e.items() if k != "_det"} for e in entries]
         return DetectResult(detections=kept, candidates=candidates)
 
     def score_at(self, image, cx: int, cy: int) -> float:
@@ -226,7 +238,7 @@ class BadgeDetector:
 
     # --- stage 1: locate ----------------------------------------------------
 
-    def _arrow_candidates(self, img, region: tuple[int, int, int, int] | None = None) -> list[tuple[int, int]]:
+    def _arrow_candidates(self, img, region: tuple[int, int, int, int] | None = None) -> list[tuple[int, int, int]]:
         x0, y0, x1, y1 = self._clamped_region(img, region)
         roi = img[y0:y1, x0:x1]
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
@@ -241,7 +253,7 @@ class BadgeDetector:
             bw, bh = int(stats[i, cv2.CC_STAT_WIDTH]), int(stats[i, cv2.CC_STAT_HEIGHT])
             if not (self._min_area <= area <= self._max_area) or bw > self._max_side or bh > self._max_side:
                 continue
-            out.append((int(cent[i][0]) + x0, int(cent[i][1]) + y0))
+            out.append((int(cent[i][0]) + x0, int(cent[i][1]) + y0, area))
         return out
 
     # --- stage 2: confirm ---------------------------------------------------
