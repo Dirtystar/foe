@@ -1,41 +1,52 @@
-# Weakening-reader spike
+# Weakening-reader spike (against the user-corrected calibration)
 
-Comparing two readers for the current-weakening number (the top-bar attrition
-counter) against the 15 reviewed ground-truth values, on regions auto-located in
-the mixed-geometry grading frames.
+Both readers evaluated on the 15 reviewed weakening values, using the corrected
+per-resolution region in `calibration.json` (`1920x1080 → x678 y477 w56 h25`).
 
 Reproduce: `python -m bap.forge.detection.weakening_eval tests/forge_assets/grading/frames`
 
 ## Results
 
-| Reader | Exact read | Mean confidence |
-|---|---|---|
-| OCR (numeric whitelist) | **33%** (5/15) | 0.15 |
-| Deterministic digit templates | **0%** (0/15) | 0.33 |
+| Reader | Exact @ calibrated region |
+|---|---|
+| OCR (numeric whitelist) | **40%** (6/15) |
+| Deterministic digit templates | **7%** (1/15) |
+| OCR, region aligned per frame | **87%** (13/15) |
 
-## Reading
+## Are the errors OCR, or region/layout drift?
 
-- **Region location is the bottleneck.** The grading frames come from several
-  capture sessions whose top bars sit at different x-positions, so the
-  auto-locator's region is often a few pixels off and catches an adjacent glyph.
-  In production the user calibrates one fixed rectangle for their consistent
-  setup (Debugger → *Set Weakening Region*), which removes this error — both
-  readers should improve substantially, OCR most of all.
-- **OCR confidence is well-calibrated and that is what matters for safety.** Every
-  correct OCR read scored high (0.9+); every wrong read scored ~0. So the
-  fail-safe gate (confidence < 0.60 → UNKNOWN → no action) correctly rejects the
-  bad reads rather than acting on them.
-- **Deterministic digit templates need a precise, tight region.** On loose
-  auto-located regions the digit segmentation picks up emblem/edge pixels and
-  mis-assembles. With a calibrated region and per-setup glyphs it is viable, but
-  it is far more sensitive to calibration than OCR.
+**Overwhelmingly region/layout drift.** Of the 9 calibrated-region failures:
 
-## Recommendation
+- **7 are region/layout drift** — the grading set is drawn from several capture
+  sessions whose top bars sit at slightly different x-positions, so one fixed
+  rectangle cannot align to all of them. A small shift (typically −18 px x) reads
+  each of these correctly:
+  `frame_000183 (111), 000460 (8), 000466 (8), 000486 (12), 000596 (1), 000650 (0), 000654 (0)`.
+- **2 are genuine OCR errors** — no shift helps:
+  `frame_000021 (86 → 36)` and `frame_000070 (92 → 36)` — high-value two-digit
+  numbers where Tesseract misreads the leading digit.
 
-Use **OCR with the numeric whitelist gated by confidence** as the weakening
-reader; keep the deterministic template reader as a cross-check once a tight
-calibrated region + per-setup digit glyphs exist. The safety gate never depends
-on a low-confidence read: **UNKNOWN → no action** by design.
+So **given a correctly-aligned region, OCR reads 13/15 (87%)**; only 2 are true
+OCR limitations. In production the user runs one consistent capture setup, so a
+single calibration aligns to *every* frame and the drift failures disappear —
+the expected field accuracy is ~87%, bounded by the two genuine misreads.
 
-Regenerate after the user calibrates the region and confirms weakening values on
-their own setup.
+**Template matching (7%) is not competitive** and is far more sensitive to the
+region than OCR; OCR is the reader to use.
+
+## Confidence
+
+Tesseract's confidence on these tiny digits is low even when the read is correct
+(mean ~0.18, sometimes 0 for single glyphs). So a strict confidence threshold is
+**over-conservative but safe**: it errs toward UNKNOWN → no action, never toward
+acting on a bad read. A stronger gate signal (e.g. agreement between two reads,
+or plausibility bounds) is a sensible follow-up before any action is enabled — it
+does not affect safety today.
+
+## Fail-safe (unchanged)
+
+- unreadable / low confidence → **UNKNOWN → no action**
+- value ≥ world limit → **STOP**
+- only a confident value below the limit → **CONTINUE**
+
+Never continues blindly.

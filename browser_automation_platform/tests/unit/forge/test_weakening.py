@@ -106,6 +106,31 @@ def test_build_digit_templates_from_labelled_samples():
 # --- scan integration + gate --------------------------------------------------
 
 
+def test_weakening_spike_uses_calibration(tmp_path):
+    import json
+
+    from bap.forge.detection.weakening_eval import run
+
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    # Two frames whose number sits inside the calibrated region.
+    for name, text in (("a.png", "42"), ("b.png", "7")):
+        img = np.zeros((1080, 1920, 3), np.uint8)
+        img[486:514, 700:790] = _digit_image(text, w=90, h=28)
+        cv2.imwrite(str(frames / name), img)
+    (tmp_path / "labels.json").write_text(json.dumps({"version": 1, "frames": [
+        {"file": "a.png", "badges": [], "reviewed": True, "weakening": 42},
+        {"file": "b.png", "badges": [], "reviewed": True, "weakening": 7},
+    ]}))
+    (tmp_path / "calibration.json").write_text(json.dumps({"version": 1, "weakening_regions": {
+        "1920x1080": {"x": 700, "y": 486, "w": 90, "h": 28}}}))
+
+    report = run(frames, tmp_path / "labels.json", tmp_path / "calibration.json")
+    assert report.n_samples == 2
+    assert report.ocr.correct >= 1                 # OCR reads at least one correctly
+    assert "corrected calibration" in report.format()
+
+
 def test_scan_weakening_gate_stops_and_blocks_selection():
     # A frame whose weakening region reads over the limit => STOP, no selection.
     frame = np.zeros((1080, 1920, 3), np.uint8)

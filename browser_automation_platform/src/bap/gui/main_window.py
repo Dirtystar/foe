@@ -357,10 +357,25 @@ class MainWindow(QMainWindow):
         from bap.gui.forge_debugger import DebuggerWindow, _bundled_classifier
 
         self._debugger = DebuggerWindow(
-            image, world=world, classifier=_bundled_classifier(), source=source
+            image, world=world, classifier=_bundled_classifier(), source=source,
+            weakening_region=self._weakening_region_for(image),
         )
         self._debugger.resize(1280, 760)
         self._debugger.show()
+
+    def _weakening_region_for(self, image):
+        """The calibrated weakening region for this image's resolution, from the
+        per-user Forge calibration (Debugger → Set Weakening Region persists it)."""
+        try:
+            from bap.forge.detection.calibration import WeakeningCalibration
+            from bap.ops.paths import ensure_dirs, get_paths
+
+            path = ensure_dirs(get_paths()).data_dir / "forge" / "calibration.json"
+            cal = WeakeningCalibration.load(path)
+            h, w = image.shape[:2]
+            return cal.get(w, h)
+        except Exception:
+            return None
 
     def _world_aliases(self) -> list[str]:
         return self._world_store.aliases() if self._world_store is not None else []
