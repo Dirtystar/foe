@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "frames": [
+    {
+      "file": "H_20260712_231142_650431.png",
+      "badges": [
+        {
+          "cx": 1072,
+          "cy": 696,
+          "pct": 60
+        },
+        {
+          "cx": 558,
+          "cy": 329,
+          "pct": 20
+        }
+      ],
+      "reviewed": true,
+      "weakening": 592
+    },
+    {
+      "file": "H_20260712_231606_382772.png",
+      "badges": [
+        {
+          "cx": 560,
+          "cy": 327,
+          "pct": 20
+        },
+        {
+          "cx": 1072,
+          "cy": 698,
+          "pct": 60
+        }
+      ],
+      "reviewed": true,
+      "weakening": 592
+    },
+    {
+      "file": "F_20260712_231811_628314.png",
+      "badges": [
+        {
+          "cx": 1263,
+          "cy": 532,
+          "pct": 60
+        },
+        {
+          "cx": 1246,
+          "cy": 668,
+          "pct": 100
+        }
+      ],
+      "reviewed": true,
+      "weakening": 65
+    }
+  ]
+}
