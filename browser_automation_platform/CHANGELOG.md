@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge active-learning review batch
+
+Builds the highest-value manual-annotation batch from the committed screenshot
+corpus. **No model change** — the detector, classifier, and thresholds are used
+strictly read-only and nothing is retrained.
+
+### Added
+
+- **`detection.active_learning`** — a review-batch builder that runs the existing
+  pipeline read-only to score each screenshot by expected information gain
+  (unknown %, classifier uncertainty near the accept bar / close top-2 classes,
+  detector-stage disagreement, near-threshold rejects, competing candidates,
+  rare background, rare scale), clusters near-duplicates by a perceptual
+  descriptor, and selects a **diversity-capped** batch (round-robin across
+  clusters — deliberately not top-N by uncertainty). CLI:
+  `python -m bap.forge.detection.active_learning <frames_dir> --n 50 --out <dir>`.
+- **`tests/forge_assets/review_batch_001/`** — the batch from the current corpus:
+  selected `frames/`, `manifest.json` (per-frame source/world/resolution/cluster/
+  score/factors/reasons/detector-summary), `REVIEW_BATCH.md` (method, weights, a
+  per-frame WHY table), and `labels.json` + merged `calibration.json` so it opens
+  directly in the existing Review Mode. The committed corpus is 18 unique
+  screenshots (all already reviewed ground truth), so the batch contains all 18
+  rather than 50; the note and CLI make producing a true 50 a one-command step
+  once the larger keep dataset is committed.
+
 ## [Unreleased] — Forge Milestone 4.7 (live-data re-evaluation)
 
 Used the committed reviewed live scans (Worlds H, F) to honestly re-evaluate and
