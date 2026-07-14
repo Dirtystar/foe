@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge active-learning: fast analysis mode
+
+Profiled the review-batch selector and added a fast analysis mode. The detector,
+classifier, and thresholds are unchanged — production scans behave identically.
+
+### Added
+
+- **Fast analysis mode** in `detection.active_learning` (`analyze(..., cache_dir,
+  progress)`): lean per-frame features (detector.scan + classification only —
+  skips the weakening OCR, panel probe, and target selection, none of which feed
+  a ranking factor), a **per-frame cache keyed by content + detector/classifier
+  signature** written as an immediate checkpoint (resume-after-interrupt), and
+  **progress reporting** with ETA. CLI gains `--cache-dir` / `--no-progress`.
+- **`ACTIVE_LEARNING_PERF.md`** — the profile (matchTemplate is 90 % of scan and
+  irreducible: 1-scale is 2.7× faster but *changes* the selection; whole-ROI
+  precompute is 6× slower) and the before/after benchmark.
+
+### Performance
+
+- Selection is **byte-identical** to the committed `review_batch_001` (files and
+  scores), verified by test.
+- Cold first pass ~4 % faster (matchTemplate untouched); **warm re-run / resume
+  ~1376×** (projected 989 s → 0.7 s for 236 frames) with checkpoints + progress,
+  so a large run never hangs invisibly or loses work on interrupt.
+
 ## [Unreleased] — Forge active-learning review batch
 
 Builds the highest-value manual-annotation batch from the committed screenshot

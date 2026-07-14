@@ -28,8 +28,10 @@ deliberately **not** the top-N by uncertainty.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -37,7 +39,10 @@ from bap.forge.detection.calibration import WeakeningCalibration
 from bap.forge.detection.classify import train_from_sources
 from bap.forge.detection.detector import TEMPLATE_SIZE, BadgeDetector
 from bap.forge.detection.geometry import CaptureGeometry, derive_rois
-from bap.forge.detection.scan import MIN_PCT_SIM, build_scan
+from bap.forge.detection.scan import MIN_PCT_SIM, _classify
+
+# Version tag for the per-frame cache. Bump when the feature computation changes.
+_CACHE_VERSION = 1
 
 _NEAR = 0.10          # "near the accept bar" band for classifier similarity
 _MARGIN = 0.05        # small top-2 exemplar-class margin = ambiguous
@@ -102,55 +107,140 @@ def _classify_uncertainty(diag: list[dict]) -> tuple[int, int]:
     return uncertain, unknown
 
 
+def _box(rect):
+    return (rect.x, rect.y, rect.x + rect.w, rect.y + rect.h)
+
+
+def _counts(candidates, detections) -> dict:
+    """Identical to DebugScan.counts, computed from the lean scan+classify path."""
+    stage1 = len(candidates)
+    confirmed = sum(1 for c in candidates if c.get("confirmed"))
+    accepted = len(detections)
+    classified = sum(1 for d in detections if d.pct is not None)
+    return {
+        "stage1_candidates": stage1, "template_confirmed": confirmed,
+        "rejected": stage1 - accepted, "final_detections": accepted,
+        "percentage_classified": classified, "percentage_unknown": accepted - classified,
+    }
+
+
+def _frame_core(img, rois, detector, classifier) -> dict:
+    """The expensive per-frame work, reduced to exactly what ranking needs:
+    detector.scan + percentage classification. It deliberately skips the weakening
+    OCR, the province-panel probe, and target selection — none of which affect any
+    information-gain factor — so it is faster than a full ``build_scan`` while
+    producing byte-identical ranking features."""
+    import numpy as np
+
+    result = detector.scan(img, region=_box(rois.battle_map))
+    detections = result.detections
+    classify_diag: list[dict] = []
+    if classifier is not None and len(classifier):
+        detections, classify_diag = _classify(img, detections, classifier)
+    cands = result.candidates
+    counts = _counts(cands, detections)
+    uncertain, unknown = _classify_uncertainty(classify_diag)
+
+    near_thresh = sum(1 for c in cands
+                      if (c.get("template_score") is not None
+                          and MIN_PCT_SIM - _NEAR <= c["template_score"] < MIN_PCT_SIM))
+    areas = [c.get("color_area", 0) for c in cands]
+    area_p75 = float(np.percentile(areas, 75)) if areas else 0.0
+    stage_disagree = sum(1 for c in cands
+                         if c.get("color_area", 0) >= area_p75
+                         and (c.get("template_score") or 0.0) < MIN_PCT_SIM)
+
+    bm = rois.battle_map
+    roi = img[max(0, bm.y):bm.y + bm.h, max(0, bm.x):bm.x + bm.w]
+    bg = roi.reshape(-1, 3).mean(axis=0) if roi.size else np.zeros(3)
+
+    h, w = img.shape[:2]
+    return {
+        "width": w, "height": h,
+        "descriptor": _descriptor(img).tolist(),
+        "bg": [float(x) for x in bg],
+        "counts": counts,
+        "factors_abs": {
+            "unknown_pct": unknown, "uncertain": uncertain,
+            "competing": counts["final_detections"], "candidates": counts["stage1_candidates"],
+            "rejected": counts["rejected"], "near_thresh_reject": near_thresh,
+            "stage_disagree": stage_disagree,
+        },
+    }
+
+
+def _detector_signature(detector: BadgeDetector, classifier) -> str:
+    d = detector
+    parts = [len(d._templates), tuple(d._scales), d._threshold, d._offset, d._nms_radius,
+             d._sat_min, d._val_min, d._min_area, d._max_area, d._max_side,
+             MIN_PCT_SIM, (len(classifier) if classifier is not None else 0), _CACHE_VERSION]
+    return hashlib.md5(repr(parts).encode()).hexdigest()[:16]
+
+
+def _frame_hash(path: Path) -> str:
+    return hashlib.md5(path.read_bytes()).hexdigest()[:16]
+
+
+def _core_from_frameinfo(f: FrameInfo) -> dict:
+    return {"width": f.width, "height": f.height,
+            "descriptor": f.descriptor.tolist(), "bg": [float(x) for x in f.bg],
+            "counts": f.counts, "factors_abs": dict(f.factors)}
+
+
 def analyze(frames_dir: Path | str, *, detector: BadgeDetector | None = None,
             classifier=None, calibration: WeakeningCalibration | None = None,
-            source: str = "corpus") -> list[FrameInfo]:
-    """Run the read-only pipeline over every PNG and collect per-frame features."""
+            source: str = "corpus", cache_dir: Path | str | None = None,
+            progress=None) -> list[FrameInfo]:
+    """Collect per-frame ranking features over every PNG, read-only.
+
+    Fast analysis mode: the expensive scan is cached per frame under ``cache_dir``
+    (keyed by frame content + detector/classifier signature), so re-runs and
+    resume-after-interrupt reuse completed frames instead of recomputing. Each
+    frame is written to the cache immediately (a checkpoint), and ``progress`` — a
+    callable ``(done, total, file, cached, elapsed)`` — is invoked per frame."""
     import cv2
     import numpy as np
 
     frames_dir = Path(frames_dir)
     detector = detector or BadgeDetector()
+    sig = _detector_signature(detector, classifier)
+    cache = Path(cache_dir) if cache_dir is not None else None
+    if cache is not None:
+        cache.mkdir(parents=True, exist_ok=True)
+
+    paths = sorted(frames_dir.glob("*.png"))
     infos: list[FrameInfo] = []
-    for p in sorted(frames_dir.glob("*.png")):
-        img = cv2.imread(str(p))
-        if img is None:
-            continue
-        h, w = img.shape[:2]
-        geo = CaptureGeometry(raw_w=w, raw_h=h)
-        rois = derive_rois(geo, calibration)
-        scan = build_scan(img, detector=detector, classifier=classifier,
-                          rois=rois, geometry=geo)
-        cands = scan.stage1_candidates
-        counts = scan.counts
-        uncertain, unknown = _classify_uncertainty(scan.classify_diag)
-
-        near_thresh = sum(1 for c in cands
-                          if (c.get("template_score") is not None
-                              and MIN_PCT_SIM - _NEAR <= c["template_score"] < MIN_PCT_SIM))
-        areas = [c.get("color_area", 0) for c in cands]
-        area_p75 = float(np.percentile(areas, 75)) if areas else 0.0
-        stage_disagree = sum(1 for c in cands
-                             if c.get("color_area", 0) >= area_p75
-                             and (c.get("template_score") or 0.0) < MIN_PCT_SIM)
-
-        bm = rois.battle_map
-        roi = img[max(0, bm.y):bm.y + bm.h, max(0, bm.x):bm.x + bm.w]
-        bg = roi.reshape(-1, 3).mean(axis=0) if roi.size else np.zeros(3)
-
+    t0 = time.perf_counter()
+    for i, p in enumerate(paths, 1):
+        core = None
+        cache_file = None
+        if cache is not None:
+            cache_file = cache / f"{_frame_hash(p)}_{sig}.json"
+            if cache_file.exists():
+                try:
+                    core = json.loads(cache_file.read_text())
+                except (json.JSONDecodeError, OSError):
+                    core = None
+        cached = core is not None
+        if not cached:
+            img = cv2.imread(str(p))
+            if img is None:
+                continue
+            geo = CaptureGeometry(raw_w=img.shape[1], raw_h=img.shape[0])
+            core = _frame_core(img, derive_rois(geo, calibration), detector, classifier)
+            if cache_file is not None:  # checkpoint immediately
+                tmp = cache_file.with_suffix(".tmp")
+                tmp.write_text(json.dumps(core))
+                tmp.replace(cache_file)
         infos.append(FrameInfo(
             file=p.name, source_path=p, source=source, world=_world_from_name(p.name),
-            width=w, height=h, descriptor=_descriptor(img), bg=bg, counts=counts,
-            factors={
-                "unknown_pct": unknown,
-                "uncertain": uncertain,
-                "competing": counts["final_detections"],
-                "candidates": counts["stage1_candidates"],
-                "rejected": counts["rejected"],
-                "near_thresh_reject": near_thresh,
-                "stage_disagree": stage_disagree,
-            },
+            width=core["width"], height=core["height"],
+            descriptor=np.asarray(core["descriptor"], dtype="float32"),
+            bg=np.asarray(core["bg"], dtype="float64"),  # match the original mean() precision
+            counts=core["counts"], factors=dict(core["factors_abs"]),
         ))
+        if progress is not None:
+            progress(i, len(paths), p.name, cached, time.perf_counter() - t0)
     _finalize_corpus_factors(infos)
     return infos
 
@@ -285,18 +375,34 @@ def select_batch(infos: list[FrameInfo], *, n: int = 50, per_cluster_cap: int | 
     return picked
 
 
+def _default_progress(done, total, file, cached, elapsed):
+    rate = done / elapsed if elapsed > 0 else 0.0
+    eta = (total - done) / rate if rate > 0 else 0.0
+    tag = "cache" if cached else "scan "
+    print(f"[{done:>4}/{total}] {tag} {file:<40} {elapsed:6.1f}s elapsed, ETA {eta:5.0f}s",
+          flush=True)
+
+
 def build_review_batch(sources, out_dir: Path | str, *, n: int = 50,
-                       classifier=None) -> dict:
+                       classifier=None, cache_dir: Path | str | None = None,
+                       progress="default") -> dict:
     """Analyse every source, select a diverse high-gain batch, and write a
     Review-Mode-ready folder: ``frames/`` + ``labels.json`` (unreviewed) +
     ``calibration.json`` (merged) + ``manifest.json`` + ``REVIEW_BATCH.md``.
 
     `sources` is an iterable of ``(frames_dir, calibration_path, tag)``. The
     detector/classifier/thresholds are used read-only and never modified.
+
+    The expensive scan is cached per frame under ``cache_dir`` (default
+    ``out_dir/.cache``): the first pass checkpoints every frame, so a re-run or a
+    resume-after-interrupt reuses completed work. Pass ``progress=None`` to
+    silence per-frame reporting.
     """
     out = Path(out_dir)
     frames_out = out / "frames"
     frames_out.mkdir(parents=True, exist_ok=True)
+    cache_dir = Path(cache_dir) if cache_dir is not None else out / ".cache"
+    prog = _default_progress if progress == "default" else progress
 
     merged_cal = WeakeningCalibration()
     all_infos: list[FrameInfo] = []
@@ -304,7 +410,8 @@ def build_review_batch(sources, out_dir: Path | str, *, n: int = 50,
         cal = WeakeningCalibration.load(calib_path) if calib_path and Path(calib_path).exists() else None
         if cal is not None:
             _merge_calibration(merged_cal, cal)
-        all_infos.extend(analyze(frames_dir, classifier=classifier, calibration=cal, source=tag))
+        all_infos.extend(analyze(frames_dir, classifier=classifier, calibration=cal,
+                                 source=tag, cache_dir=cache_dir, progress=prog))
 
     n_clusters = cluster(all_infos)
     picked = select_batch(all_infos, n=n)
@@ -412,11 +519,18 @@ def _main(argv=None) -> int:
     parser.add_argument("--tag", default="corpus")
     parser.add_argument("--n", type=int, default=50)
     parser.add_argument("--out", default="tests/forge_assets/review_batch_001")
+    parser.add_argument("--cache-dir", default=None,
+                        help="per-frame cache/checkpoint dir (default: <out>/.cache). "
+                             "Re-running reuses it and resumes after an interrupt.")
+    parser.add_argument("--no-progress", action="store_true")
     args = parser.parse_args(argv)
+    t0 = time.perf_counter()
     manifest = build_review_batch(
-        [(args.frames_dir, args.calibration, args.tag)], args.out, n=args.n)
+        [(args.frames_dir, args.calibration, args.tag)], args.out, n=args.n,
+        cache_dir=args.cache_dir, progress=(None if args.no_progress else "default"))
     print(f"selected {manifest['selected']}/{manifest['requested']} "
-          f"from {manifest['corpus_frames']} frames -> {args.out}")
+          f"from {manifest['corpus_frames']} frames in {time.perf_counter() - t0:.1f}s "
+          f"-> {args.out}")
     return 0
 
 

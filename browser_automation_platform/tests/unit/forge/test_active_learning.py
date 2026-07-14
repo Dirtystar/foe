@@ -103,3 +103,85 @@ def test_thresholds_unchanged_readonly_guard():
     from bap.forge.detection.scan import MIN_PCT_SIM
     assert BadgeDetector()._threshold == 0.62
     assert MIN_PCT_SIM == 0.62
+
+
+# --- fast analysis mode -------------------------------------------------------
+
+_GRADING = Path(__file__).resolve().parents[3] / "tests" / "forge_assets" / "grading"
+
+
+@pytest.mark.skipif(not (_GRADING / "labels.json").exists(), reason="grading set missing")
+def test_fast_features_match_build_scan_exactly():
+    # The lean fast path must produce byte-identical ranking features to the full
+    # build_scan pipeline (it only skips OCR/panel/select, which feed no factor).
+    from bap.forge.detection.active_learning import _classify_uncertainty, _frame_core, _NEAR
+    from bap.forge.detection.calibration import WeakeningCalibration
+    from bap.forge.detection.detector import BadgeDetector
+    from bap.forge.detection.geometry import CaptureGeometry, derive_rois
+    from bap.forge.detection.scan import MIN_PCT_SIM, build_scan
+
+    cal = WeakeningCalibration.load(_GRADING / "calibration.json")
+    det = BadgeDetector()
+    img = cv2.imread(str(_GRADING / "frames" / "frame_000070.png"))
+    rois = derive_rois(CaptureGeometry.from_image(img), cal)
+    scan = build_scan(img, detector=det, classifier=None, rois=rois)
+    unc, unk = _classify_uncertainty(scan.classify_diag)
+    core = _frame_core(img, rois, det, None)
+    assert core["counts"] == scan.counts
+    assert core["factors_abs"]["unknown_pct"] == unk
+    assert core["factors_abs"]["uncertain"] == unc
+    assert core["factors_abs"]["candidates"] == scan.counts["stage1_candidates"]
+
+
+def _mini_corpus(tmp_path):
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    for i, col in enumerate([(20, 40, 60), (60, 40, 20), (10, 100, 10)]):
+        cv2.imwrite(str(frames / f"f{i}.png"), np.full((80, 120, 3), col, np.uint8))
+    from bap.core.domain.models import Rect
+    from bap.forge.detection.calibration import WeakeningCalibration
+    cal = WeakeningCalibration(path=tmp_path / "calibration.json")
+    cal.set(120, 80, Rect(2, 2, 20, 10))
+    return frames, WeakeningCalibration.load(tmp_path / "calibration.json")
+
+
+def test_cache_hit_and_no_cache_produce_identical_features(tmp_path):
+    from bap.forge.detection.active_learning import analyze
+    frames, cal = _mini_corpus(tmp_path)
+    nocache = analyze(frames, calibration=cal)
+    cold = analyze(frames, calibration=cal, cache_dir=tmp_path / "c")   # writes cache
+    warm = analyze(frames, calibration=cal, cache_dir=tmp_path / "c")   # reads cache
+    # Cache files were written (checkpoints), and features round-trip exactly.
+    assert list((tmp_path / "c").glob("*.json"))
+    for a, b, c in zip(nocache, cold, warm):
+        assert a.counts == b.counts == c.counts
+        assert a.factors == b.factors == c.factors
+        assert np.allclose(a.descriptor, c.descriptor) and np.array_equal(a.bg, c.bg)
+
+
+def test_resume_recomputes_only_missing_frames(tmp_path):
+    from bap.forge.detection.active_learning import analyze
+    frames, cal = _mini_corpus(tmp_path)
+    cache = tmp_path / "c"
+    analyze(frames, calibration=cal, cache_dir=cache)          # full run
+    done = sorted(p.name for p in cache.glob("*.json"))
+    (cache / done[0]).unlink()                                  # simulate an interrupt
+    seen = []
+    analyze(frames, calibration=cal, cache_dir=cache,
+            progress=lambda i, n, f, cached, e: seen.append(cached))
+    # Exactly one frame was recomputed (cached=False); the rest resumed from cache.
+    assert seen.count(False) == 1 and seen.count(True) == 2
+
+
+def test_progress_reports_scan_then_cache(tmp_path):
+    from bap.forge.detection.active_learning import analyze
+    frames, cal = _mini_corpus(tmp_path)
+    cache = tmp_path / "c"
+    first = []
+    analyze(frames, calibration=cal, cache_dir=cache,
+            progress=lambda i, n, f, cached, e: first.append(cached))
+    assert first == [False, False, False]      # cold: all scanned
+    second = []
+    analyze(frames, calibration=cal, cache_dir=cache,
+            progress=lambda i, n, f, cached, e: second.append(cached))
+    assert second == [True, True, True]        # warm: all from cache
