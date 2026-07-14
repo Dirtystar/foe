@@ -40,11 +40,13 @@ OBSERVE_ONLY_BANNER = "OBSERVE ONLY — NO CLICK PERFORMED"
 
 # A percentage guess is only accepted when the nearest-exemplar cosine similarity
 # clears this bar; below it the badge stays UNKNOWN with a recorded reason rather
-# than being silently treated as a valid percentage. Raised 0.55 -> 0.62 after the
-# live review: 0.62 eliminates the only wrong-accepted percentage in the dataset
-# at no cost to the correct count, keeping UNKNOWN strictly safer than a wrong read
-# (see LIVE_VISION_REPORT.md).
-MIN_PCT_SIM = 0.62
+# than being silently treated as a valid percentage. Raised over time as the
+# reviewed exemplar bank grew: 0.55 -> 0.62 (live review) -> 0.70 (review_batch_002).
+# 0.70 is the lowest value that keeps wrong-accepted percentages at ZERO on the full
+# reviewed corpus; the larger, more diverse bank otherwise admits 20<->60 / 60<->100
+# confusions at ~0.62-0.69. UNKNOWN stays strictly safer than a wrong read
+# (see RETRAIN_STATUS.md for the sweep).
+MIN_PCT_SIM = 0.70
 # The province-detail panel is reported open only when the fixed pill spot both
 # scores as an emblem AND classifies as a confident percentage — a bare emblem
 # score at a fixed point is not evidence the panel is open (it false-positived on

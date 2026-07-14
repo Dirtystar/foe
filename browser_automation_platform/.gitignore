@@ -7,3 +7,6 @@ dist/
 .buildvenv/
 packaging/windows/Output/
 *.spec.bak
+
+# Active-learning per-frame checkpoint cache (generated)
+tests/forge_assets/**/.cache/

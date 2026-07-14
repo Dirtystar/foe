@@ -4,33 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — Forge: review_batch_002 wiring + dedup (retrain-ready)
+## [Unreleased] — Forge: retrain on all reviewed datasets (review_batch_002)
 
-The requested retrain over grading + live_review + review_batch_002 is blocked:
-**review_batch_002 is not in the repository** (missing dir, no labels, no git
-history — the reviewed batch was not pushed). Rather than fabricate data or ship a
-misleading retrain, this makes review_batch_002 a first-class source that is used
-automatically the instant it lands, and records the honest pre-batch baseline.
-Observe-only; no architecture redesigned. See `tests/forge_assets/RETRAIN_STATUS.md`.
+Retrain + re-evaluate the pipeline on grading + live_review + review_batch_002
+(66 unique frames, 156 badges), frame-grouped LOFO, per source + combined.
+Observe-only; detector/GUI/World Manager/OCR/weakening/runtime unchanged. Full
+write-up in `tests/forge_assets/RETRAIN_REPORT.md`.
 
 ### Added
 
-- `detection.dataset`: `REVIEW_BATCH_2_DIR` + `load_review_batch()` (guarded — an
-  empty list while absent). `load_all()` now includes it and **de-duplicates by
-  image content** (a frame reviewed in more than one root is counted once; the
-  later reviewed source's labels win).
+- `detection.dataset`: `REVIEW_BATCH_2_DIR` + `load_review_batch()` (guarded), and
+  `load_all()` now **de-duplicates by image content** (a frame reviewed in more
+  than one root counts once; the reviewed source's labels win).
 - `classify.default_label_sources()`: single source of truth for the reviewed
-  label sets (grading, live_review, review_batch_002); the bundled classifier and
-  `live_eval` both use it, so review_batch_002 joins training/eval automatically.
-- `RETRAIN_STATUS.md`: blocker evidence, pre-batch baseline, and the one-step
-  completion once the data is pushed.
+  label sets, so review_batch_002 joins the bundled classifier and `live_eval`
+  automatically. `live_eval` reports review_batch_002 as its own group.
+- `RETRAIN_REPORT.md` + annotated examples under `review_batch_002/annotated/`
+  (biggest improvement, still-failing, hardest negative, clean no-badge negative).
 
-### Fixed
+### Changed
 
-- **Leakage: the two live_review H frames are byte-identical.** Content dedup in
-  `load_all()` collapses them, so the combined corpus is 17 unique frames and the
-  earlier "live-H classified 4/4" (LOFO using an identical twin) is corrected to
-  UNKNOWN — a truer number. `wrong-accepted percentage stays 0` on every set.
+- **Classifier retrained** from all reviewed data — percentage-classification
+  coverage rose from 0 → 26/124 on the new batch frames (combined correct 6 → 37).
+- **`MIN_PCT_SIM` raised 0.62 → 0.70** — the lowest bar that keeps **wrong-accepted
+  percentage = 0** across the full corpus (the larger bank admits 20↔60 / 60↔100
+  confusions at 0.62). A raise = strictly safer; UNKNOWN over a wrong read.
+
+### Fixed / notes
+
+- **Leakage:** the two live_review H frames are byte-identical; content dedup
+  collapses them, correcting the earlier "live-H 4/4" (LOFO on an identical twin)
+  to honest UNKNOWN. The 6 intentional no-badge negatives are now loaded (marked
+  reviewed) and count toward FP measurement. Committed active-learning `.cache/`
+  untracked + git-ignored. Gaps: **80% has no examples** (unclassifiable), 40% is
+  0/8; detector precision on hard red-terrain negatives (~1.3 FP/frame) is the
+  unchanged detector's ceiling.
 
 ## [Unreleased] — Forge active-learning: fast analysis mode
 

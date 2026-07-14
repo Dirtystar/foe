@@ -98,11 +98,13 @@ def test_build_review_batch_is_review_mode_ready(tmp_path):
 
 
 def test_thresholds_unchanged_readonly_guard():
-    # Active learning must not have touched the models/thresholds.
+    # The active-learning selector must not touch the models/thresholds. The
+    # detector template threshold is 0.62; the classifier accept bar is 0.70
+    # (raised during the review_batch_002 retrain to keep wrong-accepted at 0).
     from bap.forge.detection.detector import BadgeDetector
     from bap.forge.detection.scan import MIN_PCT_SIM
     assert BadgeDetector()._threshold == 0.62
-    assert MIN_PCT_SIM == 0.62
+    assert MIN_PCT_SIM == 0.70
 
 
 # --- fast analysis mode -------------------------------------------------------

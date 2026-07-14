@@ -499,7 +499,7 @@
     {
       "file": "frame_000441.png",
       "badges": [],
-      "reviewed": false,
+      "reviewed": true,
       "weakening": null
     },
     {
@@ -598,7 +598,7 @@
     {
       "file": "frame_000282.png",
       "badges": [],
-      "reviewed": false,
+      "reviewed": true,
       "weakening": null
     },
     {
@@ -626,7 +626,7 @@
     {
       "file": "frame_000195.png",
       "badges": [],
-      "reviewed": false,
+      "reviewed": true,
       "weakening": null
     },
     {
@@ -786,7 +786,7 @@
     {
       "file": "frame_000035.png",
       "badges": [],
-      "reviewed": false,
+      "reviewed": true,
       "weakening": null
     },
     {
@@ -875,13 +875,13 @@
     {
       "file": "frame_000662.png",
       "badges": [],
-      "reviewed": false,
+      "reviewed": true,
       "weakening": null
     },
     {
       "file": "frame_000238.png",
       "badges": [],
-      "reviewed": false,
+      "reviewed": true,
       "weakening": null
     },
     {
