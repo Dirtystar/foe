@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -25,6 +26,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -99,54 +102,145 @@ class MainWindow(QMainWindow):
     # --- construction -------------------------------------------------------
 
     def _build_ui(self) -> None:
-        tabs = QTabWidget()
-        monitor = QWidget()
-        layout = QVBoxLayout(monitor)
-
-        controls = QHBoxLayout()
-        self.start_button = QPushButton("Start")
-        self.stop_button = QPushButton("Stop")
-        self.tick_button = QPushButton("Tick once")
-        self.state_label = QLabel("stopped")
-        self.state_label.setObjectName("stateLabel")
-        for widget in (self.start_button, self.stop_button, self.tick_button):
-            controls.addWidget(widget)
-        controls.addStretch(1)
-        controls.addWidget(QLabel("Status:"))
-        self.status_label = QLabel("stopped")
-        self.status_label.setObjectName("statusLabel")
-        controls.addWidget(self.status_label)
-        controls.addWidget(QLabel("Runtime:"))
-        controls.addWidget(self.state_label)
-        layout.addLayout(controls)
-
+        # Widgets are created once (shared across shells) so every existing
+        # attribute, signal, and handler is preserved; only their arrangement and
+        # styling change (Milestone 4.8 — presentation only).
+        self._build_runtime_controls()
+        self._build_activity_widgets()
         if self._forge:
-            layout.addWidget(self._build_forge_panel())
-        elif self._attended:
-            layout.addWidget(self._build_attended_panel())
+            self.setCentralWidget(self._build_forge_shell())
+        else:
+            self.setCentralWidget(self._build_classic_shell())
 
-        # In Forge mode the runtime unit is a World, not a generic Profile
-        # (profile_id stays internal). Relabel the activity table accordingly.
+        self.start_button.clicked.connect(self._on_start_clicked)
+        self.stop_button.clicked.connect(self._on_stop_clicked)
+        self.tick_button.clicked.connect(self._on_tick_clicked)
+
+    def _build_runtime_controls(self) -> None:
+        self.start_button = QPushButton("Start"); self.start_button.setProperty("primary", True)
+        self.stop_button = QPushButton("Stop"); self.stop_button.setProperty("danger", True)
+        self.tick_button = QPushButton("Tick once")
+        self.state_label = QLabel("stopped"); self.state_label.setObjectName("stateLabel")
+        self.status_label = QLabel("stopped"); self.status_label.setObjectName("statusLabel")
+
+    def _build_activity_widgets(self) -> None:
+        # In Forge mode the runtime unit is a World, not a generic Profile.
         columns = ["World" if c == "Profile" else c for c in _COLUMNS] if self._forge else _COLUMNS
         self.table = QTableWidget(0, len(columns))
         self.table.setHorizontalHeaderLabels(columns)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        layout.addWidget(self.table, stretch=2)
-
+        self.table.setAlternatingRowColors(True)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(1000)  # bounded live stream
-        layout.addWidget(self.log, stretch=1)
 
+    # --- classic shell (generic monitor / attended mode) --------------------
+
+    def _build_classic_shell(self) -> QWidget:
+        tabs = QTabWidget()
+        monitor = QWidget()
+        layout = QVBoxLayout(monitor)
+        controls = QHBoxLayout()
+        for widget in (self.start_button, self.stop_button, self.tick_button):
+            controls.addWidget(widget)
+        controls.addStretch(1)
+        controls.addWidget(QLabel("Status:")); controls.addWidget(self.status_label)
+        controls.addWidget(QLabel("Runtime:")); controls.addWidget(self.state_label)
+        layout.addLayout(controls)
+        if self._attended:
+            layout.addWidget(self._build_attended_panel())
+        layout.addWidget(self.table, stretch=2)
+        layout.addWidget(self.log, stretch=1)
         tabs.addTab(monitor, "Monitor")
         if self.dashboard is not None:
             tabs.addTab(self.dashboard, "Dashboard")
-        self.setCentralWidget(tabs)
+        return tabs
 
-        self.start_button.clicked.connect(self._on_start_clicked)
-        self.stop_button.clicked.connect(self._on_stop_clicked)
-        self.tick_button.clicked.connect(self._on_tick_clicked)
+    # --- Forge desktop shell (nav rail + toolbar + pages + footer) ----------
+
+    def _build_forge_shell(self) -> QWidget:
+        from bap.gui import widgets
+
+        root = QWidget(); root.setObjectName("appRoot")
+        v = QVBoxLayout(root); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(0)
+        v.addWidget(self._build_title_bar())
+
+        body = QHBoxLayout(); body.setContentsMargins(0, 0, 0, 0); body.setSpacing(0)
+        self._nav = widgets.NavRail()
+        self._nav.add_header("Overview")
+        for key, label, ic in (("dashboard", "Dashboard", "compass"), ("worlds", "Worlds", "shield"),
+                               ("vision", "Vision", "eye"), ("review", "Review", "quill"),
+                               ("datasets", "Datasets", "datasets"), ("reports", "Reports", "report")):
+            self._nav.add_section(key, label, ic)
+        self._nav.add_header("System")
+        self._nav.add_section("settings", "Settings", "gear")
+        self._nav.section_changed.connect(self._show_page)
+        body.addWidget(self._nav)
+
+        self._stack = QStackedWidget()
+        self._pages: dict[str, int] = {}
+        for key, builder in (("dashboard", self._build_dashboard_page),
+                             ("worlds", self._build_worlds_page),
+                             ("vision", self._build_vision_page),
+                             ("review", self._build_review_page),
+                             ("datasets", self._build_datasets_page),
+                             ("reports", self._build_reports_page),
+                             ("settings", self._build_settings_page)):
+            self._pages[key] = self._stack.addWidget(self._scrolled(builder()))
+        body.addWidget(self._stack, stretch=1)
+        v.addLayout(body, stretch=1)
+
+        v.addWidget(self._build_footer())
+        # Populate now that every page's widgets exist. The tab pickers refresh
+        # the Test Scan combo, which lives on the Vision page, so this must run
+        # after all pages are built — hence here rather than in a page builder.
+        self._refresh_worlds_table()
+        self._rebuild_pickers()
+        self._nav.select("dashboard")
+        self._refresh_dashboard()
+        return root
+
+    def _scrolled(self, inner: QWidget) -> QWidget:
+        area = QScrollArea(); area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame); area.setObjectName("page")
+        area.setWidget(inner)
+        return area
+
+    def _show_page(self, key: str) -> None:
+        if key in getattr(self, "_pages", {}):
+            self._stack.setCurrentIndex(self._pages[key])
+
+    def _build_title_bar(self) -> QWidget:
+        from bap.gui import icons, widgets
+
+        bar = QFrame(); bar.setObjectName("titleBar"); bar.setFixedHeight(46)
+        h = QHBoxLayout(bar); h.setContentsMargins(16, 0, 16, 0); h.setSpacing(10)
+        mark = QLabel(); mark.setPixmap(icons.icon("shield", stroke="#C89B5E", size=22).pixmap(22, 22))
+        h.addWidget(mark)
+        h.addWidget(widgets.display_title("Forge Assistant"))
+        sub = widgets.muted("· Vision Console"); h.addWidget(sub)
+        h.addStretch(1)
+        self._safety_chip = QLabel("OBSERVE ONLY · read-only")
+        self._safety_chip.setStyleSheet("color:#5FB98A; font-size:12px; font-weight:600;")
+        h.addWidget(self._safety_chip)
+        return bar
+
+    def _build_footer(self) -> QWidget:
+        bar = QFrame(); bar.setObjectName("footerBar"); bar.setFixedHeight(30)
+        h = QHBoxLayout(bar); h.setContentsMargins(16, 0, 16, 0); h.setSpacing(14)
+        obs = QLabel("● OBSERVE ONLY — NO CLICK PERFORMED")
+        obs.setStyleSheet("color:#5FB98A; font-weight:700; font-size:11px;")
+        h.addWidget(obs)
+        h.addStretch(1)
+        self._footer_status = QLabel("")
+        self._footer_status.setStyleSheet("color:#9C93A6; font-size:11px;")
+        h.addWidget(self._footer_status)
+        sep = QLabel("·"); sep.setStyleSheet("color:#6E6678;"); h.addWidget(sep)
+        base = QLabel("baseline forge-m4-stable")
+        base.setStyleSheet("color:#6E6678; font-size:11px;")
+        h.addWidget(base)
+        return bar
 
     def _build_menu(self) -> None:
         # Non-developer entry points: install the browser, export diagnostics,
@@ -246,12 +340,63 @@ class MainWindow(QMainWindow):
 
     _WORLD_COLS = ["Alias", "Server", "Cadence", "Max weakening", "Allowed %", "Rules", "Actions"]
 
-    def _build_forge_panel(self) -> QGroupBox:
+    # Each nav section is one page. The widgets, signal wiring, and handlers are
+    # identical to the previous single-panel layout — only their arrangement into
+    # cards/pages changes (Milestone 4.8 — presentation only). Populating refresh
+    # calls run once in `_build_forge_shell` after every page's widgets exist.
+
+    def _build_dashboard_page(self) -> QWidget:
+        """Overview: KPI tiles, runtime controls, live activity table and log."""
+        from bap.gui import widgets
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(20, 18, 20, 18)
+        v.setSpacing(14)
+        v.addWidget(widgets.display_title("Dashboard"))
+        v.addWidget(widgets.muted("Observe-only overview of your worlds and the vision pipeline."))
+
+        kpis = QHBoxLayout()
+        kpis.setSpacing(12)
+        self._kpi_worlds = widgets.StatTile("Worlds", "0", "configured", accent="bronze", icon_name="world")
+        self._kpi_attached = widgets.StatTile("Attached", "0", "live tabs", accent="green", icon_name="check")
+        self._kpi_browser = widgets.StatTile("Browser", "Closed", "chromium", accent="blue", icon_name="power")
+        self._kpi_runtime = widgets.StatTile("Runtime", "Stopped", "capture loop", accent="amber", icon_name="chart")
+        for tile in (self._kpi_worlds, self._kpi_attached, self._kpi_browser, self._kpi_runtime):
+            kpis.addWidget(tile, 1)
+        v.addLayout(kpis)
+
+        controls = widgets.Card("Runtime", "capture only — nothing is clicked")
+        crow = QHBoxLayout()
+        crow.setSpacing(8)
+        for widget in (self.start_button, self.stop_button, self.tick_button):
+            crow.addWidget(widget)
+        crow.addStretch(1)
+        crow.addWidget(widgets.muted("Status:")); crow.addWidget(self.status_label)
+        crow.addWidget(widgets.muted("Runtime:")); crow.addWidget(self.state_label)
+        controls.body.addLayout(crow)
+        v.addWidget(controls)
+
+        activity = widgets.Card("World activity", "live capture reports")
+        activity.body.addWidget(self.table)
+        v.addWidget(activity, stretch=2)
+
+        logcard = widgets.Card("Live log")
+        logcard.body.addWidget(self.log)
+        v.addWidget(logcard, stretch=1)
+        return page
+
+    def _build_worlds_page(self) -> QWidget:
         """The World Manager: persistent worlds, explicit browser lifecycle, and
         hostname reattachment. Worlds can be added/edited/removed live (no
         restart); each world gets a tab picker the moment it exists."""
-        box = QGroupBox("Worlds")
-        outer = QVBoxLayout(box)
+        from bap.gui import widgets
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(20, 18, 20, 18)
+        v.setSpacing(14)
+        v.addWidget(widgets.display_title("Worlds"))
 
         # P0-6: never let the user assume automation exists. This mode only
         # captures screenshots — no rules, no actions, nothing is clicked.
@@ -261,9 +406,10 @@ class MainWindow(QMainWindow):
         )
         self.forge_status.setObjectName("forgeStatus")
         self.forge_status.setWordWrap(True)
-        self.forge_status.setStyleSheet("font-weight: bold; color: #b06a00;")
-        outer.addWidget(self.forge_status)
+        self.forge_status.setStyleSheet("font-weight: bold; color: #E0B454;")
+        v.addWidget(self.forge_status)
 
+        browser = widgets.Card("Browser", "open Chromium, log in, then reattach")
         row = QHBoxLayout()
         self.open_browser_button = QPushButton("Open Browser")
         self.close_browser_button = QPushButton("Close Browser")
@@ -276,57 +422,40 @@ class MainWindow(QMainWindow):
             row.addWidget(widget)
         row.addWidget(self.attended_hint)
         row.addStretch(1)
-        outer.addLayout(row)
+        browser.body.addLayout(row)
+        v.addWidget(browser)
 
+        manager = widgets.Card("World Manager", "add, edit, and reattach worlds live")
         self.worlds_table = QTableWidget(0, len(self._WORLD_COLS))
         self.worlds_table.setHorizontalHeaderLabels(self._WORLD_COLS)
         self.worlds_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.worlds_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.worlds_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.worlds_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.worlds_table.setAlternatingRowColors(True)
         self.worlds_table.itemSelectionChanged.connect(self._on_world_selection_changed)
-        outer.addWidget(self.worlds_table)
+        manager.body.addWidget(self.worlds_table)
 
         crud = QHBoxLayout()
         self.add_world_button = QPushButton("Add World…")
+        self.add_world_button.setProperty("primary", True)
         self.edit_world_button = QPushButton("Edit…")
         self.remove_world_button = QPushButton("Remove")
+        self.remove_world_button.setProperty("danger", True)
         self.edit_world_button.setEnabled(False)
         self.remove_world_button.setEnabled(False)
         for widget in (self.add_world_button, self.edit_world_button, self.remove_world_button):
             crud.addWidget(widget)
         crud.addStretch(1)
-        outer.addLayout(crud)
-
-        # Test Scan (observe-only): an EXPLICIT World selector — the scan always
-        # runs against the chosen World, never implicitly the first one. Live and
-        # offline are separate actions; the file picker is never an implicit
-        # fallback for a broken live mapping.
-        scan_row = QHBoxLayout()
-        scan_row.addWidget(QLabel("Test Scan World:"))
-        self.test_scan_combo = QComboBox()
-        self.test_scan_combo.currentIndexChanged.connect(self._on_test_scan_world_changed)
-        scan_row.addWidget(self.test_scan_combo)
-        self.test_scan_live_button = QPushButton("Test Scan Live World")
-        self.test_scan_live_button.clicked.connect(self._on_test_scan_live)
-        self.scan_all_button = QPushButton("Scan All Attached Worlds")
-        self.scan_all_button.clicked.connect(self._on_scan_all)
-        self.open_offline_button = QPushButton("Open Offline Screenshot…")
-        self.open_offline_button.clicked.connect(self._on_open_offline)
-        for widget in (self.test_scan_live_button, self.scan_all_button, self.open_offline_button):
-            scan_row.addWidget(widget)
-        scan_row.addStretch(1)
-        outer.addLayout(scan_row)
-
-        self.test_scan_target_label = QLabel("")
-        self.test_scan_target_label.setObjectName("testScanTarget")
-        self.test_scan_target_label.setWordWrap(True)
-        outer.addWidget(self.test_scan_target_label)
+        manager.body.addLayout(crud)
+        v.addWidget(manager, stretch=1)
 
         # Per-world tab pickers live in a rebuildable form so add/remove updates
         # the picker set immediately, with no restart.
+        pickers = widgets.Card("Tab assignment", "match each world to an open tab")
         self._pickers_form = QFormLayout()
-        outer.addLayout(self._pickers_form)
+        pickers.body.addLayout(self._pickers_form)
+        v.addWidget(pickers)
 
         self.open_browser_button.clicked.connect(self._on_open_browser_clicked)
         self.close_browser_button.clicked.connect(self._on_close_browser_clicked)
@@ -334,10 +463,145 @@ class MainWindow(QMainWindow):
         self.add_world_button.clicked.connect(self._on_add_world)
         self.edit_world_button.clicked.connect(self._on_edit_world)
         self.remove_world_button.clicked.connect(self._on_remove_world)
-        self._refresh_worlds_table()
-        self._rebuild_pickers()
-        self._refresh_test_scan_combo()
-        return box
+        return page
+
+    def _build_vision_page(self) -> QWidget:
+        """Test Scan (observe-only): an EXPLICIT World selector — the scan always
+        runs against the chosen World, never implicitly the first one. Live and
+        offline are separate actions; the file picker is never an implicit
+        fallback for a broken live mapping."""
+        from bap.gui import widgets
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(20, 18, 20, 18)
+        v.setSpacing(14)
+        v.addWidget(widgets.display_title("Vision"))
+        v.addWidget(widgets.muted(
+            "Observe-only capture and detection. Test Scan runs against the "
+            "explicitly selected world — never implicitly the first one."
+        ))
+
+        scan = widgets.Card("Test Scan", "capture and inspect — never clicks")
+        picker_row = QHBoxLayout()
+        picker_row.addWidget(widgets.muted("Test Scan World:"))
+        self.test_scan_combo = QComboBox()
+        self.test_scan_combo.currentIndexChanged.connect(self._on_test_scan_world_changed)
+        picker_row.addWidget(self.test_scan_combo)
+        picker_row.addStretch(1)
+        scan.body.addLayout(picker_row)
+
+        btn_row = QHBoxLayout()
+        self.test_scan_live_button = QPushButton("Test Scan Live World")
+        self.test_scan_live_button.setProperty("primary", True)
+        self.test_scan_live_button.clicked.connect(self._on_test_scan_live)
+        self.scan_all_button = QPushButton("Scan All Attached Worlds")
+        self.scan_all_button.clicked.connect(self._on_scan_all)
+        self.open_offline_button = QPushButton("Open Offline Screenshot…")
+        self.open_offline_button.clicked.connect(self._on_open_offline)
+        for widget in (self.test_scan_live_button, self.scan_all_button, self.open_offline_button):
+            btn_row.addWidget(widget)
+        btn_row.addStretch(1)
+        scan.body.addLayout(btn_row)
+
+        self.test_scan_target_label = QLabel("")
+        self.test_scan_target_label.setObjectName("testScanTarget")
+        self.test_scan_target_label.setWordWrap(True)
+        scan.body.addWidget(self.test_scan_target_label)
+        v.addWidget(scan)
+        v.addStretch(1)
+        return page
+
+    def _build_review_page(self) -> QWidget:
+        return self._build_info_page(
+            "Review",
+            "Grade captured detections to improve the vision pipeline.",
+            [("Review Mode", "Live and historical detections are graded in the Review "
+              "window, which opens from a Test Scan or Scan All result. Reviewing is "
+              "observe-only and never changes a world's live tab assignment.")],
+        )
+
+    def _build_datasets_page(self) -> QWidget:
+        return self._build_info_page(
+            "Datasets",
+            "Labelled capture datasets and vision reports.",
+            [("Where datasets live", "Graded frames and vision reports are stored under "
+              "the data folder (Settings → Open data folder). Scan All writes per-world "
+              "artifacts you can revisit and label.")],
+        )
+
+    def _build_reports_page(self) -> QWidget:
+        return self._build_info_page(
+            "Reports",
+            "Diagnostics and evaluation output.",
+            [("Diagnostics", "Export a diagnostics bundle from Settings to capture the "
+              "current environment and recent logs for troubleshooting — no gameplay "
+              "data leaves the machine unless you share the bundle.")],
+        )
+
+    def _build_settings_page(self) -> QWidget:
+        """Non-developer entry points, mirroring the Tools menu as buttons."""
+        from bap.gui import widgets
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(20, 18, 20, 18)
+        v.setSpacing(14)
+        v.addWidget(widgets.display_title("Settings"))
+        v.addWidget(widgets.muted("Setup and maintenance — the same actions as the Tools menu."))
+
+        setup = widgets.Card("Setup", "one-time and on-demand tasks")
+        srow = QHBoxLayout()
+        install_btn = QPushButton("Install browser…"); install_btn.clicked.connect(self._install_browser)
+        first_run_btn = QPushButton("Run first-run setup…"); first_run_btn.clicked.connect(self._run_first_run)
+        srow.addWidget(install_btn); srow.addWidget(first_run_btn); srow.addStretch(1)
+        setup.body.addLayout(srow)
+        v.addWidget(setup)
+
+        maint = widgets.Card("Maintenance", "diagnostics and data")
+        mrow = QHBoxLayout()
+        diag_btn = QPushButton("Export diagnostics…"); diag_btn.clicked.connect(self._export_diagnostics)
+        data_btn = QPushButton("Open data folder"); data_btn.clicked.connect(self._open_data_folder)
+        mrow.addWidget(diag_btn); mrow.addWidget(data_btn); mrow.addStretch(1)
+        maint.body.addLayout(mrow)
+        v.addWidget(maint)
+        v.addStretch(1)
+        return page
+
+    def _build_info_page(self, title: str, subtitle: str, cards) -> QWidget:
+        """A simple read-only page: a display title, a subtitle, and one or more
+        informational cards. Used for sections whose actions live in dedicated
+        windows launched from existing flows."""
+        from bap.gui import widgets
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(20, 18, 20, 18)
+        v.setSpacing(14)
+        v.addWidget(widgets.display_title(title))
+        v.addWidget(widgets.muted(subtitle))
+        for card_title, body in cards:
+            card = widgets.Card(card_title)
+            label = QLabel(body)
+            label.setWordWrap(True)
+            label.setProperty("role", "muted")
+            card.body.addWidget(label)
+            v.addWidget(card)
+        v.addStretch(1)
+        return page
+
+    def _refresh_dashboard(self) -> None:
+        """Update the Dashboard KPI tiles from currently available, honest state
+        (world/attachment counts, browser and runtime state). No fabricated
+        metrics — presentation only over what the app already knows."""
+        if not hasattr(self, "_kpi_worlds"):
+            return
+        worlds = self._world_aliases()
+        attached = self._attached_aliases()
+        self._kpi_worlds.set_value(str(len(worlds)), "configured")
+        self._kpi_attached.set_value(str(len(attached)), "live tabs")
+        self._kpi_browser.set_value("Open" if self._browser_open else "Closed", "chromium")
+        self._kpi_runtime.set_value("Running" if self._running else "Stopped", "capture loop")
 
     def _current_test_scan_alias(self) -> str | None:
         """The World explicitly chosen for Test Scan — never the first by
@@ -635,6 +899,7 @@ class MainWindow(QMainWindow):
         self.attended_hint.setText("Browser closed. Open it again to reconnect your worlds.")
         self._append_log("Browser closed.")
         self._refresh_test_scan_combo()
+        self._refresh_dashboard()
 
     def _on_forge_tabs_scanned(self, tabs) -> None:
         """Remember the scan (also used to prefill Add World), then auto-reattach
@@ -683,6 +948,7 @@ class MainWindow(QMainWindow):
         self.attended_hint.setText("Open your pages, then Scan.")
         self._append_log("Browser open. Open your pages, then Scan.")
         self._refresh_test_scan_combo()
+        self._refresh_dashboard()
 
     def _on_scan_clicked(self) -> None:
         self._append_log("Scanning open tabs…")
@@ -810,6 +1076,7 @@ class MainWindow(QMainWindow):
         self._running = state == "running"
         self.stop_button.setEnabled(self._running)
         self._update_start_gate()  # Start/Tick also respect the attended gate
+        self._refresh_dashboard()
 
     def _apply_status(self, status: str, reason: str) -> None:
         self.status_label.setText(status)

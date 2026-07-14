@@ -280,6 +280,13 @@ def run_gui(
             return 2
 
     qapp = QApplication.instance() or QApplication(sys.argv)
+    # Apply the desktop theme (presentation only; safe to call once at startup).
+    try:
+        from bap.gui.theme import apply_theme
+
+        apply_theme(qapp)
+    except Exception:  # never let theming block startup
+        logger.debug("theme not applied", exc_info=True)
     try:
         window = build_main_window(
             config, real=real, real_vision=real_vision, store_path=store_path,
@@ -288,7 +295,7 @@ def run_gui(
     except OperationalError as exc:
         logger.error("Startup aborted: %s", exc)
         return 2
-    window.resize(900, 600)
+    window.resize(1360, 860)
     window.show()
     if not exec_app:
         return 0

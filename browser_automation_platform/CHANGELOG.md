@@ -4,6 +4,36 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 4.8: professional desktop UI (presentation only)
+
+A presentation-only redesign of the Forge desktop UI. No behaviour, workflow, or
+feature changes: every widget, signal, and handler is preserved (full unit suite
+unchanged at 820 passed). Confined to `src/bap/gui/`; observe-only invariants and
+reversibility to tag `forge-m4-stable` are untouched. Original "cartographer" dark
+visual language — no third-party UI, icons, or assets are copied; all ornament is
+programmatic. See `docs/ui/MILESTONE_4_8_UI_SPEC.md`.
+
+### Added
+
+- `gui.theme`: semantic colour palette + a single application-wide QSS
+  (`apply_theme(app)`), applied once at startup in `run_gui`. Offscreen/unstyled
+  test runs are unaffected (the test QApplication is not themed).
+- `gui.icons`: an original line-icon set rendered programmatically to `QIcon`
+  (inline SVG, no raster assets); falls back to an empty icon if Qt SVG is missing.
+- `gui.widgets`: reusable presentation blocks — `Card`, `StatTile`, `StatusPill`,
+  `NavRail`, section/title/muted labels — behaviour-free, styled by object name.
+
+### Changed
+
+- **Forge MainWindow** rebuilt into a desktop nav-shell: title bar + navigation
+  rail (Dashboard / Worlds / Vision / Review / Datasets / Reports / Settings) +
+  stacked pages + observe-only footer. The World Manager, browser lifecycle, and
+  Test Scan move onto the Worlds/Vision pages with **identical widgets and signal
+  wiring**; the Dashboard adds KPI tiles over already-known state (world/attached
+  counts, browser/runtime state — no fabricated metrics). The generic/attended
+  monitor keeps its classic tabbed layout.
+- Startup window size raised 900×600 → 1360×860 to suit the desktop layout.
+
 ## [Unreleased] — Forge: retrain on all reviewed datasets (review_batch_002)
 
 Retrain + re-evaluate the pipeline on grading + live_review + review_batch_002
