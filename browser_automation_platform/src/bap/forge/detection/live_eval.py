@@ -33,6 +33,8 @@ from bap.forge.detection.scan import MIN_PCT_SIM
 def _group(sample: Sample) -> str:
     if sample.source == "live":
         return f"live-{sample.world or '?'}"
+    if sample.source == "review_batch_002":
+        return "review_batch_002"
     return "historical"
 
 
@@ -250,13 +252,13 @@ def evaluate_full_slice(samples, *, detector: BadgeDetector, min_sim: float = MI
 def run(detector: BadgeDetector | None = None, *, min_sim: float = MIN_PCT_SIM) -> dict:
     samples = load_all()
     detector = detector or BadgeDetector()
+    sources = sorted({s.source for s in samples})
+    counts = {"frames": len(samples), "badges": sum(len(s.badges) for s in samples)}
+    for src in sources:
+        counts[f"{src}_frames"] = sum(1 for s in samples if s.source == src)
+        counts[f"{src}_badges"] = sum(len(s.badges) for s in samples if s.source == src)
     return {
-        "counts": {
-            "historical_frames": sum(1 for s in samples if s.source == "historical"),
-            "live_frames": sum(1 for s in samples if s.source == "live"),
-            "historical_badges": sum(len(s.badges) for s in samples if s.source == "historical"),
-            "live_badges": sum(len(s.badges) for s in samples if s.source == "live"),
-        },
+        "counts": counts,
         "localization": {g: r.to_dict() for g, r in evaluate_localization(samples, detector).items()},
         "classification": {g: r.to_dict() for g, r in evaluate_classification(samples, min_sim=min_sim).items()},
         "full_slice": {g: r.to_dict() for g, r in

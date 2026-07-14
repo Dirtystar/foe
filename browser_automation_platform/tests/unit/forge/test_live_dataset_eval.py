@@ -14,12 +14,15 @@ import pytest
 np = pytest.importorskip("numpy")
 cv2 = pytest.importorskip("cv2")
 
+import json
+
 from bap.forge.detection.dataset import (
     HISTORICAL_DIR,
     LIVE_DIR,
     load_all,
     load_historical,
     load_live,
+    load_review_batch,
 )
 from bap.forge.detection.detector import BadgeDetector
 from bap.forge.detection.live_eval import (
@@ -61,6 +64,60 @@ def test_samples_carry_geometry_rois_badges_weakening():
     assert h.rois.battle_map.w > 1000
     assert h.weakening == 592
     assert any(b.pct == 20 for b in h.badges) and any(b.pct == 60 for b in h.badges)
+
+
+def test_review_batch_absent_is_clean_skip():
+    # review_batch_002 is not committed yet; the loader must skip it, not error,
+    # and load_all must still return only the present sources.
+    assert load_review_batch() == []
+    sources = {s.source for s in load_all()}
+    assert sources <= {"historical", "live", "review_batch_002"}
+    assert "review_batch_002" not in sources     # absent today
+
+
+def test_review_batch_included_when_present(tmp_path):
+    # A synthetic batch root is picked up by load_review_batch and tagged.
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    cv2.imwrite(str(frames / "H_x.png"), np.full((80, 120, 3), 40, np.uint8))
+    (tmp_path / "labels.json").write_text(json.dumps({"version": 1, "frames": [
+        {"file": "H_x.png", "badges": [{"cx": 30, "cy": 30, "pct": 20}], "reviewed": True}]}))
+    from bap.core.domain.models import Rect
+    from bap.forge.detection.calibration import WeakeningCalibration
+    WeakeningCalibration(path=tmp_path / "calibration.json").set(120, 80, Rect(2, 2, 20, 10))
+    samples = load_review_batch(tmp_path)
+    assert len(samples) == 1
+    assert samples[0].source == "review_batch_002" and samples[0].world == "H"
+    assert samples[0].badges[0].pct == 20
+
+
+def test_load_all_dedups_by_content_keeping_last(tmp_path, monkeypatch):
+    # A frame that appears in two roots (same bytes) is counted once, and the
+    # LATER (reviewed) source's labels win.
+    import bap.forge.detection.dataset as ds
+    from bap.core.domain.models import Rect
+    from bap.forge.detection.calibration import WeakeningCalibration
+
+    def make(root, pct):
+        (root / "frames").mkdir(parents=True)
+        # identical image bytes in both roots
+        cv2.imwrite(str(root / "frames" / "dup.png"), np.full((80, 120, 3), 7, np.uint8))
+        (root / "labels.json").write_text(json.dumps({"version": 1, "frames": [
+            {"file": "dup.png", "badges": [{"cx": 30, "cy": 30, "pct": pct}], "reviewed": True}]}))
+        WeakeningCalibration(path=root / "calibration.json").set(120, 80, Rect(2, 2, 20, 10))
+
+    a, b, empty = tmp_path / "grading", tmp_path / "batch", tmp_path / "live"
+    make(a, 20)
+    make(b, 60)
+    (empty / "frames").mkdir(parents=True)
+    (empty / "labels.json").write_text(json.dumps({"version": 1, "frames": []}))
+    # Make the two roots share identical bytes (copy a's frame into b).
+    import shutil
+    shutil.copy2(a / "frames" / "dup.png", b / "frames" / "dup.png")
+    samples = ds.load_all(historical=a, live=empty, review_batch=b)
+    # empty live -> no samples; dup collapsed to one, reviewed batch (60) wins.
+    assert len(samples) == 1
+    assert samples[0].badges[0].pct == 60 and samples[0].source == "review_batch_002"
 
 
 # --- live-set regression (fast: 3 frames) -------------------------------------

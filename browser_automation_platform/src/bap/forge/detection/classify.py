@@ -147,6 +147,23 @@ def train_from_labels(frames_dir, labels_path) -> PercentClassifier | None:
     return PercentClassifier().fit(examples) if examples else None
 
 
+def default_label_sources(assets_root) -> list[tuple]:
+    """The reviewed label sets that exist under ``assets_root`` — grading, live
+    review, and the reviewed active-learning batch — as ``(frames_dir,
+    labels_path)`` pairs. A source is included only when its labels.json is
+    present, so the reviewed batch joins automatically once it is pushed. Single
+    source of truth for both the bundled classifier and the retrain path."""
+    from pathlib import Path
+
+    root = Path(assets_root)
+    out = []
+    for name in ("grading", "live_review", "review_batch_002"):
+        base = root / name
+        if (base / "labels.json").exists():
+            out.append((base / "frames", base / "labels.json"))
+    return out
+
+
 def train_from_sources(sources) -> PercentClassifier | None:
     """Build one classifier from several reviewed label sets — used to fold the
     reviewed **live** crops in alongside the historical grading set, so live-scale
@@ -164,4 +181,4 @@ def train_from_sources(sources) -> PercentClassifier | None:
 
 
 __all__ = ["PercentClassifier", "percent_patch", "train_from_labels",
-           "train_from_sources", "vec_to_image"]
+           "train_from_sources", "default_label_sources", "vec_to_image"]

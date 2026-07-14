@@ -185,14 +185,10 @@ def _bundled_classifier():
     live-browser scans, so live-scale badges have same-scale exemplars. Returns
     None if nothing is reviewed (the debugger then shows detections without %)."""
     try:
-        from bap.forge.detection.classify import train_from_sources
+        from bap.forge.detection.classify import default_label_sources, train_from_sources
 
         root = Path(__file__).resolve().parents[2] / "tests" / "forge_assets"
-        sources = []
-        for name in ("grading", "live_review"):
-            base = root / name
-            if (base / "labels.json").exists():
-                sources.append((base / "frames", base / "labels.json"))
+        sources = default_label_sources(root)
         return train_from_sources(sources) if sources else None
     except Exception:
         return None

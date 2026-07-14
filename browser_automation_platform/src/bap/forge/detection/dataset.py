@@ -24,9 +24,12 @@ from bap.forge.detection.calibration import WeakeningCalibration
 from bap.forge.detection.geometry import CaptureGeometry, ScanRois, derive_rois
 from bap.forge.labeling.model import LabelStore
 
-# Canonical, non-overlapping dataset roots (relative to the repo's tests dir).
+# Canonical dataset roots (relative to the repo's tests dir).
 HISTORICAL_DIR = Path("tests/forge_assets/grading")
 LIVE_DIR = Path("tests/forge_assets/live_review")
+# Reviewed active-learning batch. Present only after the operator pushes their
+# corrected labels; loaders skip it cleanly while it is absent.
+REVIEW_BATCH_2_DIR = Path("tests/forge_assets/review_batch_002")
 
 
 @dataclass
@@ -104,11 +107,49 @@ def load_live(base: Path | str = LIVE_DIR) -> list[Sample]:
     return _load(Path(base), "live", world_from_name=True)
 
 
+def load_review_batch(base: Path | str = REVIEW_BATCH_2_DIR) -> list[Sample]:
+    """The reviewed active-learning batch, or an empty list when it has not been
+    pushed yet (guarded absence — never an error)."""
+    base = Path(base)
+    if not (base / "labels.json").exists():
+        return []
+    return _load(base, "review_batch_002", world_from_name=True)
+
+
+def _dedup_by_content(samples: list[Sample]) -> list[Sample]:
+    """Drop frames that appear under more than one root by exact image content,
+    keeping the LAST occurrence so a later (reviewed) source's corrected labels
+    win over an earlier copy. A no-op while the roots are disjoint."""
+    seen: dict[str, int] = {}
+    out: list[Sample] = []
+    for s in samples:
+        try:
+            digest = _md5(s.path.read_bytes())
+        except OSError:
+            out.append(s)
+            continue
+        if digest in seen:
+            out[seen[digest]] = s      # later source supersedes the earlier copy
+        else:
+            seen[digest] = len(out)
+            out.append(s)
+    return out
+
+
+def _md5(data: bytes) -> str:
+    import hashlib
+
+    return hashlib.md5(data).hexdigest()
+
+
 def load_all(historical: Path | str = HISTORICAL_DIR,
-             live: Path | str = LIVE_DIR) -> list[Sample]:
-    """Both sources, concatenated. No de-duplication is needed — the two roots are
-    disjoint and each frame is unique within its source."""
-    return load_historical(historical) + load_live(live)
+             live: Path | str = LIVE_DIR,
+             review_batch: Path | str = REVIEW_BATCH_2_DIR) -> list[Sample]:
+    """Every reviewed source, concatenated then de-duplicated by image content so
+    a frame reviewed in more than one place is counted once (the later, reviewed
+    source wins). ``review_batch`` is included only when present."""
+    return _dedup_by_content(
+        load_historical(historical) + load_live(live) + load_review_batch(review_batch))
 
 
 def battle_map_box(sample: Sample) -> tuple[int, int, int, int]:
@@ -117,6 +158,6 @@ def battle_map_box(sample: Sample) -> tuple[int, int, int, int]:
 
 
 __all__ = [
-    "Sample", "GtBadge", "HISTORICAL_DIR", "LIVE_DIR",
-    "load_historical", "load_live", "load_all", "battle_map_box",
+    "Sample", "GtBadge", "HISTORICAL_DIR", "LIVE_DIR", "REVIEW_BATCH_2_DIR",
+    "load_historical", "load_live", "load_review_batch", "load_all", "battle_map_box",
 ]

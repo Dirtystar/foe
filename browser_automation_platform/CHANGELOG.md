@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Forge: review_batch_002 wiring + dedup (retrain-ready)
+
+The requested retrain over grading + live_review + review_batch_002 is blocked:
+**review_batch_002 is not in the repository** (missing dir, no labels, no git
+history — the reviewed batch was not pushed). Rather than fabricate data or ship a
+misleading retrain, this makes review_batch_002 a first-class source that is used
+automatically the instant it lands, and records the honest pre-batch baseline.
+Observe-only; no architecture redesigned. See `tests/forge_assets/RETRAIN_STATUS.md`.
+
+### Added
+
+- `detection.dataset`: `REVIEW_BATCH_2_DIR` + `load_review_batch()` (guarded — an
+  empty list while absent). `load_all()` now includes it and **de-duplicates by
+  image content** (a frame reviewed in more than one root is counted once; the
+  later reviewed source's labels win).
+- `classify.default_label_sources()`: single source of truth for the reviewed
+  label sets (grading, live_review, review_batch_002); the bundled classifier and
+  `live_eval` both use it, so review_batch_002 joins training/eval automatically.
+- `RETRAIN_STATUS.md`: blocker evidence, pre-batch baseline, and the one-step
+  completion once the data is pushed.
+
+### Fixed
+
+- **Leakage: the two live_review H frames are byte-identical.** Content dedup in
+  `load_all()` collapses them, so the combined corpus is 17 unique frames and the
+  earlier "live-H classified 4/4" (LOFO using an identical twin) is corrected to
+  UNKNOWN — a truer number. `wrong-accepted percentage stays 0` on every set.
+
 ## [Unreleased] — Forge active-learning: fast analysis mode
 
 Profiled the review-batch selector and added a fast analysis mode. The detector,
