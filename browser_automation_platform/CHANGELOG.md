@@ -4,6 +4,59 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 4.9: Performance Observatory (measurement only)
+
+A complete performance-measurement framework for the observe-only pipeline, built
+to answer one question before any cursor/click work begins: **can the current
+architecture scale to 8 simultaneous Worlds?** Measurement only — no optimisation,
+no detector/classifier/OCR/scheduler/World/dataset/threshold change. Everything
+stays observe-only and the existing suite is unchanged.
+
+**Headline finding:** the pipeline is dominated by badge **detection** — ~3 s/tick
+warm (~5 s cold), vs weakening OCR ~0.1 s and classification ~0.06 s — i.e. ~0.3
+FPS per World, and because Worlds are serviced by one process the aggregate
+throughput stays ~0.3 FPS *total* regardless of World count. Detection already
+keeps ~3 CPU cores busy, so 8 Worlds cannot be serviced anywhere near real time
+without optimising detection first — captured here as reproducible numbers, not
+changed. See `docs/perf/` for the generated baseline reports.
+
+### Added
+
+- `bap.perf` package (self-contained, no new dependency):
+  - `timing` — monotonic per-stage `StageTimer` over the canonical stages
+    (capture, weakening_ocr, detection, classification, decision, gui_update,
+    persistence).
+  - `stats` — deterministic `summarize` (mean / median / p95 / p99 / max / stdev)
+    + FPS-equivalent, pure-Python percentiles (no numpy nondeterminism).
+  - `system` — stdlib CPU + RAM sampler (`/proc`, `resource`, `os.times`; psutil
+    used only if present) with peak/average CPU, peak/average RSS, uptime.
+  - `registry` — thread-safe per-World + global `MetricsRegistry`: average /
+    median / p95 / worst / tick count / skipped ticks / FPS-equivalent, per-stage
+    breakdown, current bottleneck, recent + slowest ticks; a shared default the
+    dashboard reads.
+  - `pipeline.run_tick` — a timed harness that calls the **unmodified**
+    `build_scan` stage functions in order; a drift test proves its output equals
+    `build_scan` on a real frame, so the numbers describe the production path.
+  - `benchmark` — offline, browser-free, reproducible: `SyntheticBenchmark`
+    (1/2/4/8 Worlds → fps, tick latency, stage breakdown, CPU, RAM) and
+    `StressBenchmark` (100/1k/10k/100k ticks → avg/median/p95/p99/max). Frames are
+    loaded once and replayed in a fixed, sorted order with fixed World assignment.
+  - `export` (JSON / CSV / Markdown) and `compare` (regression comparison of two
+    runs — current vs `forge-m4-stable` — flagging regressions/improvements
+    outside a ±5% tolerance).
+  - `python -m bap.perf {synthetic,stress,compare}` CLI (compare exits non-zero on
+    a regression so CI can gate on it).
+- **Performance** dashboard page in the Forge nav-shell: per-World and global
+  timing, programmatic live charts (QPainter sparkline + stage-breakdown bars, no
+  external libraries), recent slow ticks, worst stage / current bottleneck,
+  historical averages, and an offline-benchmark button (runs in a background
+  thread). Live-refreshes only while visible.
+- `docs/perf/` generated baseline reports (synthetic sweep + stress sample) and
+  `docs/perf/PERFORMANCE_OBSERVATORY.md` describing the framework and findings.
+- Perf unit tests (stats determinism, registry aggregation, system sampler,
+  benchmark plumbing with fast fakes, harness-vs-`build_scan` drift guard,
+  export/compare, CLI, and the GUI page).
+
 ## [Unreleased] — Milestone 4.8: professional desktop UI (presentation only)
 
 A presentation-only redesign of the Forge desktop UI. No behaviour, workflow, or

@@ -171,7 +171,8 @@ class MainWindow(QMainWindow):
         self._nav.add_header("Overview")
         for key, label, ic in (("dashboard", "Dashboard", "compass"), ("worlds", "Worlds", "shield"),
                                ("vision", "Vision", "eye"), ("review", "Review", "quill"),
-                               ("datasets", "Datasets", "datasets"), ("reports", "Reports", "report")):
+                               ("datasets", "Datasets", "datasets"), ("reports", "Reports", "report"),
+                               ("performance", "Performance", "chart")):
             self._nav.add_section(key, label, ic)
         self._nav.add_header("System")
         self._nav.add_section("settings", "Settings", "gear")
@@ -186,6 +187,7 @@ class MainWindow(QMainWindow):
                              ("review", self._build_review_page),
                              ("datasets", self._build_datasets_page),
                              ("reports", self._build_reports_page),
+                             ("performance", self._build_performance_page),
                              ("settings", self._build_settings_page)):
             self._pages[key] = self._stack.addWidget(self._scrolled(builder()))
         body.addWidget(self._stack, stretch=1)
@@ -210,6 +212,15 @@ class MainWindow(QMainWindow):
     def _show_page(self, key: str) -> None:
         if key in getattr(self, "_pages", {}):
             self._stack.setCurrentIndex(self._pages[key])
+        # The Performance page live-refreshes only while it is the visible page,
+        # so its timer never runs in the background or during unrelated tests.
+        perf = getattr(self, "_perf_page", None)
+        if perf is not None:
+            if key == "performance":
+                perf.refresh()
+                perf.start_live()
+            else:
+                perf.stop_live()
 
     def _build_title_bar(self) -> QWidget:
         from bap.gui import icons, widgets
@@ -538,6 +549,15 @@ class MainWindow(QMainWindow):
               "current environment and recent logs for troubleshooting — no gameplay "
               "data leaves the machine unless you share the bundle.")],
         )
+
+    def _build_performance_page(self) -> QWidget:
+        """The Performance Observatory page (Milestone 4.9): per-World and global
+        timing, live charts, recent slow ticks, and an offline benchmark. Reads
+        the shared metrics registry; measurement only, changes no behaviour."""
+        from bap.gui.perf_page import PerformancePage
+
+        self._perf_page = PerformancePage()
+        return self._perf_page
 
     def _build_settings_page(self) -> QWidget:
         """Non-developer entry points, mirroring the Tools menu as buttons."""
