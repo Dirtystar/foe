@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 4.11: Vision Validation Suite (observe-only self-diagnosis)
+
+One button — **Validate Vision** — runs the whole observe-only pipeline against
+the selected World and grades every stage so a tester immediately knows whether
+Vision is healthy. Additive only: it reuses the existing capture + `build_scan`
+(through the M4.9 timing harness) + weakening reader and **changes no behaviour** —
+no detector/classifier/OCR/scheduler/runtime/threshold change, still observe-only.
+
+### Added
+
+- `forge/detection/validation.py` — Qt-free `validate_vision()` producing a
+  `ValidationReport` of seven sections (Capture, Weakening, Battle Map, Badge
+  Detection, Classification, Decision, Performance). Each check is graded
+  **PASS / WARNING / FAIL / INFO** with a plain-language explanation and, when not
+  healthy, a probable reason + a recommended operator action ("Run Set Weakening
+  Region", "Collect more reviewed live frames", "No battle badges currently
+  visible", …). `to_dict()` / `to_markdown()` render the report.
+- `gui/vision_validation.py` + a new **Validation** nav page — a World selector, a
+  Validate-Vision button (live capture of the selected World) and a
+  Validate-from-screenshot button (offline), a colour-coded section report, and an
+  Export-report button. Heavy work runs in a background thread.
+- `VISION_VALIDATION_REPORT.md` — a generated health report (offline sample; the
+  app reproduces it live).
+- Unit tests for the validation core (status aggregation, no-capture FAIL,
+  section structure, uncalibrated-weakening guidance, markdown/JSON, a real-frame
+  end-to-end) and the GUI page (render, export, nav wiring).
+
+### Notes
+
+- The validator surfaces the M4.10 live finding automatically: an uncalibrated /
+  low-confidence weakening read is graded WARNING with "Run Set Weakening Region",
+  and the gate stays fail-safe UNKNOWN. It also flags a benign 1px battle-map
+  calibration overhang in `review_batch_002` (crops are clamped) as a "recalibrate"
+  WARNING — a data note, not a code change.
+
 ## [Unreleased] — Milestone 4.9: Performance Observatory (measurement only)
 
 A complete performance-measurement framework for the observe-only pipeline, built

@@ -170,7 +170,8 @@ class MainWindow(QMainWindow):
         self._nav = widgets.NavRail()
         self._nav.add_header("Overview")
         for key, label, ic in (("dashboard", "Dashboard", "compass"), ("worlds", "Worlds", "shield"),
-                               ("vision", "Vision", "eye"), ("review", "Review", "quill"),
+                               ("vision", "Vision", "eye"), ("validation", "Validation", "check"),
+                               ("review", "Review", "quill"),
                                ("datasets", "Datasets", "datasets"), ("reports", "Reports", "report"),
                                ("performance", "Performance", "chart")):
             self._nav.add_section(key, label, ic)
@@ -184,6 +185,7 @@ class MainWindow(QMainWindow):
         for key, builder in (("dashboard", self._build_dashboard_page),
                              ("worlds", self._build_worlds_page),
                              ("vision", self._build_vision_page),
+                             ("validation", self._build_validation_page),
                              ("review", self._build_review_page),
                              ("datasets", self._build_datasets_page),
                              ("reports", self._build_reports_page),
@@ -221,6 +223,9 @@ class MainWindow(QMainWindow):
                 perf.start_live()
             else:
                 perf.stop_live()
+        val = getattr(self, "_validation_page", None)
+        if val is not None and key == "validation":
+            val.refresh_worlds()
 
     def _build_title_bar(self) -> QWidget:
         from bap.gui import icons, widgets
@@ -558,6 +563,45 @@ class MainWindow(QMainWindow):
 
         self._perf_page = PerformancePage()
         return self._perf_page
+
+    def _build_validation_page(self) -> QWidget:
+        """The Vision Validation page (Milestone 4.11): one button runs the whole
+        observe-only pipeline against the selected World and grades every stage
+        PASS/WARNING/FAIL/INFO. Reuses the existing capture + validate_vision;
+        changes no behaviour."""
+        from bap.gui.vision_validation import VisionValidationPage
+
+        self._validation_page = VisionValidationPage(
+            world_aliases=self._world_aliases,
+            world_getter=(lambda a: self._world_store.get(a) if self._world_store else None),
+            capture_fn=self._capture_world_timed,
+            classifier_provider=self._forge_classifier,
+            calibration_provider=self._forge_calibration,
+        )
+        return self._validation_page
+
+    def _capture_world_timed(self, alias):
+        """Capture the selected World's live tab (read-only) and time it. Returns
+        ``(image_or_None, latency_seconds_or_None, error_or_None)``."""
+        import time
+
+        from bap.forge.detection.testscan import capture_world_image
+
+        t0 = time.perf_counter()
+        img, err = capture_world_image(
+            alias, world_store=self._world_store, assignment=self._assignment,
+            browser_open=self._browser_open, capture_callback=self._capture_callback,
+        )
+        latency = (time.perf_counter() - t0) if img is not None else None
+        return img, latency, err
+
+    def _forge_classifier(self):
+        """The bundled classifier, built once and cached for this window."""
+        if getattr(self, "_classifier_cache", None) is None:
+            from bap.gui.forge_debugger import _bundled_classifier
+
+            self._classifier_cache = _bundled_classifier()
+        return self._classifier_cache
 
     def _build_settings_page(self) -> QWidget:
         """Non-developer entry points, mirroring the Tools menu as buttons."""
