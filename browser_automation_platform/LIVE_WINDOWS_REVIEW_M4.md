@@ -182,11 +182,14 @@ via `python -m bap.forge.detection.live_eval` (deterministic):
 | review_batch_002 | 0.618 | 0.847 | 0.715 | 1.30 | 26/124 | **0** |
 | **combined** | **0.657** | **0.859** | **0.745** | **1.06** | **37/156** | **0** |
 
-_Reproduction status this session: <!--EVAL_REPRO-->the same-session
-`live_eval` run was still completing at commit time (LOFO over 66 real frames at
-~5 s/frame). The pipeline is deterministic, so it reproduces the table above; the
-key safety line — **wrong-accepted = 0** — is the assertion under
-watch.<!--/EVAL_REPRO-->_
+_Reproduction status this session: <!--EVAL_REPRO-->**COMPLETED and CONFIRMED.**
+The same-session `live_eval` run finished (LOFO over 66 real frames). The primary
+safety metric holds on **every** set — `wrong_accepted_pct = 0` for combined,
+review_batch_002, live-H, and live-F. Full-slice classification (train-on-all,
+higher than LOFO because a frame's own exemplars are in-bank): combined
+correct_pct 62/156, review_batch_002 50/124, live-H/F 0/2 (safe UNKNOWN); LOFO
+(leakage-free) remains 37/156 per the table above. Localization full-slice:
+combined 134 TP / 22 FN / 70 FP.<!--/EVAL_REPRO-->_
 
 Expected improvements vs the pre-batch baseline, checked against `RETRAIN_REPORT.md`:
 
