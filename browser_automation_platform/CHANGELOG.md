@@ -4,6 +4,47 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 4.12: Fix live validation findings (observe-only)
+
+Root-causes and fixes the classifier wiring defect exposed by the first live
+Windows Vision Validation, and corrects the validation grading semantics. No
+threshold, OCR, scheduler, runtime, or detector-behaviour change; still observe
+only; full unit suite green.
+
+### Fixed
+
+- **Classifier was never built on the live path (the reported symptom).**
+  `_bundled_classifier()` resolved the reviewed dataset to a **non-existent**
+  `src/tests/forge_assets` (a fixed `parents[2]` index; the data is at repo-root
+  `tests/forge_assets`), returned `None`, and the pipeline then **skipped the whole
+  classification stage** — so every live percentage came back UNKNOWN with "nearest
+  similarities = (none)" and a zero-sample confidence histogram, even for 20%
+  (which has 154 exemplars). Added `classify.default_assets_root()` (walks up from
+  the module; layout- and cwd-independent) and pointed `_bundled_classifier()` and
+  the identical latent bug in `perf/benchmark._ASSETS_ROOT` at it. The bundled
+  classifier now loads (len 154) from any working directory. `MIN_PCT_SIM` stays
+  0.70; wrong-accepted percentage stays 0.
+
+### Changed
+
+- **Vision Validation grading correction.** The Badge Detection section no longer
+  reads PASS just because the detector executed. Execution health is INFO; accuracy
+  cannot PASS without human ground truth — a live/unreviewed scan reports
+  `accuracy (TP/FP/FN) = UNVERIFIED` (section INFO) with a Review-Mode action, while
+  a reviewed frame (via a new `ground_truth_badges` argument) gets measured count
+  accuracy (matches → PASS, accepted > real → WARNING with the FP count, accepted <
+  real → WARNING with the miss count).
+
+### Added
+
+- Regression tests: bundled-classifier non-empty + cwd-independent; a real 20%
+  frame's detections all reach the classifier and produce a similarity (not
+  missing); grading UNVERIFIED/measured branches. `LIVE_WINDOWS_REVIEW_M4_12.md`
+  with the full root cause, H false-positive categories (red-terrain emblems
+  clearing 0.62, spatially clustered), and the performance diagnosis (detection ≈
+  80 ms × stage-1 candidates; live 40–54 s is the 4–8× higher candidate count, not
+  a regression).
+
 ## [Unreleased] — Milestone 4.11: Vision Validation Suite (observe-only self-diagnosis)
 
 One button — **Validate Vision** — runs the whole observe-only pipeline against

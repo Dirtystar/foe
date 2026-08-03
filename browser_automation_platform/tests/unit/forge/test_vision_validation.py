@@ -96,10 +96,9 @@ def test_all_sections_present_and_no_badge_path():
     assert titles == ["Capture", "Weakening", "Battle Map", "Badge Detection",
                       "Classification", "Decision", "Performance"]
     badge = next(s for s in rep.sections if s.title == "Badge Detection")
-    accepted = next(c for c in badge.checks if c.name == "accepted count")
-    # No badges detected -> WARNING with an operator action.
-    assert accepted.status is Status.WARNING
-    assert "battle" in (accepted.action or "").lower()
+    # Execution health and accepted count are INFO (accuracy is graded separately).
+    assert next(c for c in badge.checks if c.name == "accepted count").status is Status.INFO
+    assert next(c for c in badge.checks if c.name == "detector executed").status is Status.INFO
     # Weakening ROI present + calibrated -> those checks PASS.
     weak = next(s for s in rep.sections if s.title == "Weakening")
     assert next(c for c in weak.checks if c.name == "ROI present").status is Status.PASS
@@ -113,6 +112,34 @@ def test_uncalibrated_weakening_warns_with_action():
     roi_present = next(c for c in weak.checks if c.name == "ROI present")
     assert roi_present.status is Status.FAIL
     assert "Set Weakening Region" in (roi_present.action or "")
+
+
+def test_badge_accuracy_is_unverified_without_ground_truth():
+    # M4.12: a live/unreviewed scan must NOT report an accuracy PASS. Execution is
+    # INFO; the Badge Detection section is INFO (not PASS) until ground truth exists.
+    rep = validate_vision(_img(), world_alias="H", detector=_FakeDetector(),
+                          classifier=_FakeClassifier(), rois=_rois())
+    badge = next(s for s in rep.sections if s.title == "Badge Detection")
+    assert badge.status is Status.INFO
+    acc = next(c for c in badge.checks if c.name == "accuracy (TP/FP/FN)")
+    assert acc.status is Status.INFO and acc.value == "UNVERIFIED"
+    assert "Review Mode" in (acc.action or "")
+
+
+def test_badge_accuracy_grades_against_ground_truth():
+    # Fake detector accepts 0 badges. gt=0 -> PASS (matches); gt=2 -> WARNING (missed).
+    rep_match = validate_vision(_img(), world_alias="H", detector=_FakeDetector(),
+                                classifier=_FakeClassifier(), rois=_rois(), ground_truth_badges=0)
+    acc = next(c for s in rep_match.sections if s.title == "Badge Detection"
+               for c in s.checks if c.name == "accuracy (TP/FP/FN)")
+    assert acc.status is Status.PASS
+
+    rep_missed = validate_vision(_img(), world_alias="H", detector=_FakeDetector(),
+                                 classifier=_FakeClassifier(), rois=_rois(), ground_truth_badges=2)
+    badge = next(s for s in rep_missed.sections if s.title == "Badge Detection")
+    acc2 = next(c for c in badge.checks if c.name == "accuracy (TP/FP/FN)")
+    assert acc2.status is Status.WARNING and "missed" in acc2.value
+    assert badge.status is Status.WARNING
 
 
 def test_markdown_and_json_render():

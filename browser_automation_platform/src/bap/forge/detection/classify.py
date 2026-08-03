@@ -147,6 +147,27 @@ def train_from_labels(frames_dir, labels_path) -> PercentClassifier | None:
     return PercentClassifier().fit(examples) if examples else None
 
 
+def default_assets_root():
+    """Locate ``tests/forge_assets`` robustly by walking up from this module.
+
+    The reviewed label sets live at the **repository root** under
+    ``tests/forge_assets``; this file is at ``src/bap/forge/detection/``, so a
+    fixed ``parents[N]`` index is fragile (it silently resolved to
+    ``src/tests/forge_assets`` before — a directory that does not exist — which
+    left the bundled classifier empty and every live percentage UNKNOWN). Walking
+    up until the directory is found is layout- and cwd-independent. Returns
+    ``None`` when the datasets are not on disk (e.g. an installed wheel that does
+    not ship ``tests/``)."""
+    from pathlib import Path
+
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "tests" / "forge_assets"
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
 def default_label_sources(assets_root) -> list[tuple]:
     """The reviewed label sets that exist under ``assets_root`` — grading, live
     review, and the reviewed active-learning batch — as ``(frames_dir,
@@ -181,4 +202,5 @@ def train_from_sources(sources) -> PercentClassifier | None:
 
 
 __all__ = ["PercentClassifier", "percent_patch", "train_from_labels",
-           "train_from_sources", "default_label_sources", "vec_to_image"]
+           "train_from_sources", "default_label_sources", "default_assets_root",
+           "vec_to_image"]

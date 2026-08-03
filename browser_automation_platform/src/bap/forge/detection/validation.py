@@ -290,34 +290,68 @@ def _battle_map_section(scan, geometry) -> Section:
     return Section("Battle Map", "Where badges are detected — the whole usable battleground.", checks)
 
 
-def _badge_section(scan, timer) -> Section:
+def _badge_section(scan, timer, ground_truth: int | None = None) -> Section:
     checks: list[Check] = []
     counts = scan.counts
     cand = counts["stage1_candidates"]
     accepted = counts["final_detections"]
     rejected = counts["rejected"]
+    # Execution health (the detector ran) is INFO — running successfully is not the
+    # same as being *accurate*, so it must never read as an accuracy PASS.
+    checks.append(Check("detector executed", Status.INFO, "yes",
+                        "The detector completed without error (execution health, not accuracy)."))
     checks.append(Check("candidate count", Status.INFO, str(cand),
                         "Stage-1 colour-prior candidates before template confirmation."))
-    if accepted == 0 and cand == 0:
-        checks.append(Check("accepted count", Status.WARNING, "0",
-                            "No badges detected in this frame.",
-                            "no battle badges currently visible (or none on screen)",
-                            "Capture during an active battle with visible weakened sectors."))
-    else:
-        checks.append(Check("accepted count", Status.INFO, str(accepted),
-                            "Candidates confirmed as badges after template + NMS."))
+    unreviewed = ground_truth is None
+    checks.append(Check("accepted count", Status.INFO, str(accepted),
+                        "Accepted badges after template + NMS — "
+                        + ("UNVERIFIED (not confirmed real without review)." if unreviewed
+                           else "compared to ground truth below.")))
     checks.append(Check("rejected count", Status.INFO, str(rejected),
                         "Candidates dropped (below template threshold or NMS-suppressed)."))
     panel = scan.panel_result
     present = bool(panel and panel.get("present"))
-    checks.append(Check("false panel detection", Status.PASS if not present else Status.INFO,
+    checks.append(Check("false panel overlay", Status.INFO,
                         "none" if not present else "panel corroborated open",
-                        "Guards against drawing a province-panel overlay on the map.",
-                        None, None))
+                        "Whether a province-panel overlay would be drawn (guarded)."))
     det_ms = timer.stages.get("detection", 0.0) * 1000.0
     checks.append(Check("per-stage timing (detection)", Status.INFO, f"{det_ms:.0f} ms",
                         "Detection dominates the tick; measurement only."))
-    return Section("Badge Detection", "Locating weakened-sector badges on the map.", checks)
+
+    # Accuracy: cannot PASS without human ground truth. Live/unreviewed → UNVERIFIED
+    # (INFO). A reviewed frame supplies the real badge count → measured count-accuracy.
+    if unreviewed:
+        checks.append(Check(
+            "accuracy (TP/FP/FN)", Status.INFO, "UNVERIFIED",
+            "Accepted candidates are not confirmed real without human ground truth.",
+            "this is a live/unreviewed scan — accuracy cannot be graded",
+            "Label this frame in Review Mode to measure TP/FP/FN against ground truth.",
+        ))
+    elif accepted == ground_truth:
+        checks.append(Check(
+            "accuracy (TP/FP/FN)", Status.PASS, f"{accepted}/{ground_truth} accepted = real (count)",
+            "Accepted count matches the reviewed ground-truth badge count."))
+    elif accepted > ground_truth:
+        extra = accepted - ground_truth
+        checks.append(Check(
+            "accuracy (TP/FP/FN)", Status.WARNING,
+            f"{accepted} accepted > {ground_truth} real (+{extra} likely FP)",
+            "The detector accepted more candidates than there are real badges.",
+            "false positives (e.g. red terrain / banners scoring like emblems)",
+            "Review the extra detections; add a false-positive filter only if a shared property is proven.",
+        ))
+    else:
+        missed = ground_truth - accepted
+        checks.append(Check(
+            "accuracy (TP/FP/FN)", Status.WARNING,
+            f"{accepted} accepted < {ground_truth} real ({missed} missed)",
+            "Fewer accepted than real badges — the detector missed some.",
+            "colour-prior / template recall gap on this frame",
+            "Add the missed badges in Review Mode as regression data.",
+        ))
+    return Section("Badge Detection",
+                   "Locating weakened-sector badges. Execution health is INFO; accuracy "
+                   "only PASSES against human ground truth (reviewed frames).", checks)
 
 
 def _classification_section(scan) -> Section:
@@ -420,6 +454,7 @@ def validate_vision(
     capture_latency_s: float | None = None,
     live: bool = False,
     weakening_tracker=None,
+    ground_truth_badges: int | None = None,
     min_ocr_confidence: float = DEFAULT_MIN_CONFIDENCE,
     sample_system: bool = True,
 ) -> ValidationReport:
@@ -468,7 +503,7 @@ def validate_vision(
         _capture_section(image, geometry, capture_latency_s, live),
         _weakening_section(scan, weakening_tracker, world_id, min_ocr_confidence),
         _battle_map_section(scan, geometry),
-        _badge_section(scan, timer),
+        _badge_section(scan, timer, ground_truth_badges),
         _classification_section(scan),
         _decision_section(scan),
         _performance_section(timer, system),

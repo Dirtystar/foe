@@ -30,7 +30,18 @@ from bap.perf.stats import summarize
 from bap.perf.system import SystemSampler
 from bap.perf.timing import StageTimer
 
-_ASSETS_ROOT = Path(__file__).resolve().parents[2] / "tests" / "forge_assets"
+# Resolve the reviewed-assets root robustly (the fixed parents[2] index resolved
+# to a non-existent ``src/tests/forge_assets`` — the same defect that left the
+# bundled classifier empty). Fall back to the old expression only if the walk-up
+# finds nothing, so callers still get a Path.
+def _resolve_assets_root() -> Path:
+    from bap.forge.detection.classify import default_assets_root
+
+    found = default_assets_root()
+    return found if found is not None else Path(__file__).resolve().parents[2] / "tests" / "forge_assets"
+
+
+_ASSETS_ROOT = _resolve_assets_root()
 
 
 @dataclass
