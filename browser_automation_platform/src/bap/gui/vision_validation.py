@@ -57,6 +57,8 @@ class VisionValidationPage(QWidget):
         self._calibration_provider = calibration_provider or (lambda: None)
         self._thread: threading.Thread | None = None
         self._last_report = None
+        self._last_image = None
+        self._last_alias = None
         self._build()
         self._done.connect(self._on_done)
         self.refresh_worlds()
@@ -83,10 +85,16 @@ class VisionValidationPage(QWidget):
         self._validate_btn.clicked.connect(self._validate_live)
         self._offline_btn = QPushButton("Validate from screenshot…")
         self._offline_btn.clicked.connect(self._validate_offline)
+        self._snapshot_btn = QPushButton("Save Snapshot")
+        self._snapshot_btn.setToolTip(
+            "Freeze this validated frame into a permanent, reproducible, reviewable "
+            "snapshot — negative or positive — so the live game changing can't lose it.")
+        self._snapshot_btn.setEnabled(False)
+        self._snapshot_btn.clicked.connect(self._save_snapshot)
         self._export_btn = QPushButton("Export report…")
         self._export_btn.setEnabled(False)
         self._export_btn.clicked.connect(self._export)
-        for b in (self._validate_btn, self._offline_btn, self._export_btn):
+        for b in (self._validate_btn, self._offline_btn, self._snapshot_btn, self._export_btn):
             controls.addWidget(b)
         v.addLayout(controls)
 
@@ -151,6 +159,8 @@ class VisionValidationPage(QWidget):
     def _run_async(self, image, alias, *, latency_s, live) -> None:
         if self._thread is not None and self._thread.is_alive():
             return
+        self._last_image = image
+        self._last_alias = alias
         self._validate_btn.setEnabled(False)
         self._offline_btn.setEnabled(False)
         self._summary.setText("Validating… (running the full pipeline — this can take a few seconds)")
@@ -187,7 +197,23 @@ class VisionValidationPage(QWidget):
             return
         self._last_report = report
         self._export_btn.setEnabled(True)
+        self._snapshot_btn.setEnabled(report.scan is not None and self._last_image is not None)
         self.render_report(report)
+
+    def _save_snapshot(self) -> None:
+        """Freeze the validated frame into a reproducible snapshot, with the
+        validation report bundled in. Observe-only — writes files only."""
+        if self._last_report is None or self._last_report.scan is None or self._last_image is None:
+            return
+        from bap.gui.snapshot_actions import save_snapshot_and_offer
+
+        world = self._world_getter(self._last_alias) if self._last_alias is not None else None
+        save_snapshot_and_offer(
+            self, image=self._last_image, scan=self._last_report.scan, world=world,
+            classifier=self._classifier_provider(),
+            validation_markdown=self._last_report.to_markdown(),
+            url=getattr(world, "last_url", None),
+        )
 
     def render_report(self, report) -> None:
         self._last_report = report

@@ -77,6 +77,25 @@ class _Service:
         pass
 
 
+def test_snapshot_button_enables_after_run(qapp):
+    page = VisionValidationPage(world_aliases=lambda: ["H"])
+    assert page._snapshot_btn.isEnabled() is False
+    import numpy as np
+
+    page._last_image = np.zeros((90, 120, 3), dtype=np.uint8)
+    page._last_alias = "H"
+    page._on_done(_report(), None)
+    # Report carries the scan and an image is retained -> Save Snapshot enabled.
+    assert page._snapshot_btn.isEnabled() is True
+
+
+def test_debugger_has_snapshot_button():
+    # The Vision Debugger (Test Scan) exposes a Save Snapshot control + handler.
+    import bap.gui.forge_debugger as fd
+
+    assert hasattr(fd.DebuggerWindow, "_on_save_snapshot")
+
+
 def test_main_window_has_validation_page(qapp):
     store = WorldStore()
     store.add(World(alias="H", hostname="cz8.forgeofempires.com"))

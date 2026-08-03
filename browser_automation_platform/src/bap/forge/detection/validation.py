@@ -83,6 +83,9 @@ class ValidationReport:
     sections: list[Section]
     capture_ok: bool
     live: bool = False
+    # The DebugScan this report was built from — kept live for snapshotting; never
+    # serialized (see to_dict). None when capture failed.
+    scan: object = None
 
     @property
     def overall(self) -> Status:
@@ -508,7 +511,7 @@ def validate_vision(
         _decision_section(scan),
         _performance_section(timer, system),
     ]
-    return ValidationReport(alias, created, sections, capture_ok=True, live=live)
+    return ValidationReport(alias, created, sections, capture_ok=True, live=live, scan=scan)
 
 
 __all__ = ["Status", "Check", "Section", "ValidationReport", "validate_vision"]

@@ -107,6 +107,12 @@ class DebuggerWindow(QMainWindow):
             "keys 1-5 set 20/40/60/80/100. Saved as live ground truth.")
         self.review_button.clicked.connect(self._on_label_review)
         controls.addWidget(self.review_button)
+        self.snapshot_button = QPushButton("Save Snapshot")
+        self.snapshot_button.setToolTip(
+            "Freeze this exact scan into a permanent, reproducible, reviewable "
+            "snapshot so the live game changing can never lose it.")
+        self.snapshot_button.clicked.connect(self._on_save_snapshot)
+        controls.addWidget(self.snapshot_button)
         controls.addStretch(1)
         note = QLabel("Real clicking stays disabled until you confirm these detections.")
         controls.addWidget(note)
@@ -139,6 +145,19 @@ class DebuggerWindow(QMainWindow):
             self._review.show()
         except Exception as exc:  # never crash the debugger over a review launch
             QMessageBox.warning(self, "Review Mode", f"Could not open Review Mode:\n{exc}")
+
+    def _on_save_snapshot(self) -> None:
+        """Freeze this scan into a reproducible snapshot (raw + annotated + trace +
+        world + calibration + labels + metadata), then offer Open-in-Review /
+        Import. Observe-only — it writes files, nothing more."""
+        from bap.forge.detection.detector import BadgeDetector
+        from bap.gui.snapshot_actions import save_snapshot_and_offer
+
+        save_snapshot_and_offer(
+            self, image=self._image, scan=self._scan, world=self._world,
+            classifier=self._classifier, detector=BadgeDetector(),
+            url=getattr(self._world, "last_url", None),
+        )
 
     @staticmethod
     def _default_live_review_dir() -> Path:

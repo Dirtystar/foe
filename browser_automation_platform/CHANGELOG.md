@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 4.13: Snapshot workflow (observe-only)
+
+Freeze every interesting live scan into a permanent, reproducible, immediately
+reviewable artifact so the fast-changing live board can never lose a good example.
+Additive only — writes files and opens the existing Review Mode; no
+detector/classifier/OCR/scheduler/threshold change; still observe-only.
+
+### Added
+
+- `forge/snapshots.py` (Qt-free): `write_snapshot()` creates a timestamped
+  directory with `frames/raw.png`, `annotated.png`, `scan.json`, `world.json`,
+  `calibration.json`, `labels.json`, `metadata.json`, and (from Vision Validation)
+  `validation_report.md`. `metadata.json` records World alias, URL, resolution,
+  DPR, viewport, timestamp, detector version, classifier version, git commit, and
+  image MD5. Plus `load_snapshot`, `review_paths`, and `import_into_dataset`
+  (dedup by image content hash; preserves labels + metadata).
+- `Save Snapshot` on the **Vision Debugger** (Test Scan) and the **Vision
+  Validation** page, with follow-up **Open in Review** (zero-copy `run_review` on
+  the snapshot's `frames/`) and **Import into Dataset**.
+- The snapshot is **immutable except for `labels.json`** — reviewing never
+  rewrites the raw image, annotation, or trace (proven by a byte-hash test).
+- `EXTERNAL_CHROME_ATTACH.md` (design only — attach to an operator-launched Chrome
+  over CDP; BAP as read-only guest; closing BAP never closes Chrome) and
+  `SNAPSHOT_WORKFLOW_REPORT.md`.
+- Tests: snapshot creation, metadata completeness, reload, review round-trip
+  immutability, dataset import dedup + label/metadata preservation, distinct-image
+  retention, and GUI button wiring.
+
 ## [Unreleased] — Milestone 4.12: Fix live validation findings (observe-only)
 
 Root-causes and fixes the classifier wiring defect exposed by the first live
