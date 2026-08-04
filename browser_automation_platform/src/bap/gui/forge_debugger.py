@@ -62,7 +62,7 @@ class DebuggerWindow(QMainWindow):
 
     def __init__(self, image, *, world=None, classifier=None, source: str = "",
                  weakening_region=None, rois=None, geometry=None,
-                 dataset_dir=None) -> None:
+                 dataset_dir=None, cursor_controller=None, cursor_context=None) -> None:
         super().__init__()
         self._image = image
         self._classifier = classifier
@@ -72,6 +72,11 @@ class DebuggerWindow(QMainWindow):
         # Reviewed Dataset (dataset_store); tests may pass an isolated dir.
         self._dataset_dir = dataset_dir
         self._review = None
+        # Manual one-shot cursor preview (Milestone 5A). Both optional and safe by
+        # default: with no controller the section is unavailable; disabled until the
+        # operator explicitly enables it for this session.
+        self._cursor_controller = cursor_controller
+        self._cursor_context = cursor_context
         self._scan = build_scan(image, world=world, classifier=classifier,
                                 weakening_region=weakening_region, rois=rois,
                                 geometry=geometry)
@@ -120,7 +125,149 @@ class DebuggerWindow(QMainWindow):
         controls.addWidget(note)
         root.addLayout(controls)
 
+        root.addWidget(self._build_cursor_preview_section())
+
         self.setCentralWidget(central)
+
+    # --- Manual one-shot cursor preview (Milestone 5A) ----------------------
+
+    def _build_cursor_preview_section(self):
+        """A clearly-separated, warning-styled panel for the manual cursor preview.
+        Disabled by default; there is no Run/Fight/Execute here — one gated,
+        one-shot MOVE that never clicks."""
+        from PySide6.QtWidgets import QFrame
+
+        box = QFrame()
+        box.setObjectName("cursorPreviewBox")
+        box.setStyleSheet(
+            "#cursorPreviewBox { border: 2px solid #C0563A; border-radius: 6px; }")
+        lay = QVBoxLayout(box)
+        title = QLabel("Cursor Preview  —  manual, one-shot MOVE only · NEVER clicks")
+        title.setStyleSheet("color:#C0563A; font-weight:bold;")
+        lay.addWidget(title)
+
+        row = QHBoxLayout()
+        self.cursor_state_label = QLabel("Cursor Preview: DISABLED")
+        self.cursor_state_label.setStyleSheet("font-weight:bold;")
+        row.addWidget(self.cursor_state_label)
+        self.enable_cursor_button = QPushButton("Enable for this session")
+        self.enable_cursor_button.clicked.connect(self._on_enable_cursor_preview)
+        row.addWidget(self.enable_cursor_button)
+        self.preview_cursor_button = QPushButton("Preview Cursor Target")
+        self.preview_cursor_button.setEnabled(False)
+        self.preview_cursor_button.clicked.connect(self._on_preview_cursor_target)
+        row.addWidget(self.preview_cursor_button)
+        row.addStretch(1)
+        lay.addLayout(row)
+
+        self.cursor_result_label = QLabel("")
+        self.cursor_result_label.setWordWrap(True)
+        lay.addWidget(self.cursor_result_label)
+
+        if self._cursor_controller is None:
+            self.enable_cursor_button.setEnabled(False)
+            self.cursor_state_label.setText("Cursor Preview: UNAVAILABLE (no cursor adapter)")
+        return box
+
+    def _on_enable_cursor_preview(self) -> None:
+        if self._cursor_controller is None:
+            return
+        self._cursor_controller.enable_for_session()
+        self.cursor_state_label.setText("Cursor Preview: ENABLED (this session only)")
+        self.preview_cursor_button.setEnabled(True)
+        self.enable_cursor_button.setEnabled(False)
+
+    def _cursor_target_fields(self):
+        """Pull the target + safety facts from THIS scan (the other half of the
+        gate; identity/geometry come from the injected context)."""
+        sel = self._scan.selection.detection
+        weak = self._scan.weakening
+        return {
+            "target_point": (int(sel.cx), int(sel.cy)) if sel is not None else None,
+            "pct": sel.pct if sel is not None else None,
+            "confidence": float(sel.confidence) if sel is not None else None,
+            "weakening_value": weak.value if (weak is not None and weak.value is not None) else None,
+            "world_limit": self._scan.world_limit,
+            "decision": self._scan.decision,
+        }
+
+    def _build_preview_request(self):
+        ctx = self._cursor_context
+        enabled = bool(self._cursor_controller and self._cursor_controller.enabled)
+        return ctx.build_request(enabled=enabled, **self._cursor_target_fields())
+
+    def _on_preview_cursor_target(self) -> None:
+        """Evaluate the strict gate and, only if it passes, show a two-step
+        confirmation dialog. On confirm, move the cursor exactly once."""
+        if self._cursor_controller is None or self._cursor_context is None:
+            self.cursor_result_label.setText("Cursor preview is unavailable.")
+            return
+        req = self._build_preview_request()
+        decision = self._cursor_controller.preview(req)
+        if not decision.ok:
+            self.cursor_result_label.setStyleSheet("color:#C0563A;")
+            self.cursor_result_label.setText(f"Blocked: {decision.reason}")
+            return
+        if not self._confirm_cursor_move(decision):
+            self.cursor_result_label.setStyleSheet("")
+            self.cursor_result_label.setText("Cancelled — no movement.")
+            return
+        # Re-build the request NOW (fresh clock + live getters) so a scan that
+        # expired or a World switched while the dialog was open is caught.
+        result = self._cursor_controller.confirm_and_move(self._build_preview_request(),
+                                                          confirmed=True)
+        if result.moved:
+            self.cursor_result_label.setStyleSheet("color:#C0563A; font-weight:bold;")
+            self.cursor_result_label.setText(
+                f"Cursor moved to {result.screen_point} — NO CLICK PERFORMED. "
+                + self._after_move_verification(result))
+        else:
+            self.cursor_result_label.setStyleSheet("color:#C0563A;")
+            self.cursor_result_label.setText(f"Blocked at move time: {result.reason}")
+
+    def _confirm_cursor_move(self, decision) -> bool:
+        """A two-step confirmation. Cancel is the default and Escape cancels; there
+        is no Enter-to-move and no keyboard shortcut for Move Cursor."""
+        f = decision.fields
+        lines = [
+            f"World: {f.get('world')}  ({f.get('hostname')})",
+            f"Badge: {f.get('pct')}%   confidence {f.get('confidence')}",
+            f"Weakening: {f.get('weakening')}   limit {f.get('world_limit')}   "
+            f"decision {f.get('decision')}",
+            f"Image point:    {f.get('image_point')}",
+            f"Viewport point: {f.get('viewport_point')}",
+            f"Screen point:   {f.get('screen_point')}",
+            f"Scan age: {f.get('age_s')} s",
+            "",
+            "The cursor will move once. No click will be performed.",
+        ]
+        box = QMessageBox(self)
+        box.setWindowTitle("Move Cursor to Preview Point")
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setText("\n".join(lines))
+        move_btn = box.addButton("Move Cursor", QMessageBox.ButtonRole.ActionRole)
+        cancel_btn = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(cancel_btn)     # Cancel is the default safe action
+        box.setEscapeButton(cancel_btn)      # Escape cancels, never moves
+        box.exec()
+        return box.clickedButton() is move_btn
+
+    def _after_move_verification(self, result) -> str:
+        """Optionally re-read the cursor position and a fresh screenshot to report
+        requested-vs-actual delta and whether geometry held. Never clicks."""
+        ctx = self._cursor_context
+        getter = getattr(ctx, "cursor_position_getter", None)
+        if getter is None:
+            return "(actual position not available)"
+        try:
+            actual = getter()
+        except Exception:
+            actual = None
+        if actual is None or result.screen_point is None:
+            return "(actual position not available)"
+        dx = actual[0] - result.screen_point[0]
+        dy = actual[1] - result.screen_point[1]
+        return f"actual {actual}, delta ({dx},{dy})."
 
     def _on_label_review(self) -> None:
         """Add this live capture to THE canonical Reviewed Dataset and open it in

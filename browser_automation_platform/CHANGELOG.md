@@ -4,6 +4,53 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 5A: Manual Move Cursor Preview (one-shot, no click)
+
+The first real **output** action: a manual, operator-confirmed, one-shot cursor
+**move** to the validated would-click point. **Clicking is not implemented** — the
+only output method anywhere is `CursorPreviewPort.move_to`; there is no click,
+keyboard, drag, or scroll path. A coordinate-contract + safety-validation
+milestone. Detector / classifier / OCR / thresholds unchanged. See
+`M5A_CURSOR_PREVIEW_REPORT.md`.
+
+### Added
+
+- **`bap.forge.cursor`** package:
+  - `port.CursorPreviewPort` — a one-method (`move_to`) boundary, separate from the
+    generic action engine, plus `FORBIDDEN_INPUT_METHODS` (asserted absent by tests).
+  - `geometry` — the explicit **image→screen coordinate contract** (raw px →
+    viewport CSS → content CSS → screen logical → Windows physical), applying the
+    capture/DPR scale and the monitor scale exactly once, preserving negative
+    multi-monitor coordinates, with a full `CoordinateTrace`.
+  - `preview` — the **strict manual gate**: enabled, owned/attached window, fresh
+    live scan, unchanged World+tab, target exists, confident %, weakening CONTINUE,
+    inside viewport, not stale (≤5 s default), geometry available and unchanged.
+    First failure returns the exact reason; never guesses a coordinate.
+  - `controller` — session enable (disabled by default, never persisted → resets
+    each launch), two-step evaluate→confirm→**one-shot** move, re-evaluation at
+    move time, and audit.
+  - `audit` — append-only `CURSOR_PREVIEW_ONLY` JSONL with `no_click: true`, the
+    coordinate trace, window geometry, and safety values.
+  - `context` — Qt-free bridge that builds a `PreviewRequest` from live getters
+    (so a World switched while the dialog is open is caught).
+- **`bap.adapters.cursor`**: `FakeCursorPreview` (tests) and `WindowsCursorPreview`
+  (Win32 `SetCursorPos`, movement only, DPI-aware; unavailable off Windows).
+- **Vision Debugger**: a clearly-separated, warning-styled **Cursor Preview**
+  panel — "Cursor Preview: DISABLED" → "Enable for this session" → "Preview Cursor
+  Target" → a Cancel-default confirmation dialog (no Enter/shortcut, Escape
+  cancels) → "Cursor moved — NO CLICK PERFORMED". Offered only for a fresh live
+  scan; Scan All / offline / scheduler have no path to movement.
+- Tests (47): coordinate contract (100 %/125 % scaling, two monitors, negative
+  coords, DPR, capture≠viewport), every gate condition, controller one-shot +
+  audit + re-eval, adapter surface (no click/keyboard), and the debugger UI flow.
+
+### Limitations
+
+- Live window-geometry acquisition is not automated; `MainWindow._window_geometry`
+  returns `None` by default, so the gate **safely refuses to move** until a
+  measured/calibrated `WindowGeometry` is supplied on Windows (a documented M5A
+  follow-up). No real-cursor verification is possible in the headless container.
+
 ## [Unreleased] — Milestone 4.16: External Chrome Attach (observe-only)
 
 Adds a second browser mode: BAP can **attach to an operator-launched Chrome over

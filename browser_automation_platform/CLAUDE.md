@@ -7,11 +7,15 @@ is now only the **internal engine** — a hexagonal (ports/adapters) core that t
 Forge product is built on. Optimize decisions for the Forge product first; do not
 add generic abstractions unless a Forge feature clearly requires them.
 
-Current state: **observe-only**. The app reads Forge Guild-Battlegrounds tabs and
-*explains* what it sees (weakening gate + badge detection + a deterministic
-would-click target). It performs **no clicking, mouse, or keyboard input**. Do not
-add gameplay actions, clicking, battle flow, R cadence, daily counters, or
-licensing unless explicitly asked.
+Current state: **observe-only, with one gated manual output**. The app reads Forge
+Guild-Battlegrounds tabs and *explains* what it sees (weakening gate + badge
+detection + a deterministic would-click target). It performs **no clicking and no
+keyboard input**. The only output action is the Milestone 5A **Move Cursor
+Preview**: a manual, operator-confirmed, one-shot cursor *move* to the validated
+would-click point that never clicks (`src/bap/forge/cursor/`, `CursorPreviewPort`
+exposes only `move_to`). Do not add clicking, automated/ repeated cursor movement,
+scheduler-triggered movement, battle flow, R cadence, daily counters, or licensing
+unless explicitly asked.
 
 ## Where things live
 

@@ -885,9 +885,15 @@ class MainWindow(QMainWindow):
                                 f"Cannot live-scan World “{alias}”:\n{err}\n\n"
                                 "Use “Open Offline Screenshot…” to review a saved image instead.")
             return
+        from datetime import datetime, timezone
+
+        captured_at = datetime.now(timezone.utc)
+        assigned = self._assignment.get(alias) if self._assignment else None
+        tab_id = assigned.tab_id if assigned is not None else None
         self._append_log(f"Live Test Scan of World “{alias}”.")
         self._open_debugger(img, world=world, source=f"{alias} (live)",
-                            geometry_meta=self._geometry_meta())
+                            geometry_meta=self._geometry_meta(),
+                            live=True, captured_at=captured_at, alias=alias, tab_id=tab_id)
 
     def _on_open_offline(self) -> None:
         """Explicitly review a saved screenshot. Has no effect on any World's live
@@ -955,17 +961,81 @@ class MainWindow(QMainWindow):
                     "cdp_endpoint": self._browser_settings.cdp_endpoint}
         return {"browser_mode": BrowserMode.MANAGED.value, "cdp_endpoint": None}
 
-    def _open_debugger(self, image, *, world=None, source: str = "", geometry_meta=None) -> None:
+    def _open_debugger(self, image, *, world=None, source: str = "", geometry_meta=None,
+                       live: bool = False, captured_at=None, alias=None, tab_id=None) -> None:
         from bap.gui.forge_debugger import DebuggerWindow, _bundled_classifier
         from bap.forge.detection.geometry import CaptureGeometry, derive_rois
 
         geometry = CaptureGeometry.from_image(image, **(geometry_meta or {}))
+        # Cursor preview (M5A) is offered ONLY for a fresh live scan — never for an
+        # offline image. Both are None otherwise, so the section shows as unavailable.
+        cursor_controller = self._cursor_controller() if live else None
+        cursor_context = (
+            self._build_cursor_context(world, alias, tab_id, image, captured_at, geometry_meta)
+            if (live and cursor_controller is not None) else None
+        )
         self._debugger = DebuggerWindow(
             image, world=world, classifier=_bundled_classifier(), source=source,
             geometry=geometry, rois=derive_rois(geometry, self._forge_calibration()),
+            cursor_controller=cursor_controller, cursor_context=cursor_context,
         )
         self._debugger.resize(1280, 760)
         self._debugger.show()
+
+    def _cursor_controller(self):
+        """The one session cursor-preview controller (M5A), created lazily and
+        DISABLED by default — nothing persists its enabled flag, so it resets to
+        disabled on every launch. Returns None when no real cursor adapter is
+        available (e.g. non-Windows), so the preview shows as unavailable rather
+        than guessing."""
+        if getattr(self, "_cursor_ctl", "unset") != "unset":
+            return self._cursor_ctl
+        self._cursor_ctl = None
+        try:
+            from bap.adapters.cursor.os_cursor import WindowsCursorPreview
+            from bap.forge.cursor.audit import CursorPreviewAudit, default_audit_path
+            from bap.forge.cursor.controller import CursorPreviewController
+
+            cursor = WindowsCursorPreview()  # raises off Windows / without win32
+            self._cursor_ctl = CursorPreviewController(cursor, CursorPreviewAudit(default_audit_path()))
+        except Exception:
+            self._cursor_ctl = None  # no real cursor here → preview unavailable
+        return self._cursor_ctl
+
+    def _window_geometry(self, image, geometry_meta):
+        """Best-effort browser-window geometry for the image→screen transform.
+
+        Returns None by default: precise window position, content-area offset,
+        DPR/zoom, and monitor scaling are OS-level facts not available headless, and
+        the safety gate MUST refuse to move without them (never guess). On Windows
+        this is where a calibrated/measured WindowGeometry is supplied — see
+        M5A_CURSOR_PREVIEW_REPORT.md."""
+        return None
+
+    def _build_cursor_context(self, world, alias, tab_id, image, captured_at, geometry_meta):
+        from bap.forge.browser_settings import BrowserMode
+        from bap.forge.cursor.context import CursorPreviewContext
+
+        h, w = (image.shape[0], image.shape[1]) if image is not None else (0, 0)
+        mode = (BrowserMode.EXTERNAL.value if self._external_chrome else BrowserMode.MANAGED.value)
+        geom = self._window_geometry(image, geometry_meta)
+
+        def selected_alias():
+            return self._current_test_scan_alias()
+
+        def current_tab():
+            assigned = self._assignment.get(alias) if (self._assignment and alias) else None
+            return assigned.tab_id if assigned is not None else None
+
+        return CursorPreviewContext(
+            world_alias=alias, hostname=getattr(world, "hostname", None), browser_mode=mode,
+            tab_id_at_scan=tab_id, live=True, captured_at=captured_at,
+            capture_w=w, capture_h=h, geometry_at_scan=geom,
+            selected_alias_getter=selected_alias,
+            current_tab_getter=current_tab,
+            current_geometry_getter=lambda: geom,
+            window_owned_getter=lambda: bool(self._browser_open),
+        )
 
     def _forge_calibration(self):
         """The per-user Forge calibration (weakening + battle-map regions),

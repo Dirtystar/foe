@@ -9,17 +9,26 @@ only. Optimize for Forge; avoid new generic frameworks.
 
 ## Safety state
 
-**OBSERVE ONLY — NO CLICK PERFORMED.** No mouse, keyboard, clicking, battle flow,
-R cadence, daily counters, or licensing. The pipeline computes a would-click
-point and explains its decision; it never acts.
+**NO CLICK PERFORMED.** No clicking, keyboard, battle flow, R cadence, daily
+counters, or licensing. The pipeline computes a would-click point and explains its
+decision. The one output action is the M5A **Move Cursor Preview**: a manual,
+operator-confirmed, one-shot cursor *move* to that point — strictly gated, never a
+click, never automated or scheduler-triggered.
 
 ## Branch / commit
 
 - Branch: `claude/browser-automation-architecture-5784h1`.
-- Latest work: Milestone 4.16 (External Chrome Attach) — BAP can attach to an
+- Latest work: Milestone 5A (Manual Move Cursor Preview) — the first output action:
+  a manual, confirmed, one-shot cursor MOVE to the validated would-click point that
+  **never clicks** (`bap.forge.cursor`, `CursorPreviewPort` exposes only
+  `move_to`). Strict manual gate + explicit image→screen coordinate contract +
+  append-only `CURSOR_PREVIEW_ONLY` audit. Live window-geometry acquisition is a
+  documented follow-up (gate safely blocks without it). See
+  `M5A_CURSOR_PREVIEW_REPORT.md`.
+- Prior: Milestone 4.16 (External Chrome Attach) — BAP can attach to an
   operator-launched Chrome over CDP (`bap.adapters.browser.cdp_attach_adapter`)
   as a read-only guest that never launches or closes Chrome; explicit
-  `BrowserOwnership`; persisted `BrowserMode` (default Managed). Observe-only. See
+  `BrowserOwnership`; persisted `BrowserMode` (default Managed). See
   `EXTERNAL_CHROME_IMPLEMENTATION_REPORT.md`.
 - Prior: Milestone 4.15 (one unified Dataset / Snapshot / Review workflow) — a
   single editable Reviewed Dataset (`bap.forge.dataset_store`) that every Review
