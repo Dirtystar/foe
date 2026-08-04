@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "frames": [
+    {
+      "file": "2026-08-04_17-58-59_H.png",
+      "badges": [
+        {
+          "cx": 1059,
+          "cy": 806,
+          "pct": null
+        },
+        {
+          "cx": 1031,
+          "cy": 797,
+          "pct": null
+        },
+        {
+          "cx": 913,
+          "cy": 749,
+          "pct": null
+        }
+      ],
+      "reviewed": false,
+      "weakening": null
+    }
+  ]
+}
