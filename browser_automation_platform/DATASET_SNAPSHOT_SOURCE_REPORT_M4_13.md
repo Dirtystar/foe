@@ -105,8 +105,11 @@ all below the 0.70 accept bar, so none is accepted:
   reproduction (same 66-frame set, same 154-exemplar classifier): historical /
   review_batch_002 / live-H / live-F / combined all reproduce M4.12's numbers, with
   **wrong-accepted = 0 on every set**.
-  <!--EVAL_REPRO-->A same-session `live_eval` run is reproducing this to confirm;
-  the confirmed line is appended below on completion.<!--/EVAL_REPRO-->
+  <!--EVAL_REPRO-->**Confirmed this session** — `live_eval` reproduced the M4.12
+  numbers exactly: combined 156 truth badges · 134 TP / 22 FN / 70 FP · correct_pct
+  62 · unknown 72 · **wrong_accepted 0**; review_batch_002 124/105/19/65, correct 50,
+  **wrong 0**; live-H 2/2, **wrong 0**; live-F 2/2, **wrong 0**. The `dataset/`
+  addition changed nothing loaded.<!--/EVAL_REPRO-->
 - **Wrong-accepted percentage across all sets: 0** (unchanged, the key safety metric).
 
 ## 7. Regression test (future imports auto-discover)
