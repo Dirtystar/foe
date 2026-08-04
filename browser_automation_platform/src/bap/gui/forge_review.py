@@ -20,11 +20,13 @@ from pathlib import Path
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QKeyEvent, QPainter, QPen
 from PySide6.QtWidgets import (
+    QCheckBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -166,6 +168,10 @@ class ForgeReviewWindow(QMainWindow):
                  *, world=None, detector: BadgeDetector | None = None) -> None:
         super().__init__()
         self._session = session
+        # Review Mode persists ONLY on an explicit Save, so a close can Discard
+        # cleanly and edits never silently reach disk before the operator saves.
+        self._session.store.autosave = False
+        self._dirty = False
         self._frames_dir = Path(frames_dir)
         self._cal = calibration
         self._world = world
@@ -198,6 +204,31 @@ class ForgeReviewWindow(QMainWindow):
     def _build_side_panel(self) -> QWidget:
         panel = QWidget()
         v = QVBoxLayout(panel)
+
+        # --- explicit save bar (M4.14) --------------------------------------
+        save_row = QHBoxLayout()
+        self.save_button = QPushButton("Save")
+        self.save_button.setToolTip("Write the current labels to the labels file now (atomic).")
+        self.save_button.clicked.connect(self._save_now)
+        self.reviewed_check = QCheckBox("Reviewed")
+        self.reviewed_check.setToolTip(
+            "Mark THIS frame reviewed — works for zero-badge negatives too. "
+            "Written to disk on Save.")
+        self.reviewed_check.toggled.connect(self._on_reviewed_toggled)
+        save_row.addWidget(self.save_button)
+        save_row.addWidget(self.reviewed_check)
+        save_row.addStretch(1)
+        v.addLayout(save_row)
+        self.save_status = QLabel("")
+        v.addWidget(self.save_status)
+        self.labels_path_lbl = QLabel("")
+        self.labels_path_lbl.setWordWrap(True)
+        self.labels_path_lbl.setStyleSheet("color:#888; font-size:11px;")
+        v.addWidget(self.labels_path_lbl)
+        self.dup_warn_lbl = QLabel("")
+        self.dup_warn_lbl.setWordWrap(True)
+        self.dup_warn_lbl.setStyleSheet("color:#b00020; font-weight:bold; font-size:11px;")
+        v.addWidget(self.dup_warn_lbl)
 
         row = QHBoxLayout()
         self.detect_button = QPushButton("Run detector")
@@ -294,6 +325,54 @@ class ForgeReviewWindow(QMainWindow):
         s = self._session
         self.status.setText(f"[{s.index + 1}/{s.total}] {s.current_file()}   "
                             f"badges {len(s.badges())}  reviewed {s.reviewed_count()}/{s.total}")
+        # Reflect this frame's reviewed state without re-triggering the toggle.
+        self.reviewed_check.blockSignals(True)
+        self.reviewed_check.setChecked(self._session.current().reviewed)
+        self.reviewed_check.blockSignals(False)
+        self._refresh_save_ui()
+
+    # --- explicit save / dirty state (M4.14) --------------------------------
+
+    def _refresh_save_ui(self) -> None:
+        path = self._session.store.path
+        self.labels_path_lbl.setText(f"Labels file: {path}")
+        # Warn if a *different* labels.json sits in the frames dir (a classic
+        # foot-gun: edits go to the labels file above, not that one).
+        dup = self._frames_dir / "labels.json"
+        store_path = Path(path) if path is not None else None
+        try:
+            is_other = dup.exists() and (store_path is None or dup.resolve() != store_path.resolve())
+        except OSError:
+            is_other = dup.exists()
+        self.dup_warn_lbl.setText(
+            f"⚠ A different labels.json exists in the frames folder:\n{dup}\n"
+            "Edits are written to the labels file above, not that one."
+            if is_other else "")
+        if not self._dirty:
+            if not self.save_status.text().startswith("✅"):
+                self.save_status.setText("○ No unsaved changes")
+                self.save_status.setStyleSheet("color:#888;")
+
+    def _mark_dirty(self) -> None:
+        self._dirty = True
+        self.save_status.setText("● Unsaved changes")
+        self.save_status.setStyleSheet("color:#b00020; font-weight:bold;")
+
+    def _save_now(self) -> None:
+        import time
+
+        self._session.store.save()          # explicit + atomic, to the bound path
+        self._dirty = False
+        path = self._session.store.path
+        self.save_status.setText(f"✅ Saved to: {path}   ·   {time.strftime('%H:%M:%S')}")
+        self.save_status.setStyleSheet("color:#2e7d32; font-weight:bold;")
+
+    def _on_reviewed_toggled(self, checked: bool) -> None:
+        # Explicit reviewed control — works for zero-badge negatives too; never
+        # inferred from merely opening the frame. Persisted on Save.
+        if self._session.current().reviewed != checked:
+            self._session.current().reviewed = checked
+            self._mark_dirty()
 
     def _refresh_weakening(self, rect: Rect | None) -> None:
         self.limit_lbl.setText(str(getattr(self._world, "max_weakening", "—")) if self._world else "—")
@@ -328,10 +407,14 @@ class ForgeReviewWindow(QMainWindow):
     # --- interaction --------------------------------------------------------
 
     def _on_badge_clicked(self, ix, iy, button) -> None:
+        changed = False
         if button == Qt.MouseButton.RightButton:
-            self._session.remove_nearest(ix, iy, radius=40)
+            changed = self._session.remove_nearest(ix, iy, radius=40)
         elif self._session.select_nearest(ix, iy, radius=20) is None:
             self._session.add_badge(ix, iy)
+            changed = True
+        if changed:
+            self._mark_dirty()
         self._load()
 
     def _on_region_drawn(self, rect: Rect) -> None:
@@ -348,28 +431,60 @@ class ForgeReviewWindow(QMainWindow):
 
     def _on_gt_entered(self) -> None:
         text = self.gt_edit.text().strip()
-        self._session.set_weakening(int(text) if text.isdigit() else None)
+        new = int(text) if text.isdigit() else None
+        if self._session.weakening() != new:
+            self._session.set_weakening(new)
+            self._mark_dirty()
 
     def keyPressEvent(self, e: QKeyEvent) -> None:  # noqa: N802
         key = e.key()
         if key in _PCT_KEYS:
-            self._session.arm_pct(_PCT_KEYS[key]); self._load()
+            self._session.arm_pct(_PCT_KEYS[key]); self._mark_dirty(); self._load()
         elif key in (Qt.Key.Key_Right, Qt.Key.Key_D):
             self._nav(+1)
         elif key in (Qt.Key.Key_Left, Qt.Key.Key_A):
             self._nav(-1)
         elif key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
-            self._session.remove_active(); self._load()
+            if self._session.remove_active():
+                self._mark_dirty()
+            self._load()
         else:
             super().keyPressEvent(e)
 
     def _nav(self, delta: int) -> None:
-        cur = self._session.current()
-        if cur.badges and all(b.pct is not None for b in cur.badges):
-            cur.reviewed = True
-            self._session.store.save()
+        # No implicit reviewed write on navigation — reviewed is set only by the
+        # explicit checkbox. All frames' edits live in the in-memory store, so
+        # navigating never loses them; they persist together on the next Save.
         self._session.goto(self._session.index + delta)
         self._load()
+
+    def _prompt_unsaved(self) -> str:
+        """Show the unsaved-changes dialog; return 'save' | 'discard' | 'cancel'."""
+        box = QMessageBox(self)
+        box.setWindowTitle("Unsaved changes")
+        box.setText("Save changes before closing?")
+        save_b = box.addButton("Save", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Discard", QMessageBox.ButtonRole.DestructiveRole)
+        cancel_b = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(save_b)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is cancel_b:
+            return "cancel"
+        return "save" if clicked is save_b else "discard"
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        # Never lose edits silently: prompt when there are unsaved changes.
+        if not self._dirty:
+            super().closeEvent(event)
+            return
+        choice = self._prompt_unsaved()
+        if choice == "cancel":
+            event.ignore()
+            return
+        if choice == "save":
+            self._save_now()
+        super().closeEvent(event)  # Discard: proceed without writing
 
 
 def run_review(frames_dir: str, labels_path: str, calibration_path: str, world=None) -> int:

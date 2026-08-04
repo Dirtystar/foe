@@ -38,15 +38,23 @@ def review(qapp, tmp_path):
     session = LabelSession.open(frames, labels)
     win = ForgeReviewWindow(session, frames, cal, world=world)
     yield win, session, cal, labels
+    win._dirty = False  # avoid the (blocking) unsaved-changes prompt at teardown
     win.close()
 
 
-def test_badge_add_and_classify_autosaves(review):
+def test_badge_add_and_classify_persist_on_explicit_save(review):
     win, session, _, labels = review
     win._on_badge_clicked(900, 740, Qt.MouseButton.LeftButton)
     win.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_3, Qt.KeyboardModifier.NoModifier))
     b = session.badges()[0]
     assert (b.cx, b.cy, b.pct) == (900, 740, 60)
+    # Review Mode is explicit-save: the edit is in memory and marked dirty, not yet
+    # on disk, until Save is pressed.
+    assert win._dirty is True
+    assert LabelStore.load(labels).get("a.png") is None or \
+        not LabelStore.load(labels).get("a.png").badges
+    win._save_now()
+    assert win._dirty is False
     assert LabelStore.load(labels).get("a.png").badges[0].pct == 60
 
 
@@ -65,11 +73,12 @@ def test_set_weakening_region_persists_calibration(review):
     assert r is not None and (r.x, r.y, r.w, r.h) == (700, 486, 90, 28)
 
 
-def test_weakening_ground_truth_entry_autosaves(review):
+def test_weakening_ground_truth_entry_persists_on_save(review):
     win, session, _, labels = review
     win.gt_edit.setText("42")
     win._on_gt_entered()
     assert session.weakening() == 42
+    win._save_now()
     assert LabelStore.load(labels).get("a.png").weakening == 42
 
 

@@ -157,7 +157,10 @@ class LabelSession:
         return sum(1 for b in self.badges() if b.pct is None)
 
     def _save(self) -> None:
-        self._store.save()
+        # Respect the store's autosave flag: Review Mode disables it so edits reach
+        # disk only on an explicit Save (making Discard-on-close meaningful).
+        if getattr(self._store, "autosave", True):
+            self._store.save()
 
     @classmethod
     def open(cls, frames_dir: Path | str, labels_path: Path | str) -> "LabelSession":

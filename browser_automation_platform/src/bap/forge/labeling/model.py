@@ -93,9 +93,18 @@ class LabelStore:
     Autosaves after each mutation when bound to a path. Loading a missing file
     yields an empty store bound to that path (the first edit creates it)."""
 
-    def __init__(self, path: Path | str | None = None):
+    def __init__(self, path: Path | str | None = None, *, autosave: bool = True):
         self._path = Path(path) if path is not None else None
         self._frames: dict[str, FrameLabel] = {}
+        # When False, per-edit autosave (LabelSession._save) is suppressed and the
+        # caller must persist explicitly via save() — used by Review Mode so a
+        # close can Discard cleanly and edits only reach disk on an explicit Save.
+        # An explicit save() always writes regardless of this flag.
+        self.autosave = autosave
+
+    def bind(self, path: Path | str) -> None:
+        """Bind the store to a labels path (so a later explicit save() writes there)."""
+        self._path = Path(path)
 
     @property
     def path(self) -> Path | None:

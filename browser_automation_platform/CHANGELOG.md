@@ -4,6 +4,38 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 4.14: reliable Review save workflow (observe-only)
+
+Fixes a real Windows bug where Review-Mode edits — especially `reviewed=true` —
+did not persist. Root cause: `reviewed=true` was only ever written by an implicit
+branch of frame navigation (`badges present AND all classified AND you navigate`),
+so it was **impossible for zero-badge negatives**, never fired on close-without-nav,
+and had no visible control; edits also had no dirty state, no save confirmation,
+and no visible labels path. Review persistence is now explicit, reliable, and
+visible. No detector/classifier/OCR/threshold/runtime/snapshot/dataset-semantics
+change; observe-only.
+
+### Changed
+
+- **Review Mode is explicit-save.** `LabelStore` gains an `autosave` flag (default
+  `True`, so the grading labeler and all other callers are unchanged);
+  `LabelSession._save()` respects it. Review Mode turns autosave **off** so edits
+  reach disk only on an explicit Save — which makes Discard meaningful.
+- **`forge_review`** adds: a **Save** button (atomic write to the exact launch
+  labels path, with a visible `✅ Saved to: <full path> · <time>` confirmation), a
+  **Reviewed** checkbox (works for zero-badge negatives; preserves labels; written
+  on Save; never inferred from opening a frame — the implicit nav auto-review was
+  removed), a **dirty** indicator (`● Unsaved changes` / `Saved`), a **close
+  confirmation** (Save / Discard / Cancel — no edit lost silently), the active
+  **labels-file path**, and a **duplicate-`labels.json`-in-frames** warning.
+
+### Added
+
+- `tests/unit/gui/test_review_save.py` (save writes to the requested path; persists
+  additions / deletions / percentages / `reviewed=true`; reviewed negative with
+  zero badges; reopen restores; close prompts; Discard does not write; Cancel keeps
+  the window open; no duplicate `labels.json` under `frames/`). `REVIEW_SAVE_FIX_M4_14.md`.
+
 ## [Unreleased] — Milestone 4.13b: imported-snapshot dataset source (observe-only)
 
 Makes the repo-root `dataset/` (where "Import Snapshot into Dataset" writes) a
