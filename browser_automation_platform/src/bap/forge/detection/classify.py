@@ -168,12 +168,32 @@ def default_assets_root():
     return None
 
 
+def default_snapshot_dataset_dir():
+    """Locate the repo-root ``dataset/`` directory that "Import Snapshot into
+    Dataset" writes to (frames/ + labels.json), by walking up from this module.
+
+    This is a **first-class reviewed source** alongside grading / live_review /
+    review_batch: every snapshot the operator imports there is discovered
+    automatically. Returns ``None`` when it is absent (e.g. no snapshots imported
+    yet, or an installed wheel that does not ship it)."""
+    from pathlib import Path
+
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "dataset"
+        if (candidate / "labels.json").exists() and (candidate / "frames").is_dir():
+            return candidate
+    return None
+
+
 def default_label_sources(assets_root) -> list[tuple]:
-    """The reviewed label sets that exist under ``assets_root`` — grading, live
-    review, and the reviewed active-learning batch — as ``(frames_dir,
-    labels_path)`` pairs. A source is included only when its labels.json is
-    present, so the reviewed batch joins automatically once it is pushed. Single
-    source of truth for both the bundled classifier and the retrain path."""
+    """The reviewed label sets — grading, live review, the reviewed active-learning
+    batch (all under ``assets_root``), plus the repo-root ``dataset/`` of imported
+    snapshots — as ``(frames_dir, labels_path)`` pairs. A source is included only
+    when its labels.json is present, so an imported snapshot joins automatically.
+    Single source of truth for both the bundled classifier and the retrain path.
+    Only reviewed, classified badges become exemplars (see ``_examples_from``), so
+    an imported-but-not-yet-reviewed frame contributes nothing until reviewed."""
     from pathlib import Path
 
     root = Path(assets_root)
@@ -182,6 +202,9 @@ def default_label_sources(assets_root) -> list[tuple]:
         base = root / name
         if (base / "labels.json").exists():
             out.append((base / "frames", base / "labels.json"))
+    snapshot_dir = default_snapshot_dataset_dir()
+    if snapshot_dir is not None:
+        out.append((snapshot_dir / "frames", snapshot_dir / "labels.json"))
     return out
 
 

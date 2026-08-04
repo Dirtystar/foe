@@ -107,6 +107,23 @@ def load_live(base: Path | str = LIVE_DIR) -> list[Sample]:
     return _load(Path(base), "live", world_from_name=True)
 
 
+def load_snapshot_dataset(base: Path | str | None = None) -> list[Sample]:
+    """Reviewed frames imported via "Import Snapshot into Dataset" (repo-root
+    ``dataset/``). Resolved robustly (cwd-independent) when ``base`` is None.
+    Returns [] when the directory is absent, so it is a no-op until snapshots are
+    imported. Only reviewed frames load (the standard ground-truth gate)."""
+    if base is None:
+        from bap.forge.detection.classify import default_snapshot_dataset_dir
+
+        base = default_snapshot_dataset_dir()
+    if base is None:
+        return []
+    base = Path(base)
+    if not (base / "labels.json").exists():
+        return []
+    return _load(base, "snapshot", world_from_name=False)
+
+
 def load_review_batch(base: Path | str = REVIEW_BATCH_2_DIR) -> list[Sample]:
     """The reviewed active-learning batch, or an empty list when it has not been
     pushed yet (guarded absence — never an error)."""
@@ -144,12 +161,16 @@ def _md5(data: bytes) -> str:
 
 def load_all(historical: Path | str = HISTORICAL_DIR,
              live: Path | str = LIVE_DIR,
-             review_batch: Path | str = REVIEW_BATCH_2_DIR) -> list[Sample]:
+             review_batch: Path | str = REVIEW_BATCH_2_DIR,
+             snapshots: Path | str | None = None) -> list[Sample]:
     """Every reviewed source, concatenated then de-duplicated by image content so
     a frame reviewed in more than one place is counted once (the later, reviewed
-    source wins). ``review_batch`` is included only when present."""
+    source wins). ``review_batch`` and the imported-snapshot ``dataset/`` are each
+    included only when present. Snapshots are appended last so their (reviewed)
+    labels supersede any earlier copy of the same image."""
     return _dedup_by_content(
-        load_historical(historical) + load_live(live) + load_review_batch(review_batch))
+        load_historical(historical) + load_live(live)
+        + load_review_batch(review_batch) + load_snapshot_dataset(snapshots))
 
 
 def battle_map_box(sample: Sample) -> tuple[int, int, int, int]:
@@ -159,5 +180,6 @@ def battle_map_box(sample: Sample) -> tuple[int, int, int, int]:
 
 __all__ = [
     "Sample", "GtBadge", "HISTORICAL_DIR", "LIVE_DIR", "REVIEW_BATCH_2_DIR",
-    "load_historical", "load_live", "load_review_batch", "load_all", "battle_map_box",
+    "load_historical", "load_live", "load_review_batch", "load_snapshot_dataset",
+    "load_all", "battle_map_box",
 ]

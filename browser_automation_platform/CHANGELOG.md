@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 4.13b: imported-snapshot dataset source (observe-only)
+
+Makes the repo-root `dataset/` (where "Import Snapshot into Dataset" writes) a
+first-class **reviewed** source for both the classifier and the evaluation loader,
+so future imported snapshots are discovered automatically. No threshold change, no
+retraining, observe-only.
+
+### Added
+
+- `classify.default_snapshot_dataset_dir()` — resolves the repo-root `dataset/`
+  robustly (walk-up, cwd-independent). `classify.default_label_sources()` now
+  includes it (grading / live_review / review_batch_002 preserved).
+- `dataset.load_snapshot_dataset()` + `dataset.load_all(..., snapshots=…)` load the
+  imported-snapshot `dataset/` last, then de-duplicate by image content hash so an
+  identical frame is never double-counted (the reviewed copy wins).
+- Regression test proving future **reviewed** imports under `dataset/` are
+  auto-discovered by the classifier and loader, while **unreviewed** ones are
+  skipped (the standing ground-truth gate). `DATASET_SNAPSHOT_SOURCE_REPORT_M4_13.md`.
+
+### Notes
+
+- The committed live H snapshot (`dataset/2026-08-04_17-58-59_H`) is **unreviewed**
+  (`reviewed:false`, all percentages `null` — the detector's seeded detections), so
+  it correctly loads as **no** ground truth and adds **no** exemplars: the bundled
+  classifier stays at 154 exemplars, the eval set stays at 66 frames, combined
+  metrics are unchanged, and wrong-accepted stays 0. It counts once reviewed.
+
 ## [Unreleased] — Milestone 4.13: Snapshot workflow (observe-only)
 
 Freeze every interesting live scan into a permanent, reproducible, immediately
