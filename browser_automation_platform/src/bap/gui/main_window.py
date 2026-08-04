@@ -59,11 +59,21 @@ class MainWindow(QMainWindow):
         forge: bool = False,
         world_store=None,
         capture_callback=None,
+        browser_settings=None,
     ) -> None:
         super().__init__()
         self._service = service
         self._bridge = bridge
         self._on_close = on_close
+        # Browser mode (Milestone 4.16): Managed Chromium (default) vs External
+        # Chrome (CDP). Persisted; drives the Worlds-page connection UI, the exit
+        # prompt, and the browser provenance stamped onto captures/snapshots.
+        if browser_settings is None:
+            from bap.forge.browser_settings import BrowserSettings
+
+            browser_settings = BrowserSettings()
+        self._browser_settings = browser_settings
+        self._external_chrome = getattr(browser_settings, "is_external", False)
         # Forge mode is the product surface: a persistent World Manager. It is a
         # specialisation of attended mode (the user drives a real browser), so it
         # reuses the tab-assignment/start-gating machinery and adds world CRUD +
@@ -425,21 +435,7 @@ class MainWindow(QMainWindow):
         self.forge_status.setStyleSheet("font-weight: bold; color: #E0B454;")
         v.addWidget(self.forge_status)
 
-        browser = widgets.Card("Browser", "open Chromium, log in, then reattach")
-        row = QHBoxLayout()
-        self.open_browser_button = QPushButton("Open Browser")
-        self.close_browser_button = QPushButton("Close Browser")
-        self.close_browser_button.setEnabled(False)
-        self.scan_button = QPushButton("Scan && Reattach")
-        self.scan_button.setEnabled(False)
-        self.attended_hint = QLabel("Open the browser, log in to your worlds, then Scan && Reattach.")
-        self.attended_hint.setObjectName("attendedHint")
-        for widget in (self.open_browser_button, self.close_browser_button, self.scan_button):
-            row.addWidget(widget)
-        row.addWidget(self.attended_hint)
-        row.addStretch(1)
-        browser.body.addLayout(row)
-        v.addWidget(browser)
+        v.addWidget(self._build_browser_card())
 
         manager = widgets.Card("World Manager", "add, edit, and reattach worlds live")
         self.worlds_table = QTableWidget(0, len(self._WORLD_COLS))
@@ -473,13 +469,96 @@ class MainWindow(QMainWindow):
         pickers.body.addLayout(self._pickers_form)
         v.addWidget(pickers)
 
-        self.open_browser_button.clicked.connect(self._on_open_browser_clicked)
-        self.close_browser_button.clicked.connect(self._on_close_browser_clicked)
-        self.scan_button.clicked.connect(self._on_scan_clicked)
         self.add_world_button.clicked.connect(self._on_add_world)
         self.edit_world_button.clicked.connect(self._on_edit_world)
         self.remove_world_button.clicked.connect(self._on_remove_world)
         return page
+
+    def _build_browser_card(self):
+        """The Browser card — Managed Chromium or External Chrome (CDP).
+
+        It reflects the RUNNING browser mode (chosen at launch from persisted
+        settings). Managed shows Open/Close; External shows the CDP endpoint, Test
+        Connection, Attach, and Disconnect — never an 'Open Browser' button, since
+        BAP does not open the operator's Chrome. The mode selector persists the
+        choice for the next launch (there is no silent hot-swap of the running
+        browser)."""
+        from PySide6.QtWidgets import QComboBox, QLineEdit
+
+        from bap.forge.browser_settings import BrowserMode
+        from bap.gui import widgets
+
+        external = self._external_chrome
+        subtitle = ("attach to your Chrome over CDP, then reattach"
+                    if external else "open Chromium, log in, then reattach")
+        card = widgets.Card("Browser", subtitle)
+
+        # --- mode selector (persisted; applies on next launch) ----------------
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Browser mode:"))
+        self.browser_mode_combo = QComboBox()
+        self.browser_mode_combo.addItem(BrowserMode.MANAGED.label, BrowserMode.MANAGED.value)
+        self.browser_mode_combo.addItem(BrowserMode.EXTERNAL.label, BrowserMode.EXTERNAL.value)
+        current = BrowserMode.EXTERNAL if external else BrowserMode.MANAGED
+        self.browser_mode_combo.setCurrentIndex(self.browser_mode_combo.findData(current.value))
+        self.browser_mode_combo.currentIndexChanged.connect(self._on_browser_mode_changed)
+        mode_row.addWidget(self.browser_mode_combo)
+        self.browser_mode_note = QLabel("")
+        self.browser_mode_note.setWordWrap(True)
+        self.browser_mode_note.setProperty("role", "muted")
+        mode_row.addWidget(self.browser_mode_note)
+        mode_row.addStretch(1)
+        card.body.addLayout(mode_row)
+
+        # --- External-Chrome connection controls ------------------------------
+        self.cdp_endpoint_edit = QLineEdit(self._browser_settings.cdp_endpoint)
+        self.test_conn_button = QPushButton("Test Connection")
+        self.test_conn_button.clicked.connect(self._on_test_connection)
+        self.connection_status_label = QLabel("")
+        self.connection_status_label.setObjectName("connectionStatus")
+        self.connection_status_label.setWordWrap(True)
+        self.localhost_warning_label = QLabel("")
+        self.localhost_warning_label.setWordWrap(True)
+        self.localhost_warning_label.setStyleSheet("color:#C0563A; font-weight:bold;")
+        self.launch_command_label = QLabel("")
+        self.launch_command_label.setWordWrap(True)
+        self.launch_command_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.launch_command_label.setStyleSheet("font-family: monospace;")
+
+        if external:
+            ep_row = QHBoxLayout()
+            ep_row.addWidget(QLabel("CDP endpoint:"))
+            ep_row.addWidget(self.cdp_endpoint_edit, stretch=1)
+            ep_row.addWidget(self.test_conn_button)
+            card.body.addLayout(ep_row)
+            card.body.addWidget(self.launch_command_label)
+            card.body.addWidget(self.localhost_warning_label)
+            card.body.addWidget(self.connection_status_label)
+
+        # --- Attach/Open + Disconnect/Close + Scan ----------------------------
+        row = QHBoxLayout()
+        self.open_browser_button = QPushButton("Attach Chrome" if external else "Open Browser")
+        self.close_browser_button = QPushButton("Disconnect" if external else "Close Browser")
+        self.close_browser_button.setEnabled(False)
+        self.scan_button = QPushButton("Scan && Reattach")
+        self.scan_button.setEnabled(False)
+        default_hint = ("Attach to your Chrome, then Scan && Reattach."
+                        if external else "Open the browser, log in to your worlds, then Scan && Reattach.")
+        self.attended_hint = QLabel(default_hint)
+        self.attended_hint.setObjectName("attendedHint")
+        for widget in (self.open_browser_button, self.close_browser_button, self.scan_button):
+            row.addWidget(widget)
+        row.addWidget(self.attended_hint)
+        row.addStretch(1)
+        card.body.addLayout(row)
+
+        self.open_browser_button.clicked.connect(self._on_open_browser_clicked)
+        self.close_browser_button.clicked.connect(self._on_close_browser_clicked)
+        self.scan_button.clicked.connect(self._on_scan_clicked)
+
+        if external:
+            self._refresh_external_chrome_ui()
+        return card
 
     def _build_vision_page(self) -> QWidget:
         """Test Scan (observe-only): an EXPLICIT World selector — the scan always
@@ -807,7 +886,8 @@ class MainWindow(QMainWindow):
                                 "Use “Open Offline Screenshot…” to review a saved image instead.")
             return
         self._append_log(f"Live Test Scan of World “{alias}”.")
-        self._open_debugger(img, world=world, source=f"{alias} (live)")
+        self._open_debugger(img, world=world, source=f"{alias} (live)",
+                            geometry_meta=self._geometry_meta())
 
     def _on_open_offline(self) -> None:
         """Explicitly review a saved screenshot. Has no effect on any World's live
@@ -841,6 +921,7 @@ class MainWindow(QMainWindow):
             browser_open=self._browser_open, capture_callback=self._capture_callback,
             classifier=_bundled_classifier(), calibration=self._forge_calibration(),
             artifacts_root=self._scan_all_artifacts_root(),
+            geometry_meta=self._geometry_meta(),
         )
         saved = sum(1 for r in results if r.artifacts_dir)
         self._append_log(f"Scan All: {len(results)} attached World(s) scanned independently"
@@ -863,11 +944,22 @@ class MainWindow(QMainWindow):
         self._scan_all_window.resize(1200, 360)
         self._scan_all_window.show()
 
-    def _open_debugger(self, image, *, world=None, source: str = "") -> None:
+    def _geometry_meta(self) -> dict:
+        """Capture provenance for live scans: which browser produced the pixels.
+        Keeps External-Chrome captures calibrated separately from Managed ones and
+        stamps snapshot metadata (Milestone 4.16)."""
+        from bap.forge.browser_settings import BrowserMode
+
+        if self._external_chrome:
+            return {"browser_mode": BrowserMode.EXTERNAL.value,
+                    "cdp_endpoint": self._browser_settings.cdp_endpoint}
+        return {"browser_mode": BrowserMode.MANAGED.value, "cdp_endpoint": None}
+
+    def _open_debugger(self, image, *, world=None, source: str = "", geometry_meta=None) -> None:
         from bap.gui.forge_debugger import DebuggerWindow, _bundled_classifier
         from bap.forge.detection.geometry import CaptureGeometry, derive_rois
 
-        geometry = CaptureGeometry.from_image(image)
+        geometry = CaptureGeometry.from_image(image, **(geometry_meta or {}))
         self._debugger = DebuggerWindow(
             image, world=world, classifier=_bundled_classifier(), source=source,
             geometry=geometry, rois=derive_rois(geometry, self._forge_calibration()),
@@ -1022,12 +1114,17 @@ class MainWindow(QMainWindow):
     def _on_browser_closed(self) -> None:
         self._browser_open = False
         self.open_browser_button.setEnabled(True)
-        self.open_browser_button.setText("Open Browser")
+        self.open_browser_button.setText("Attach Chrome" if self._external_chrome else "Open Browser")
         self.scan_button.setEnabled(False)
         if hasattr(self, "close_browser_button"):
             self.close_browser_button.setEnabled(False)
-        self.attended_hint.setText("Browser closed. Open it again to reconnect your worlds.")
-        self._append_log("Browser closed.")
+        if self._external_chrome:
+            self.attended_hint.setText("Disconnected. Chrome is still open — Attach again to reconnect.")
+            self._set_connection_status("Disconnected", ok=None)
+            self._append_log("Disconnected from external Chrome (Chrome left running).")
+        else:
+            self.attended_hint.setText("Browser closed. Open it again to reconnect your worlds.")
+            self._append_log("Browser closed.")
         self._refresh_test_scan_combo()
         self._refresh_dashboard()
 
@@ -1054,7 +1151,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_open_browser_clicked(self) -> None:
-        self._append_log("Opening browser…")
+        self._append_log("Attaching to external Chrome…" if self._external_chrome else "Opening browser…")
         self.open_browser_button.setEnabled(False)
         future = self._service.open_browser()
         future.add_done_callback(self._browser_open_done)
@@ -1064,21 +1161,110 @@ class MainWindow(QMainWindow):
         try:
             future.result()
         except Exception as exc:  # surfaced, never raised into the thread
-            self._bridge.error_occurred.emit(f"Could not open browser: {exc}")
+            verb = "attach to external Chrome" if self._external_chrome else "open browser"
+            self._bridge.error_occurred.emit(f"Could not {verb}: {exc}")
+            # Leave the app recoverable: re-enable Attach so the operator can
+            # launch Chrome and retry, without a silent fallback to another mode.
+            self._bridge.browser_closed.emit()
             return
         self._bridge.browser_ready.emit()
 
     def _on_browser_ready(self) -> None:
         self._browser_open = True
         self.scan_button.setEnabled(True)
-        self.open_browser_button.setText("Browser open")
+        self.open_browser_button.setText("Attached" if self._external_chrome else "Browser open")
         self.open_browser_button.setEnabled(False)
         if hasattr(self, "close_browser_button"):
             self.close_browser_button.setEnabled(True)
-        self.attended_hint.setText("Open your pages, then Scan.")
-        self._append_log("Browser open. Open your pages, then Scan.")
+        if self._external_chrome:
+            self.attended_hint.setText("Attached. Open your Forge world tabs in Chrome, then Scan && Reattach.")
+            self._set_connection_status("Connected", ok=True)
+            self._append_log("Attached to external Chrome (read-only).")
+        else:
+            self.attended_hint.setText("Open your pages, then Scan.")
+            self._append_log("Browser open. Open your pages, then Scan.")
         self._refresh_test_scan_combo()
         self._refresh_dashboard()
+
+    # --- External Chrome (CDP) controls -------------------------------------
+
+    def _on_browser_mode_changed(self, *_args) -> None:
+        """Persist the selected browser mode. It applies on the next launch — the
+        running browser is never hot-swapped (no silent mode change mid-session)."""
+        from bap.forge.browser_settings import (
+            BrowserMode,
+            default_settings_path,
+            save_browser_settings,
+        )
+
+        selected = BrowserMode(self.browser_mode_combo.currentData())
+        running = BrowserMode.EXTERNAL if self._external_chrome else BrowserMode.MANAGED
+        self._browser_settings = self._browser_settings.with_changes(mode=selected)
+        try:
+            save_browser_settings(default_settings_path(), self._browser_settings)
+        except Exception as exc:  # never crash the UI over a settings write
+            self._append_log(f"Could not save browser mode: {exc}")
+        if selected is running:
+            self.browser_mode_note.setText("")
+        else:
+            self.browser_mode_note.setText(
+                f"Saved. Restart BAP to use {selected.label}; this session is still "
+                f"running {running.label}.")
+
+    def _on_test_connection(self) -> None:
+        """GET the CDP endpoint's /json/version to report reachability, browser
+        version, and tab count — without connecting a driver. Persists the typed
+        endpoint. Does not launch Chrome."""
+        from bap.adapters.browser.cdp_attach_adapter import normalize_endpoint, probe_cdp
+        from bap.forge.browser_settings import default_settings_path, save_browser_settings
+
+        endpoint = normalize_endpoint(self.cdp_endpoint_edit.text())
+        self.cdp_endpoint_edit.setText(endpoint)
+        self._browser_settings = self._browser_settings.with_changes(cdp_endpoint=endpoint)
+        try:
+            save_browser_settings(default_settings_path(), self._browser_settings)
+        except Exception:
+            pass
+        self._refresh_external_chrome_ui()
+        result = probe_cdp(endpoint)
+        if result.get("reachable"):
+            tabs = result.get("tabs")
+            forge = result.get("forge_tabs")
+            detail = f"{result.get('browser', 'Chrome')}"
+            if tabs is not None:
+                detail += f" · {tabs} tab(s)"
+                if forge is not None:
+                    detail += f" ({forge} Forge)"
+            self._set_connection_status(f"Reachable — {detail}", ok=True)
+        else:
+            self._set_connection_status(
+                f"Connection refused / not running at {endpoint}. "
+                "Launch Chrome with remote debugging first.", ok=False)
+
+    def _set_connection_status(self, text: str, *, ok) -> None:
+        if not hasattr(self, "connection_status_label"):
+            return
+        color = "#3A8A3A" if ok else ("#C0563A" if ok is False else "#888888")
+        self.connection_status_label.setStyleSheet(f"color:{color};")
+        self.connection_status_label.setText(f"Status: {text}")
+
+    def _refresh_external_chrome_ui(self) -> None:
+        """Update the localhost warning and the copyable launch command from the
+        current endpoint."""
+        from bap.adapters.browser.cdp_attach_adapter import is_localhost_endpoint, normalize_endpoint
+        from bap.forge.browser_settings import windows_launch_command
+
+        if not hasattr(self, "cdp_endpoint_edit"):
+            return
+        endpoint = normalize_endpoint(self.cdp_endpoint_edit.text())
+        if is_localhost_endpoint(endpoint):
+            self.localhost_warning_label.setText("")
+        else:
+            self.localhost_warning_label.setText(
+                "⚠ Endpoint is not localhost. The Chrome debugging port must not be "
+                "exposed to the network — use 127.0.0.1.")
+        self.launch_command_label.setText(
+            "Launch Chrome (Windows):  " + windows_launch_command(self._browser_settings))
 
     def _on_scan_clicked(self) -> None:
         self._append_log("Scanning open tabs…")
@@ -1232,7 +1418,12 @@ class MainWindow(QMainWindow):
         # tabs and login). Stop always means automation-only; only an explicit
         # choice here tears the browser down.
         close_browser = True
-        if self._forge and self._browser_open:
+        if self._external_chrome:
+            # External Chrome is operator-owned: exit disconnects (shutdown_runtime
+            # → adapter.stop() disconnects only) but NEVER closes Chrome. No
+            # "keep the browser open" prompt — there is no BAP-owned browser.
+            close_browser = True
+        elif self._forge and self._browser_open:
             choice = self._ask_exit_choice()
             if choice == "cancel":
                 event.ignore()

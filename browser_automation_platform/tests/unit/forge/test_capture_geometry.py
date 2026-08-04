@@ -53,6 +53,19 @@ def test_capture_geometry_key_includes_all_known_fields():
     assert CaptureGeometry(1920, 1080).key() == "1920x1080"
 
 
+def test_external_chrome_key_is_separate_from_managed(tmp_path):
+    # Milestone 4.16: External Chrome must not silently reuse a Managed-Chromium
+    # calibration. Its key differs even at identical pixel size, while Managed keeps
+    # the legacy key so existing calibrations still match.
+    managed = CaptureGeometry(1920, 1080, browser_mode="managed_chromium")
+    external = CaptureGeometry(1920, 1080, browser_mode="external_chrome")
+    legacy = CaptureGeometry(1920, 1080)  # captures predating the field
+    assert managed.key() == legacy.key() == "1920x1080"     # backward compatible
+    assert external.key() == "1920x1080|ext:external_chrome"
+    assert external.key() != managed.key()
+    assert external.to_dict()["browser_mode"] == "external_chrome"
+
+
 def test_default_battle_map_covers_whole_width_below_top_bar():
     g = CaptureGeometry(1920, 1080)
     weak = Rect(678, 477, 56, 25)

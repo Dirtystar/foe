@@ -1,10 +1,31 @@
-# External Chrome Attach — Design (Milestone 4.13)
+# External Chrome Attach (Milestone 4.16 — **implemented**)
 
-**Design only. Not implemented in this milestone.** This document describes how
-BAP should support **attaching to an operator-launched Chrome** over CDP instead
-of launching its own bundled Chromium. It changes no gameplay behaviour and keeps
-the app strictly observe-only; capture stays read-only (`Page.captureScreenshot`,
-`fromSurface`, no input).
+**Status: implemented.** BAP can attach to an **operator-launched Chrome** over
+CDP instead of launching its own bundled Chromium. It changes no gameplay
+behaviour and stays strictly observe-only; capture remains read-only
+(`Page.captureScreenshot`, `fromSurface`, no input). Managed Chromium is still the
+default, so existing installs are unchanged. Implementation details and the exact
+operator checklist are in **EXTERNAL_CHROME_IMPLEMENTATION_REPORT.md**; the design
+below is preserved for context.
+
+## Operator quick start (Windows)
+
+1. Close any Chrome already using the dedicated BAP profile.
+2. Launch a **dedicated** Chrome with remote debugging (never your personal profile):
+
+   ```
+   "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%LOCALAPPDATA%\BAP\chrome-profile"
+   ```
+
+3. Log into Forge and open your World tabs.
+4. In BAP → Worlds → **Browser mode: External Chrome (CDP)** (restart BAP if you
+   just switched from Managed).
+5. **Test Connection** → **Attach Chrome** → **Scan && Reattach**.
+6. Close BAP — Chrome stays open.
+
+A dedicated `--user-data-dir` is recommended because it isolates BAP from your
+email/banking/personal tabs, avoids profile-lock conflicts, keeps the Forge login
+persistent, and leaves the operator fully in control. The port stays on localhost.
 
 ## Why
 
@@ -119,4 +140,5 @@ instead of a BAP-launched one.
 - Managing/mutating the operator's Chrome profile.
 - Multi-machine / remote-CDP over the network (localhost only for now).
 
-_This is a design. No attach code, adapter, or UI is added in Milestone 4.13._
+_Design authored in Milestone 4.13; implemented in Milestone 4.16 — see
+EXTERNAL_CHROME_IMPLEMENTATION_REPORT.md._

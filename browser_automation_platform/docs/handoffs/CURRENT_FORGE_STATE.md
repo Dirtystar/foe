@@ -16,8 +16,13 @@ point and explains its decision; it never acts.
 ## Branch / commit
 
 - Branch: `claude/browser-automation-architecture-5784h1`.
-- Latest work: Milestone 4.15 (one unified Dataset / Snapshot / Review workflow) —
-  a single editable Reviewed Dataset (`bap.forge.dataset_store`) that every Review
+- Latest work: Milestone 4.16 (External Chrome Attach) — BAP can attach to an
+  operator-launched Chrome over CDP (`bap.adapters.browser.cdp_attach_adapter`)
+  as a read-only guest that never launches or closes Chrome; explicit
+  `BrowserOwnership`; persisted `BrowserMode` (default Managed). Observe-only. See
+  `EXTERNAL_CHROME_IMPLEMENTATION_REPORT.md`.
+- Prior: Milestone 4.15 (one unified Dataset / Snapshot / Review workflow) — a
+  single editable Reviewed Dataset (`bap.forge.dataset_store`) that every Review
   entry point edits; snapshots are immutable archives imported into it. See
   `docs/DATASET_WORKFLOW.md`.
 

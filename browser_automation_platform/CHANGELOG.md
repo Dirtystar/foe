@@ -4,6 +4,60 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 4.16: External Chrome Attach (observe-only)
+
+Adds a second browser mode: BAP can **attach to an operator-launched Chrome over
+CDP** and observe the Forge tabs already open, instead of always launching and
+owning its bundled Chromium. Strictly observe-only (no click / keyboard / cursor /
+navigation / gameplay). **Managed Chromium stays the default**, so existing
+installs, Worlds, settings, tests, and CLI entry points are unchanged. See
+`EXTERNAL_CHROME_IMPLEMENTATION_REPORT.md`.
+
+### Added
+
+- **`bap.adapters.browser.cdp_attach_adapter`** — `CdpAttachBrowserManager`, a
+  read-only CDP guest (`BrowserPort` + tab discovery/adoption): `start()` connects
+  via `connect_over_cdp` (injectable), `stop()` **disconnects only and never closes
+  Chrome**, `open_tab`/`navigate` are refused and `close_tab` is a no-op. Plus
+  `probe_cdp()` (driver-free `GET /json/version` reachability), `normalize_endpoint`,
+  `is_localhost_endpoint`.
+- **`bap.forge.browser_settings`** — persisted `BrowserMode` (Managed / External),
+  `cdp_endpoint`, `chrome_path`, and the copyable Windows launch command. Default
+  Managed; a missing file is never an error (no migration needed).
+- **Explicit ownership** — `BrowserOwnership` (`MANAGED` / `EXTERNAL`);
+  `BrowserPort.ownership` (default MANAGED, all existing adapters unchanged);
+  `BrowserController.ownership` / `owns_process`.
+- **Worlds page** — a **Browser mode** selector and, in External mode, a **CDP
+  endpoint** field, **Test Connection**, **Attach Chrome**, **Disconnect**, a live
+  status line, a non-localhost warning, and the copyable launch command (no "Open
+  Browser" button in External mode — BAP does not open the operator's Chrome).
+- Capture provenance: `CaptureGeometry` gains `browser_mode` / `cdp_endpoint`, and
+  External Chrome is kept in a separate calibration namespace (`ext:` marker in the
+  key; Managed keys byte-identical). Snapshot metadata gains `browser_mode`,
+  `browser_name`, `cdp_endpoint`, `zoom` (older snapshots still load).
+- Tests (34 new/changed): `test_cdp_attach_adapter.py`, `test_browser_settings.py`,
+  `test_external_lifecycle.py`, `test_external_chrome_ui.py`, plus additions to
+  `test_browser_controller.py`, `test_snapshots.py`, `test_capture_geometry.py`.
+  Faithful fake CDP adapters (injected `connect`/`fetch`) keep the unit suite
+  Chrome-free.
+
+### Changed
+
+- `gui_main` selects the browser adapter from the persisted mode (External →
+  `CdpAttachBrowserManager`, else the managed attended adapter). No silent fallback
+  between modes.
+- External-Chrome exit **disconnects but never closes Chrome** (no "keep the browser
+  open" prompt — there is no BAP-owned browser); Stop automation never disconnects.
+- `testscan.scan_world` / `scan_all_attached` thread capture provenance
+  (`geometry_meta`) onto the geometry.
+
+### Limitations
+
+- Browser-mode change applies on the **next launch** (persisted + restart note); the
+  running adapter is not hot-swapped, for observe-only safety.
+- viewport/DPR/zoom remain best-effort (`None` when unavailable), as in Managed mode.
+- localhost only; no real-Chrome integration test in the normal unit suite (opt-in).
+
 ## [Unreleased] — Milestone 4.15: one unified Dataset / Snapshot / Review workflow (observe-only)
 
 Collapses the fragmented review targets into **one editable Reviewed Dataset**.

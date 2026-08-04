@@ -35,11 +35,11 @@ class _FakeDetector:
         return 0.0
 
 
-def _scan(image):
+def _scan(image, **geom_meta):
     rois = ScanRois(battle_map=Rect(0, 8, image.shape[1], image.shape[0] - 8),
                     weakening=Rect(2, 2, 20, 12), weakening_calibrated=True)
     geom = CaptureGeometry.from_image(image, viewport_w=image.shape[1], viewport_h=image.shape[0],
-                                     device_pixel_ratio=1.0)
+                                     device_pixel_ratio=1.0, **geom_meta)
     return build_scan(image, world=None, detector=_FakeDetector(), classifier=None,
                       rois=rois, geometry=geom)
 
@@ -79,6 +79,41 @@ def test_metadata_is_complete(tmp_path):
     assert meta["world_alias"] == "H"
     assert meta["resolution"] == [120, 90]
     assert meta["image_md5"] == _md5(d / "frames" / "raw.png")
+
+
+def test_snapshot_records_external_chrome_provenance(tmp_path):
+    img = _image()
+    d = snapshots.write_snapshot(
+        img, _scan(img, browser_mode="external_chrome", cdp_endpoint="http://127.0.0.1:9222"),
+        root=tmp_path)
+    meta = json.loads((d / "metadata.json").read_text())
+    assert meta["browser_mode"] == "external_chrome"
+    assert meta["browser_name"] == "External Chrome (CDP)"
+    assert meta["cdp_endpoint"] == "http://127.0.0.1:9222"
+
+
+def test_snapshot_managed_provenance_defaults(tmp_path):
+    img = _image()
+    d = snapshots.write_snapshot(img, _scan(img, browser_mode="managed_chromium"), root=tmp_path)
+    meta = json.loads((d / "metadata.json").read_text())
+    assert meta["browser_mode"] == "managed_chromium"
+    assert meta["browser_name"] == "Managed Chromium"
+    assert meta["cdp_endpoint"] is None
+
+
+def test_older_snapshot_without_provenance_still_loads(tmp_path):
+    # A snapshot whose metadata predates the browser-provenance keys must remain
+    # loadable (additive schema, no migration).
+    img = _image()
+    d = snapshots.write_snapshot(img, _scan(img), root=tmp_path)
+    meta_path = d / "metadata.json"
+    meta = json.loads(meta_path.read_text())
+    for key in ("browser_mode", "browser_name", "cdp_endpoint"):
+        meta.pop(key, None)
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    info = snapshots.load_snapshot(d)
+    assert info["metadata"]["resolution"] == [120, 90]
+    assert "browser_mode" not in info["metadata"]
 
 
 def test_reload_and_review_paths(tmp_path):

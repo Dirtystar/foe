@@ -1,12 +1,14 @@
 import pytest
 
+from bap.core.domain.enums import BrowserOwnership
 from bap.core.engine.browser_controller import BrowserController
 from bap.core.ports.browser_port import BrowserPort
 
 
 class FakeBrowser(BrowserPort):
-    def __init__(self, *, fail_stop: bool = False):
+    def __init__(self, *, fail_stop: bool = False, ownership=BrowserOwnership.MANAGED):
         self.fail_stop = fail_stop
+        self.ownership = ownership
         self.start_calls = 0
         self.stop_calls = 0
 
@@ -84,6 +86,30 @@ async def test_reopen_after_close_starts_a_fresh_lifecycle():
     assert browser.start_calls == 2
     assert browser.stop_calls == 1
     assert controller.is_open
+
+
+def test_ownership_defaults_to_managed():
+    controller = BrowserController(FakeBrowser())
+    assert controller.ownership is BrowserOwnership.MANAGED
+    assert controller.owns_process is True
+
+
+def test_ownership_reads_external_from_adapter():
+    controller = BrowserController(FakeBrowser(ownership=BrowserOwnership.EXTERNAL))
+    assert controller.ownership is BrowserOwnership.EXTERNAL
+    assert controller.owns_process is False
+
+
+async def test_external_close_delegates_to_adapter_stop_only():
+    # For an EXTERNAL adapter, close() drives the adapter's stop() — which is a
+    # DISCONNECT that never closes the operator's process. The controller adds no
+    # separate process-close call.
+    browser = FakeBrowser(ownership=BrowserOwnership.EXTERNAL)
+    controller = BrowserController(browser)
+    await controller.open()
+    await controller.close()
+    assert browser.stop_calls == 1
+    assert not controller.is_open
 
 
 async def test_failed_close_clears_open_flag_and_propagates():

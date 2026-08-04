@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from bap.core.domain.enums import BrowserOwnership
 from bap.core.domain.models import TabHandle, TabId, TabProfile, ViewportSize
 
 __all__ = [
@@ -9,6 +10,7 @@ __all__ = [
     "TabId",
     "TabProfile",
     "ViewportSize",
+    "BrowserOwnership",
     "BrowserManagerError",
     "BrowserNotStartedError",
     "DuplicateTabError",
@@ -46,6 +48,13 @@ class BrowserPort(ABC):
     deliberately out of scope here — they live behind CapturePort and
     ActionHandlerPort, which operate on the TabHandle this port returns.
     """
+
+    #: Whether this adapter owns the browser process (MANAGED) or is a read-only
+    #: guest of an operator-owned one (EXTERNAL). Managed adapters — every existing
+    #: one — keep the default; only the CDP-attach adapter overrides it. The
+    #: BrowserController reads this to know whether a close tears the process down
+    #: or merely disconnects.
+    ownership: BrowserOwnership = BrowserOwnership.MANAGED
 
     @abstractmethod
     async def start(self) -> None: ...

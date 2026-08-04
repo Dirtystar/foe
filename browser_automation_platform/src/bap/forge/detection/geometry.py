@@ -34,7 +34,13 @@ _DEFAULT_TOP_BAR_FRACTION = 0.06
 class CaptureGeometry:
     """Exact geometry of one raw capture. ``raw_w``/``raw_h`` are the pixel size
     of the capture itself; the rest describe how the browser produced it and are
-    ``None`` when unavailable (e.g. an offline screenshot)."""
+    ``None`` when unavailable (e.g. an offline screenshot).
+
+    ``browser_mode`` / ``cdp_endpoint`` record the capture *provenance* (which
+    browser produced the pixels). External-Chrome captures contribute the mode to
+    the calibration ``key`` so an External-Chrome layout is never silently
+    calibrated against a Managed-Chromium one; Managed keys are unchanged, so
+    existing calibrations keep matching."""
 
     raw_w: int
     raw_h: int
@@ -42,6 +48,8 @@ class CaptureGeometry:
     viewport_h: int | None = None
     device_pixel_ratio: float | None = None
     zoom: float | None = None
+    browser_mode: str | None = None
+    cdp_endpoint: str | None = None
 
     @classmethod
     def from_image(cls, image, **meta) -> "CaptureGeometry":
@@ -50,7 +58,10 @@ class CaptureGeometry:
 
     def key(self) -> str:
         """A stable key that includes every geometry field we know, so distinct
-        capture setups never collide (raw size alone is not enough)."""
+        capture setups never collide (raw size alone is not enough). External
+        Chrome adds a ``ext`` marker so its calibration is kept separate from a
+        Managed-Chromium capture of the same pixel size; Managed adds nothing, so
+        keys predating this field are byte-identical."""
         parts = [f"{self.raw_w}x{self.raw_h}"]
         if self.viewport_w and self.viewport_h:
             parts.append(f"vp{self.viewport_w}x{self.viewport_h}")
@@ -58,6 +69,8 @@ class CaptureGeometry:
             parts.append(f"dpr{self.device_pixel_ratio:g}")
         if self.zoom:
             parts.append(f"z{self.zoom:g}")
+        if self.browser_mode and self.browser_mode != "managed_chromium":
+            parts.append(f"ext:{self.browser_mode}")
         return "|".join(parts)
 
     def to_dict(self) -> dict:
@@ -68,6 +81,8 @@ class CaptureGeometry:
             "viewport_h": self.viewport_h,
             "device_pixel_ratio": self.device_pixel_ratio,
             "zoom": self.zoom,
+            "browser_mode": self.browser_mode,
+            "cdp_endpoint": self.cdp_endpoint,
             "key": self.key(),
         }
 

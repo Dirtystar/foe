@@ -92,7 +92,6 @@ def build_main_window(
         # with the built-in demo analyzers/actions so no vision libs are needed.
         import os
 
-        from bap.adapters.browser.attended_adapter import AttendedBrowserManager
         from bap.app.attended import (
             TabAssignment,
             load_assignment,
@@ -102,14 +101,33 @@ def build_main_window(
         from bap.ops.paths import ensure_dirs, get_paths
 
         paths = ensure_dirs(get_paths())
-        # Forge shares one persistent Chromium profile across all worlds (they
-        # are tabs in the same window); the generic attended mode uses its own.
-        profile_dir = "forge-profile" if forge else "attended-profile"
-        browser = AttendedBrowserManager(
-            user_data_dir=str(paths.data_dir / profile_dir),
-            browser_engine=config.settings.browser_engine,
-            executable_path=os.environ.get("PLAYWRIGHT_EXECUTABLE_PATH"),
+        # Browser mode (Milestone 4.16): Forge may attach to an operator-launched
+        # Chrome over CDP instead of managing its own Chromium. The choice is a
+        # persisted operator setting; a missing file defaults to Managed Chromium,
+        # so existing installs are unchanged. There is no silent fallback between
+        # modes — External Chrome never launches a browser.
+        from bap.forge.browser_settings import (
+            BrowserMode,
+            default_settings_path,
+            load_browser_settings,
         )
+
+        browser_settings = load_browser_settings(default_settings_path()) if forge else None
+        if forge and browser_settings.mode is BrowserMode.EXTERNAL:
+            from bap.adapters.browser.cdp_attach_adapter import CdpAttachBrowserManager
+
+            browser = CdpAttachBrowserManager(endpoint=browser_settings.cdp_endpoint)
+        else:
+            from bap.adapters.browser.attended_adapter import AttendedBrowserManager
+
+            # Forge shares one persistent Chromium profile across all worlds (they
+            # are tabs in the same window); the generic attended mode uses its own.
+            profile_dir = "forge-profile" if forge else "attended-profile"
+            browser = AttendedBrowserManager(
+                user_data_dir=str(paths.data_dir / profile_dir),
+                browser_engine=config.settings.browser_engine,
+                executable_path=os.environ.get("PLAYWRIGHT_EXECUTABLE_PATH"),
+            )
         if forge:
             # Worlds persist (worlds.json); tab assignment does NOT — it is
             # rebuilt each launch by hostname reattachment, so start with an
@@ -227,6 +245,7 @@ def build_main_window(
         forge=forge,
         world_store=world_store,
         capture_callback=capture_callback,
+        browser_settings=browser_settings if forge else None,
     )
 
 

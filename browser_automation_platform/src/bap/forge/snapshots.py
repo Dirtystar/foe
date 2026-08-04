@@ -39,6 +39,16 @@ def _slug(text: str | None) -> str:
     return s[:40]
 
 
+def _browser_name(browser_mode: str | None) -> str | None:
+    """Human-readable browser name for snapshot provenance, from the capture's
+    browser mode. None (older captures) reads as Managed Chromium."""
+    if browser_mode == "external_chrome":
+        return "External Chrome (CDP)"
+    if browser_mode == "managed_chromium" or browser_mode is None:
+        return "Managed Chromium"
+    return browser_mode
+
+
 def snapshots_root(base: Path | str | None = None) -> Path:
     """Default snapshots directory (under the app data dir), or ``base``/snapshots."""
     if base is not None:
@@ -171,6 +181,7 @@ def write_snapshot(
     if validation_markdown:
         (out / "validation_report.md").write_text(validation_markdown, encoding="utf-8")
 
+    browser_mode = getattr(geometry, "browser_mode", None)
     meta = {
         "snapshot_schema": SNAPSHOT_SCHEMA,
         "world_alias": alias,
@@ -178,6 +189,11 @@ def write_snapshot(
         "resolution": [scan.width, scan.height],
         "device_pixel_ratio": getattr(geometry, "device_pixel_ratio", None),
         "viewport": [getattr(geometry, "viewport_w", None), getattr(geometry, "viewport_h", None)],
+        "zoom": getattr(geometry, "zoom", None),
+        # Browser provenance (Milestone 4.16): which browser produced these pixels.
+        "browser_mode": browser_mode,
+        "browser_name": _browser_name(browser_mode),
+        "cdp_endpoint": getattr(geometry, "cdp_endpoint", None),
         "timestamp": ts.isoformat(timespec="seconds"),
         "detector_version": detector_version(detector),
         "classifier_version": classifier_version(classifier),

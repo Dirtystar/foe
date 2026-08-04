@@ -18,10 +18,22 @@ into one clean transition.
 
 from __future__ import annotations
 
+from bap.core.domain.enums import BrowserOwnership
 from bap.core.ports.browser_port import BrowserPort
 
 
 class BrowserController:
+    """Owns the browser's open/close (connect/disconnect) lifecycle.
+
+    Ownership is not the controller's decision — it reads it from the adapter
+    (``browser.ownership``). For a MANAGED adapter, ``close()`` tears the process
+    down; for an EXTERNAL (CDP-attach) adapter, the adapter's ``stop()`` only
+    disconnects the CDP client and never closes the operator's Chrome. Either
+    way the controller drives the same idempotent open/close transitions — the
+    behavioural difference lives entirely in the adapter, so there is no mutable
+    flag here deciding whether a close kills the operator's browser.
+    """
+
     def __init__(self, browser: BrowserPort) -> None:
         self._browser = browser
         self._open = False
@@ -30,17 +42,30 @@ class BrowserController:
     def is_open(self) -> bool:
         return self._open
 
+    @property
+    def ownership(self) -> BrowserOwnership:
+        """MANAGED or EXTERNAL, as declared by the adapter."""
+        return getattr(self._browser, "ownership", BrowserOwnership.MANAGED)
+
+    @property
+    def owns_process(self) -> bool:
+        """True when a close() tears down a BAP-owned process; False when the
+        browser is operator-owned and close() only disconnects."""
+        return self.ownership is BrowserOwnership.MANAGED
+
     async def open(self) -> None:
-        """Open the browser window. No-op if already open."""
+        """Open (MANAGED) or attach to (EXTERNAL) the browser. No-op if already open."""
         if self._open:
             return
         await self._browser.start()
         self._open = True
 
     async def close(self) -> None:
-        """Close the browser window. No-op if not open. The flag is cleared
-        even if the underlying stop() raises, so a failed close never wedges
-        the controller into a permanently-'open' state; the error propagates."""
+        """Close (MANAGED) or disconnect from (EXTERNAL) the browser. No-op if not
+        open. The flag is cleared even if the underlying stop() raises, so a
+        failed close never wedges the controller into a permanently-'open' state;
+        the error propagates. In EXTERNAL mode the adapter's stop() disconnects
+        only — the operator's Chrome process is never closed here."""
         if not self._open:
             return
         try:

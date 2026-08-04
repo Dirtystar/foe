@@ -139,9 +139,10 @@ def capture_world_image(alias, *, world_store, assignment, browser_open, capture
 
 
 def scan_world(alias, *, world_store, assignment, browser_open, capture_callback,
-               classifier=None, calibration=None) -> WorldScanResult:
+               classifier=None, calibration=None, geometry_meta=None) -> WorldScanResult:
     """Capture + analyze one explicitly named World. The result is tagged with
-    that World's alias/hostname and the exact tab id used."""
+    that World's alias/hostname and the exact tab id used. ``geometry_meta``
+    carries capture provenance (browser_mode / cdp_endpoint) onto the geometry."""
     world = world_store.get(alias) if world_store is not None else None
     hostname = getattr(world, "hostname", None)
     target = resolve_target(alias, world_store=world_store, assignment=assignment,
@@ -151,7 +152,7 @@ def scan_world(alias, *, world_store, assignment, browser_open, capture_callback
     if img is None:
         return WorldScanResult(alias=alias, hostname=hostname, tab_id=target.tab_id,
                                capture_ok=False, error=err)
-    geometry = CaptureGeometry.from_image(img)
+    geometry = CaptureGeometry.from_image(img, **(geometry_meta or {}))
     rois = derive_rois(geometry, calibration)
     scan = build_scan(img, world=world, classifier=classifier, rois=rois, geometry=geometry)
     return WorldScanResult(alias=alias, hostname=hostname, tab_id=target.tab_id,
@@ -167,7 +168,8 @@ def attached_aliases(*, world_store, assignment, browser_open: bool) -> list[str
 
 
 def scan_all_attached(*, world_store, assignment, browser_open, capture_callback,
-                      classifier=None, calibration=None, artifacts_root=None) -> list[WorldScanResult]:
+                      classifier=None, calibration=None, artifacts_root=None,
+                      geometry_meta=None) -> list[WorldScanResult]:
     """Scan every attached World independently and sequentially. Each World uses
     its own freshly-resolved tab; no World's result depends on another's.
 
@@ -186,7 +188,8 @@ def scan_all_attached(*, world_store, assignment, browser_open, capture_callback
                                   browser_open=browser_open):
         result = scan_world(alias, world_store=world_store, assignment=assignment,
                             browser_open=browser_open, capture_callback=capture_callback,
-                            classifier=classifier, calibration=calibration)
+                            classifier=classifier, calibration=calibration,
+                            geometry_meta=geometry_meta)
         if run_dir is not None and result.capture_ok and result.scan is not None:
             from bap.forge.detection.scan import save_scan
 
