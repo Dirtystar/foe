@@ -169,20 +169,20 @@ def default_assets_root():
 
 
 def default_snapshot_dataset_dir():
-    """Locate the repo-root ``dataset/`` directory that "Import Snapshot into
-    Dataset" writes to (frames/ + labels.json), by walking up from this module.
+    """Locate THE one canonical reviewed dataset (frames/ + labels.json) that every
+    Review-from-the-UI action edits and that "Import Snapshot into Dataset" writes to.
 
-    This is a **first-class reviewed source** alongside grading / live_review /
-    review_batch: every snapshot the operator imports there is discovered
-    automatically. Returns ``None`` when it is absent (e.g. no snapshots imported
-    yet, or an installed wheel that does not ship it)."""
-    from pathlib import Path
+    Delegates to :func:`bap.forge.dataset_store.reviewed_dataset_dir` so training,
+    evaluation, the GUI, snapshot import, and this loader all agree on a single
+    location (Milestone 4.15). It is a **first-class reviewed source** alongside
+    grading / live_review / review_batch. Returns ``None`` only when that dataset
+    has not been created yet (no labels.json on disk), so an empty checkout adds
+    nothing rather than erroring."""
+    from bap.forge.dataset_store import reviewed_dataset_dir
 
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        candidate = parent / "dataset"
-        if (candidate / "labels.json").exists() and (candidate / "frames").is_dir():
-            return candidate
+    candidate = reviewed_dataset_dir()
+    if (candidate / "labels.json").exists() and (candidate / "frames").is_dir():
+        return candidate
     return None
 
 

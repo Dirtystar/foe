@@ -538,13 +538,79 @@ class MainWindow(QMainWindow):
         )
 
     def _build_datasets_page(self) -> QWidget:
-        return self._build_info_page(
-            "Datasets",
-            "Labelled capture datasets and vision reports.",
-            [("Where datasets live", "Graded frames and vision reports are stored under "
-              "the data folder (Settings → Open data folder). Scan All writes per-world "
-              "artifacts you can revisit and label.")],
-        )
+        """THE one Reviewed Dataset (Milestone 4.15): the single place reviewed
+        ground truth lives. Shows its exact path and counts, opens it in Review
+        (every Review entry point edits this exact dataset), and imports snapshots
+        into it. There is no other editable review target."""
+        from bap.gui import widgets
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(20, 18, 20, 18)
+        v.setSpacing(14)
+        v.addWidget(widgets.display_title("Datasets"))
+        v.addWidget(widgets.muted(
+            "One Reviewed Dataset holds all reviewed ground truth. Opening Review "
+            "anywhere in the app edits this exact dataset; snapshots are immutable "
+            "archives you import into it."))
+
+        card = widgets.Card("Reviewed Dataset", "the single source of truth")
+        self._dataset_path_lbl = QLabel("")
+        self._dataset_path_lbl.setWordWrap(True)
+        self._dataset_counts_lbl = QLabel("")
+        self._dataset_counts_lbl.setProperty("role", "muted")
+        card.body.addWidget(self._dataset_path_lbl)
+        card.body.addWidget(self._dataset_counts_lbl)
+
+        row = QHBoxLayout()
+        open_btn = QPushButton("Open Dataset in Review")
+        open_btn.setProperty("primary", True)
+        open_btn.clicked.connect(self._on_open_dataset_review)
+        import_btn = QPushButton("Import snapshot…")
+        import_btn.clicked.connect(self._on_import_snapshot)
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.clicked.connect(self._refresh_dataset_page)
+        for b in (open_btn, import_btn, refresh_btn):
+            row.addWidget(b)
+        row.addStretch(1)
+        card.body.addLayout(row)
+        v.addWidget(card)
+        v.addStretch(1)
+
+        self._refresh_dataset_page()
+        return page
+
+    def _refresh_dataset_page(self) -> None:
+        """Show the canonical dataset's exact path and frame/reviewed counts."""
+        from bap.forge import dataset_store
+
+        try:
+            summary = dataset_store.dataset_summary()
+        except Exception as exc:  # never crash the page over a read
+            self._dataset_path_lbl.setText("Reviewed Dataset: (unavailable)")
+            self._dataset_counts_lbl.setText(str(exc))
+            return
+        self._dataset_path_lbl.setText(f"Location: {summary['dir']}")
+        self._dataset_counts_lbl.setText(
+            f"{summary['frames']} frame(s) · {summary['reviewed']} reviewed "
+            f"· {summary['labelled']} labelled")
+
+    def _on_open_dataset_review(self) -> None:
+        from bap.gui.snapshot_actions import open_dataset_in_review
+
+        open_dataset_in_review(self)
+        self._refresh_dataset_page()
+
+    def _on_import_snapshot(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        from bap.gui.snapshot_actions import import_snapshot_dialog
+
+        snap = QFileDialog.getExistingDirectory(self, "Pick a snapshot directory to import")
+        if not snap:
+            return
+        import_snapshot_dialog(self, snap)
+        self._refresh_dataset_page()
 
     def _build_reports_page(self) -> QWidget:
         return self._build_info_page(

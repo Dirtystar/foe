@@ -220,14 +220,25 @@ def load_snapshot(snapshot_dir: Path | str) -> dict:
     }
 
 
-def import_into_dataset(snapshot_dir: Path | str, dataset_dir: Path | str) -> dict:
-    """Import a snapshot's raw frame + label into a dataset (frames/ + labels.json),
+def import_into_dataset(snapshot_dir: Path | str, dataset_dir: Path | str | None = None) -> dict:
+    """Import a snapshot's raw frame + label into the dataset (frames/ + labels.json),
     deduplicating by image content hash. Preserves the label and the snapshot's
-    metadata; never imports the same image twice."""
+    metadata, merges the snapshot's ROIs into the dataset calibration, and never
+    imports the same image twice.
+
+    When ``dataset_dir`` is omitted the import goes to THE one canonical reviewed
+    dataset (:func:`bap.forge.dataset_store.reviewed_dataset_dir`), so a snapshot
+    imported from anywhere in the UI lands in the single place Review Mode edits
+    (Milestone 4.15)."""
     from bap.forge.labeling.model import LabelStore
 
     snap = Path(snapshot_dir)
-    dataset = Path(dataset_dir)
+    if dataset_dir is None:
+        from bap.forge.dataset_store import reviewed_dataset_dir
+
+        dataset = reviewed_dataset_dir(create=True)
+    else:
+        dataset = Path(dataset_dir)
     raw = snap / "frames" / RAW_NAME
     if not raw.exists():
         return {"imported": False, "reason": "snapshot has no frames/raw.png", "dest": None}
@@ -273,7 +284,35 @@ def import_into_dataset(snapshot_dir: Path | str, dataset_dir: Path | str) -> di
         meta_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(meta_src, meta_dir / f"{dest.stem}.json")
 
+    # Merge the snapshot's ROIs into the dataset calibration so Review Mode on the
+    # imported frame shows the same weakening / battle-map regions it was scanned with.
+    _merge_calibration(snap / "calibration.json", dataset / "calibration.json")
+
     return {"imported": True, "reason": "imported", "dest": str(dest), "md5": new_md5}
+
+
+def _merge_calibration(src_path: Path, dst_path: Path) -> None:
+    """Fold every resolution-keyed ROI from a snapshot's calibration into the
+    dataset calibration (existing dataset entries win, so an operator's dataset
+    calibration is never overwritten by an import)."""
+    from bap.forge.detection.calibration import WeakeningCalibration
+
+    if not Path(src_path).exists():
+        return
+    try:
+        src = WeakeningCalibration.load(src_path)
+        dst = WeakeningCalibration.load(dst_path)  # bound to dst_path for save()
+    except Exception:
+        return
+    changed = False
+    for attr in ("_regions", "_battle_map", "_geometry"):
+        dst_map = getattr(dst, attr)
+        for key, value in getattr(src, attr).items():
+            if key not in dst_map:
+                dst_map[key] = value
+                changed = True
+    if changed:
+        dst.save()
 
 
 __all__ = [

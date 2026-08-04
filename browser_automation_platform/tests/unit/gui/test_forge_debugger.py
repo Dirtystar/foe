@@ -148,16 +148,42 @@ def test_annotate_preview_has_no_banner_over_top_bar(qapp):
 
 def test_label_in_review_mode_saves_frame_and_opens_review(qapp, tmp_path):
     img = _frame_with_emblem()
-    win = DebuggerWindow(img, source="H (live)", live_review_dir=tmp_path)
+    # dataset_dir points Review at an isolated dataset (production uses THE canonical
+    # Reviewed Dataset via dataset_store). The live capture is added there and Review
+    # Mode edits that exact dataset (M4.15).
+    win = DebuggerWindow(img, source="H (live)", dataset_dir=tmp_path)
     try:
         win._on_label_review()
-        # The live capture was persisted as a Review-Mode frame under the world tag.
-        frames = list((tmp_path / "frames").glob("H_*.png"))
-        assert len(frames) == 1
+        frames = list((tmp_path / "frames").glob("*.png"))
+        assert len(frames) == 1                        # capture added to the dataset
+        assert frames[0].name.endswith("_H.png")       # tagged with the world/source
+        assert (tmp_path / "labels.json").exists()     # the one ground-truth file
         assert win._review is not None                 # Review Mode window opened
+        # Review edits THIS dataset: its labels path is the dataset's labels.json.
+        assert str(tmp_path / "labels.json") in win._review.labels_path_lbl.text()
     finally:
         if win._review is not None:
+            win._review._dirty = False
             win._review.close()
+        win.close()
+
+
+def test_datasets_page_shows_canonical_dataset(qapp, tmp_path, monkeypatch):
+    # The Datasets page shows THE one Reviewed Dataset's exact path + counts and
+    # offers "Open Dataset in Review" — the single place reviewed data live (M4.15).
+    monkeypatch.setenv("BAP_DATASET_DIR", str(tmp_path / "dataset"))
+    import numpy as np
+
+    from bap.forge import dataset_store
+
+    dataset_store.add_frame(np.full((80, 120, 3), 15, np.uint8), alias="H")
+    win, _ = _forge_window(qapp)
+    try:
+        win._refresh_dataset_page()
+        assert str(tmp_path / "dataset") in win._dataset_path_lbl.text()
+        assert "1 frame(s)" in win._dataset_counts_lbl.text()
+    finally:
+        win._browser_open = False
         win.close()
 
 

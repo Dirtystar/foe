@@ -62,13 +62,15 @@ class DebuggerWindow(QMainWindow):
 
     def __init__(self, image, *, world=None, classifier=None, source: str = "",
                  weakening_region=None, rois=None, geometry=None,
-                 live_review_dir=None) -> None:
+                 dataset_dir=None) -> None:
         super().__init__()
         self._image = image
         self._classifier = classifier
         self._world = world
         self._source = source
-        self._live_review_dir = live_review_dir
+        # Where "Label in Review Mode" adds this frame. None => THE canonical
+        # Reviewed Dataset (dataset_store); tests may pass an isolated dir.
+        self._dataset_dir = dataset_dir
         self._review = None
         self._scan = build_scan(image, world=world, classifier=classifier,
                                 weakening_region=weakening_region, rois=rois,
@@ -121,24 +123,34 @@ class DebuggerWindow(QMainWindow):
         self.setCentralWidget(central)
 
     def _on_label_review(self) -> None:
-        """Open the current live capture in Review Mode so the operator can add /
-        correct badges (keys 1-5), remove false positives, and save the result as
-        additional live ground truth — reusing the existing labelling tools, no
-        external editor."""
+        """Add this live capture to THE canonical Reviewed Dataset and open it in
+        Review Mode so the operator can add / correct badges (keys 1-5), remove
+        false positives, and save the result as ground truth. There is exactly one
+        editable dataset (dataset_store): this frame lands there, and the review
+        edits that exact dataset — never a scattered scratch location (M4.15)."""
+        from bap.forge import dataset_store
         from bap.forge.detection.calibration import WeakeningCalibration
         from bap.forge.detection.detector import BadgeDetector
         from bap.forge.labeling.session import LabelSession
         from bap.gui.forge_review import ForgeReviewWindow
 
         try:
-            base = self._live_review_dir or self._default_live_review_dir()
-            frames_dir, name = save_live_review_frame(self._image, self._source, base)
-            session = LabelSession.open(frames_dir, Path(base) / "labels.json")
+            alias = getattr(self._world, "alias", None) or (self._source.split()[0] if self._source else None)
+            name, _is_new = dataset_store.add_frame(
+                self._image, alias=alias, scan=self._scan, dataset_dir=self._dataset_dir)
+            if self._dataset_dir is not None:
+                root = Path(self._dataset_dir)
+                frames_dir = str(root / dataset_store.FRAMES_DIRNAME)
+                labels_path = str(root / dataset_store.LABELS_NAME)
+                calibration_path = str(root / dataset_store.CALIB_NAME)
+            else:
+                frames_dir, labels_path, calibration_path = dataset_store.dataset_review_paths(create=True)
+            session = LabelSession.open(frames_dir, labels_path)
             for i in range(session.total):
                 session.goto(i)
                 if session.current_file() == name:
                     break
-            cal = WeakeningCalibration.load(Path(base) / "calibration.json")
+            cal = WeakeningCalibration.load(calibration_path)
             self._review = ForgeReviewWindow(session, frames_dir, cal, world=self._world,
                                              detector=BadgeDetector())
             self._review.resize(1360, 800)
@@ -159,12 +171,6 @@ class DebuggerWindow(QMainWindow):
             url=getattr(self._world, "last_url", None),
         )
 
-    @staticmethod
-    def _default_live_review_dir() -> Path:
-        from bap.ops.paths import ensure_dirs, get_paths
-
-        return ensure_dirs(get_paths()).data_dir / "forge" / "live_review"
-
     def _on_save(self) -> None:
         from bap.forge.detection.scan import save_scan
 
@@ -180,23 +186,6 @@ class DebuggerWindow(QMainWindow):
             self, "Saved",
             "Saved:\n" + "\n".join(Path(p).name for p in paths.values()),
         )
-
-
-def save_live_review_frame(image, source: str, base_dir) -> tuple[str, str]:
-    """Persist a live capture as a Review-Mode frame under ``base_dir/frames`` and
-    return ``(frames_dir, filename)``. The filename carries the World/source and a
-    timestamp so live scans accumulate as reviewable ground truth."""
-    import re
-    from datetime import datetime
-
-    import cv2
-
-    frames_dir = Path(base_dir) / "frames"
-    frames_dir.mkdir(parents=True, exist_ok=True)
-    tag = re.sub(r"[^A-Za-z0-9_-]+", "_", (source or "scan").split()[0]) or "scan"
-    name = f"{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
-    cv2.imwrite(str(frames_dir / name), image)
-    return str(frames_dir), name
 
 
 def _bundled_classifier():

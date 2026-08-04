@@ -16,8 +16,10 @@ point and explains its decision; it never acts.
 ## Branch / commit
 
 - Branch: `claude/browser-automation-architecture-5784h1`.
-- Latest work: Milestone 4.7 (live-data re-evaluation) — see the commit that adds
-  `tests/forge_assets/LIVE_VISION_REPORT.md`.
+- Latest work: Milestone 4.15 (one unified Dataset / Snapshot / Review workflow) —
+  a single editable Reviewed Dataset (`bap.forge.dataset_store`) that every Review
+  entry point edits; snapshots are immutable archives imported into it. See
+  `docs/DATASET_WORKFLOW.md`.
 
 ## Milestones completed
 

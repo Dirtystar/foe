@@ -4,6 +4,50 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 4.15: one unified Dataset / Snapshot / Review workflow (observe-only)
+
+Collapses the fragmented review targets into **one editable Reviewed Dataset**.
+Previously three places were independently editable in Review — an AppData
+`forge/live_review` folder, each snapshot's own `labels.json`, and the repo-root
+`dataset/` — so a review could land somewhere other than where the operator
+expected (the root cause behind repeated "lost review" / "wrong labels.json"
+incidents). Now there is exactly one obvious place reviewed data live, and every
+Review entry point edits *that exact* dataset. Snapshots become immutable
+archives; AppData is scratch only. No detector / classifier / threshold / OCR /
+weakening / runtime / scheduler change; observe-only. See `docs/DATASET_WORKFLOW.md`.
+
+### Added
+
+- **`bap.forge.dataset_store`** — the single source of truth for the canonical
+  Reviewed Dataset. `reviewed_dataset_dir()` resolves one location
+  (`BAP_DATASET_DIR` → repo-root `dataset/` → `<app-data>/dataset`);
+  `add_frame()` adds a capture (dedup by image hash, seeds detections as an
+  **unreviewed** starting point, carries weakening, persists ROIs);
+  `dataset_review_paths()`, `dataset_summary()`, `dataset_exists()`.
+- Functional **Datasets page**: shows the dataset's exact path and frame /
+  reviewed / labelled counts, with **Open Dataset in Review** and **Import
+  snapshot…**.
+- `tests/unit/forge/test_dataset_store.py` (resolution / override / dedup /
+  detection-seeding / ROI persistence / summary / loader-discovers-the-same-dataset)
+  and `tests/unit/gui/test_dataset_review_flow.py` (reviewing a snapshot edits the
+  canonical dataset; import has no picker; empty dataset reports clearly).
+
+### Changed
+
+- **Every Review entry point edits the one dataset.** The Vision Debugger's *Label
+  in Review Mode* adds the capture via `dataset_store.add_frame` and opens Review on
+  the canonical dataset; snapshot *Open in Review* imports the snapshot into the
+  dataset and reviews the imported copy; *Import into Dataset* no longer asks for a
+  directory (there is only one).
+- **`classify.default_snapshot_dataset_dir`** now delegates to
+  `dataset_store.reviewed_dataset_dir()`, so the classifier/eval loader and the UI
+  resolve to the same dataset.
+- **`snapshots.import_into_dataset`** defaults its target to the canonical dataset
+  and now merges the snapshot's ROIs into the dataset calibration on import
+  (existing dataset entries win).
+- Removed the deprecated `save_live_review_frame` / `_default_live_review_dir`
+  AppData review-scratch path from the debugger.
+
 ## [Unreleased] — Milestone 4.14: reliable Review save workflow (observe-only)
 
 Fixes a real Windows bug where Review-Mode edits — especially `reviewed=true` —
