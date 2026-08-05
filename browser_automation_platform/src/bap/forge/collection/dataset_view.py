@@ -141,6 +141,14 @@ def build_queue(dataset_dir=None, *, filters=None, world=None, resolution=None,
         scarcity = _class_scarcity(rows)
         rows.sort(key=lambda e: min((scarcity[int(c)] for c, n in e.per_class.items() if n),
                                     default=10 ** 9))
+    elif sort == "priority":
+        # Operator priority: most UNKNOWN first, then frames touching a rare class,
+        # then newest. A single high-to-low key over a tuple.
+        scarcity = _class_scarcity(rows)
+        def rare_bonus(e):
+            return sum(n for c, n in e.per_class.items() if scarcity.get(int(c), 0) <= 8)
+        rows.sort(key=lambda e: (e.unknown, rare_bonus(e), e.timestamp or "", e.frame),
+                  reverse=True)
     else:
         key, reverse = _sort_key(sort)
         if key:
@@ -238,6 +246,91 @@ def shortage_hints(class_counts: dict, per_live: Counter | None = None) -> dict:
     }
 
 
+def status_summary(samples=None, *, dataset_dir=None) -> dict:
+    """The always-visible dataset status: reviewed / pending / negative, the five
+    per-class counts, total UNKNOWN (unclassified seeded badges), and *today's*
+    additions. Corpus counts come from the unified loader; pending/UNKNOWN/today from
+    the collected frames. Read-only."""
+    stats = dataset_statistics(samples=samples, dataset_dir=dataset_dir)
+    rows = frame_rows(dataset_dir)
+    today = date.today().isoformat()
+    todays = [e for e in rows if (e.timestamp or "").startswith(today)]
+    today_pc = Counter()
+    for e in todays:
+        for c in CLASSES:
+            today_pc[c] += e.per_class.get(str(c), 0)
+    return {
+        "reviewed": stats["reviewed_frames"],
+        "pending": stats["pending_frames"],
+        "negative": stats["reviewed_negative_frames"],
+        "per_class": stats["per_class"],
+        "unknown": sum(e.unknown for e in rows),
+        "total_badges": stats["total_badges"],
+        "today": {
+            "frames": len(todays),
+            "reviewed": sum(1 for e in todays if e.reviewed),
+            "negative": sum(1 for e in todays if e.negative),
+            "per_class": {str(c): today_pc.get(c, 0) for c in CLASSES},
+            "unknown": sum(e.unknown for e in todays),
+        },
+        "shortages": stats["shortages"],
+    }
+
+
+def _parse_ts(text: str | None):
+    from datetime import datetime
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def session_dashboard(session, *, dataset_dir=None, now=None) -> dict:
+    """Live, real (never fabricated) metrics for the current session: Worlds
+    attached, frames captured / skipped / reviewed / pending, duplicates, capture
+    rate, and session duration. ``now`` is injectable for deterministic tests."""
+    from datetime import datetime
+    if session is None:
+        return {"active": False}
+    now = now or datetime.now()
+    entries = [e for e in frame_rows(dataset_dir) if e.session_id == session.session_id]
+    reviewed = sum(1 for e in entries if e.reviewed)
+    pending = len(entries) - reviewed
+    start = _parse_ts(session.started_at)
+    duration_s = max(0.0, (now - start).total_seconds()) if start else 0.0
+    captured = len(session.captured_frames)
+    rate_per_hour = round(captured / (duration_s / 3600.0), 1) if duration_s >= 1 else None
+    return {
+        "active": True,
+        "session_id": session.session_id,
+        "browser_mode": session.browser_mode,
+        "worlds_attached": len(session.worlds),
+        "worlds": list(session.worlds),
+        "frames_captured": captured,
+        "frames_skipped": session.duplicates_skipped,
+        "frames_reviewed": reviewed,
+        "frames_pending": pending,
+        "duplicates": session.duplicates_skipped,
+        "capture_rate_per_hour": rate_per_hour,
+        "duration_seconds": int(duration_s),
+        "duration_human": _human_duration(duration_s),
+        "git_commit": (session.git_commit or "")[:8] or None,
+    }
+
+
+def _human_duration(seconds: float) -> str:
+    s = int(seconds)
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    if h:
+        return f"{h}h {m}m"
+    if m:
+        return f"{m}m {sec}s"
+    return f"{sec}s"
+
+
 def target_progress(session, *, dataset_dir=None) -> dict:
     """Per-class + negative progress toward a session's targets, counted from the
     frames captured in that session. Never fabricates a missing class."""
@@ -299,5 +392,6 @@ def active_learning_priority(dataset_dir=None) -> list[tuple[QueueEntry, int, li
 
 __all__ = [
     "QueueEntry", "frame_rows", "build_queue", "dataset_statistics",
-    "shortage_hints", "target_progress", "active_learning_priority", "CLASSES",
+    "shortage_hints", "target_progress", "active_learning_priority",
+    "status_summary", "session_dashboard", "CLASSES",
 ]

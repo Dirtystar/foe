@@ -79,6 +79,31 @@ algorithm**. Priorities, in order:
     Unreviewed frames may be included as *pending* data — the plan warns you, but it
     is allowed.
 
+## Reading the screen
+
+The Live Data Collection window always shows, at the top:
+
+- **Today's session** dashboard — Worlds attached, frames captured / skipped /
+  reviewed / pending, duplicates, capture rate per hour, and session duration (all
+  real, never fabricated).
+- **Dataset status** — reviewed / pending / negative / UNKNOWN and the five per-class
+  counts, with zero-example classes highlighted in red, plus **today's additions**.
+
+After each capture the log shows one line per World with the result, and a **quality
+warning** (`⚠ … → how to fix`) whenever a frame is a duplicate, nearly identical to
+an existing one, at an unusual resolution, at a non-100% zoom, missing calibration,
+or when the browser has detached — so you can fix it and move on instead of
+collecting unusable data.
+
+Use the **Quick** chips (Needs review / Has UNKNOWN / Rare classes / Negatives /
+All) for one-tap views; the default sort is **Priority** (UNKNOWN → rare class →
+newest).
+
+In Review Mode, a coloured pill always shows the frame's state — **PENDING REVIEW**
+(amber), **REVIEWED** (green), or **REVIEWED · NEGATIVE** — and a **DUPLICATE IMAGE**
+note appears when another frame has identical pixels. The frame position (`12 / 47`),
+the unsaved/saved indicator, and the labels-file path are always visible.
+
 ## Session report
 
 At any point, **Write Session Report** produces

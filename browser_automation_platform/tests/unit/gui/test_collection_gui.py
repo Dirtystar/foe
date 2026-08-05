@@ -137,6 +137,65 @@ def test_enter_saves_and_advances_and_persists(qapp, dataset_env):
         win.close()
 
 
+def test_collection_dashboard_status_and_quick_filters(qapp, dataset_env):
+    from bap.gui.forge_collection import ForgeCollectionWindow
+
+    imgs = {"H": _img(11), "F": _img(12)}
+    win = ForgeCollectionWindow(
+        world_store=_Store([_World("H"), _World("F")]),
+        browser_mode="external_chromium",
+        capture_fn=lambda w: imgs[w.alias])
+    # empty state before any capture
+    assert win._session is None
+    win._start_session()
+    win._capture(selected_only=False)
+    # dashboard shows real session metrics
+    dash = win.dashboard_lbl.text()
+    assert "Today's session" in dash and "captured" in dash
+    # always-visible dataset status
+    status = win.status_lbl.text()
+    assert "Dataset" in status and "UNKNOWN" in status and "Today" in status
+    # quick filter wires filter + sort together
+    win._quick("has_unknown", "uncertainty")
+    assert win.filter_combo.currentText() == "Has UNKNOWN"
+    assert win.sort_combo.currentText() == "Highest uncertainty"
+
+
+def test_review_state_pill_and_duplicate_indicator(qapp, dataset_env):
+    from bap.forge.collection import session as S
+    from bap.forge.collection.capture import capture_frame
+    from bap.forge.detection.calibration import WeakeningCalibration
+    from bap.forge.dataset_store import FRAMES_DIRNAME, dataset_review_paths, reviewed_dataset_dir
+    from bap.forge.labeling.session import LabelSession
+    from bap.gui.forge_review import ForgeReviewWindow
+
+    s = S.start_session(["H"])
+    capture_frame(_img(40), world=_World("H"), session=s)
+    # plant a byte-identical duplicate image under a second name (content dup)
+    frames = reviewed_dataset_dir() / FRAMES_DIRNAME
+    src = sorted(frames.glob("*.png"))[0]
+    (frames / "dup_copy.png").write_bytes(src.read_bytes())
+
+    frames_dir, labels_path, calib_path = dataset_review_paths()
+    session = LabelSession.open(frames_dir, labels_path)
+    win = ForgeReviewWindow(session, frames_dir, WeakeningCalibration.load(calib_path))
+    try:
+        session.goto(0)
+        win._load()
+        assert "PENDING" in win.state_pill.text()
+        assert "DUPLICATE" in win.content_dup_lbl.text()   # identical pixels detected
+        win.reviewed_check.setChecked(True)                # mark reviewed
+        win._load()
+        assert "REVIEWED" in win.state_pill.text()
+        # make it a negative and re-render
+        session.current().badges.clear()
+        win._load()
+        assert "NEGATIVE" in win.state_pill.text()
+    finally:
+        win._dirty = False
+        win.close()
+
+
 def test_ctrl_s_saves(qapp, dataset_env):
     from bap.forge.labeling.model import LabelStore
 

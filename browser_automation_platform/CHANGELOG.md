@@ -40,6 +40,29 @@ change.
   actions, Save-and-Next persistence, negatives, statistics, class-count delta,
   validation, no-implicit-reviewed, `MIN_PCT_SIM` unchanged, no cursor/click path).
 
+### UX & robustness polish (operator productivity, no AI/threshold change)
+
+- **Always-visible dataset status** in Live Data Collection: reviewed / pending /
+  negative / UNKNOWN and the five per-class counts, plus **today's additions**,
+  with a red highlight on zero-example classes (`status_summary`).
+- **Session dashboard** (real metrics only): Worlds attached, frames captured /
+  skipped / reviewed / pending, duplicates, capture rate/hour, session duration
+  (`session_dashboard`).
+- **Capture-quality pre-flight** (`capture_quality.assess_capture`): warns —
+  what/why/how-to-fix — on a detached browser, an exact duplicate, a *nearly
+  identical* frame (aHash), an unusual resolution, an unsupported zoom, or a
+  missing calibration, so the operator never collects unusable data.
+- **Queue priority**: new `priority` sort (UNKNOWN → rare class → newest) plus
+  one-tap quick-filter chips (Needs review / Has UNKNOWN / Rare classes /
+  Negatives / All).
+- **Review Mode indicators** (visual only — review logic unchanged): a prominent
+  REVIEWED / PENDING / NEGATIVE state pill and a content-**duplicate** indicator,
+  alongside the existing frame position, unsaved/saved feedback, and labels path.
+- **Robustness**: capture never crashes the page; each per-World failure is
+  reported with a cause and fix; capture buttons show a Capturing… state and
+  re-enable in a `finally`. Tooltips, better labels, spacing, and an empty-state
+  hint throughout.
+
 ## [Unreleased] — Milestone 5C: Percentage classifier V2 benchmark (research, no click)
 
 Experimental, observe-only classifier research: builds and compares candidate

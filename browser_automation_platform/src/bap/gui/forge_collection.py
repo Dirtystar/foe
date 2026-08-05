@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QHBoxLayout,
@@ -30,10 +31,13 @@ from PySide6.QtWidgets import (
 
 from bap.forge.collection import session as sess_mod
 from bap.forge.collection.capture import capture_frame
+from bap.forge.collection.capture_quality import assess_capture
 from bap.forge.collection.commit import prepare_commit
 from bap.forge.collection.dataset_view import (
     build_queue,
     dataset_statistics,
+    session_dashboard,
+    status_summary,
     target_progress,
 )
 from bap.forge.collection.report import write_session_report
@@ -45,9 +49,9 @@ _FILTERS = [("All", None), ("Unreviewed", "unreviewed"), ("Reviewed", "reviewed"
             ("No badge", "no_badge"), ("Has UNKNOWN", "has_unknown"),
             ("Negative", "negative"), ("20%", "20"), ("40%", "40"),
             ("60%", "60"), ("80%", "80"), ("100%", "100")]
-_SORTS = [("Newest", "newest"), ("Highest uncertainty", "uncertainty"),
-          ("Rarest class", "rarest_class"), ("Most detections", "most_detections"),
-          ("World", "world")]
+_SORTS = [("Priority (UNKNOWN → rare → newest)", "priority"), ("Newest", "newest"),
+          ("Highest uncertainty", "uncertainty"), ("Rarest class", "rarest_class"),
+          ("Most detections", "most_detections"), ("World", "world")]
 
 
 class ForgeCollectionWindow(QWidget):
@@ -75,17 +79,39 @@ class ForgeCollectionWindow(QWidget):
     def _build(self) -> None:
         root = QVBoxLayout(self)
 
+        # Always-visible session status + live dashboard.
         self.session_lbl = QLabel()
+        self.session_lbl.setStyleSheet("font-weight: 600;")
         root.addWidget(self.session_lbl)
+        self.dashboard_lbl = QLabel()
+        self.dashboard_lbl.setTextFormat(Qt.TextFormat.RichText)
+        self.dashboard_lbl.setToolTip("Live metrics for the current session — real, "
+                                      "never fabricated.")
+        root.addWidget(self.dashboard_lbl)
+
+        # Always-visible dataset status (reviewed / pending / negative / classes /
+        # UNKNOWN, plus today's additions).
+        self.status_lbl = QLabel()
+        self.status_lbl.setTextFormat(Qt.TextFormat.RichText)
+        self.status_lbl.setWordWrap(True)
+        self.status_lbl.setToolTip("Canonical dataset status. Shortages guide the "
+                                   "most useful next capture.")
+        root.addWidget(self.status_lbl)
 
         session_row = QHBoxLayout()
-        self.start_btn = QPushButton("Start Session")
+        self.start_btn = QPushButton("▶ Start Session")
+        self.start_btn.setToolTip("Begin a named collection session (survives an app "
+                                  "restart). Records Worlds, time, browser mode, git commit.")
         self.start_btn.clicked.connect(self._start_session)
         session_row.addWidget(self.start_btn)
-        self.capture_sel_btn = QPushButton("Capture Selected Worlds")
+        self.capture_sel_btn = QPushButton("📷 Capture Selected")
+        self.capture_sel_btn.setToolTip("Capture a read-only screenshot of each ticked "
+                                        "World into the dataset (duplicates skipped).")
         self.capture_sel_btn.clicked.connect(lambda: self._capture(selected_only=True))
         session_row.addWidget(self.capture_sel_btn)
-        self.capture_all_btn = QPushButton("Capture All Worlds")
+        self.capture_all_btn = QPushButton("📷 Capture All Worlds")
+        self.capture_all_btn.setToolTip("Capture every World once. Move the map between "
+                                        "bursts to gather fresh badges.")
         self.capture_all_btn.clicked.connect(lambda: self._capture(selected_only=False))
         session_row.addWidget(self.capture_all_btn)
         session_row.addStretch(1)
@@ -119,13 +145,34 @@ class ForgeCollectionWindow(QWidget):
         self.today_check = QCheckBox("Today")
         self.today_check.toggled.connect(self.refresh)
         controls.addWidget(self.today_check)
-        self.open_review_btn = QPushButton("Open in Review")
+        self.open_review_btn = QPushButton("✎ Open in Review")
+        self.open_review_btn.setToolTip("Open the whole dataset in Review Mode "
+                                        "(fast keyboard labelling).")
         self.open_review_btn.clicked.connect(self._open_review)
         controls.addWidget(self.open_review_btn)
         controls.addStretch(1)
         root.addLayout(controls)
 
-        # queue table
+        # One-tap quick filters (chips) for the most common operator views.
+        quick = QHBoxLayout()
+        quick.addWidget(QLabel("Quick:"))
+        for label, filt, srt in (("Needs review", "unreviewed", "priority"),
+                                  ("Has UNKNOWN", "has_unknown", "uncertainty"),
+                                  ("Rare classes", None, "rarest_class"),
+                                  ("Negatives", "negative", "newest"),
+                                  ("All", None, "newest")):
+            b = QPushButton(label)
+            b.setToolTip("Quick view — sets the filter and sort together.")
+            b.clicked.connect(lambda _=False, f=filt, s=srt: self._quick(f, s))
+            quick.addWidget(b)
+        quick.addStretch(1)
+        root.addLayout(quick)
+
+        # queue table + empty state
+        self.queue_hint = QLabel()
+        self.queue_hint.setStyleSheet("color: #888;")
+        self.queue_hint.hide()
+        root.addWidget(self.queue_hint)
         self.table = QTableWidget(0, len(_QUEUE_COLS))
         self.table.setHorizontalHeaderLabels(_QUEUE_COLS)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -200,34 +247,98 @@ class ForgeCollectionWindow(QWidget):
             self._start_session()
         aliases = self._selected_aliases(selected_only)
         if not aliases:
-            self._append("No Worlds selected.")
+            self._warn("No Worlds selected", "Tick at least one World, or use "
+                       "Capture All Worlds.")
             return
-        new = dup = err = 0
-        for alias in aliases:
-            world = self._world_by_alias(alias)
-            try:
-                image, error = self._capture_image(world)
-            except Exception as exc:  # capture must never crash the page
-                image, error = None, str(exc)
-            if image is None:
-                err += 1
-                self._append(f"{alias}: capture failed — {error}")
-                continue
-            res = capture_frame(image, world=world, session=self._session)
-            if res.is_new:
-                new += 1
-                self._append(f"{alias}: {res.frame} — det {res.detected}, "
-                             f"cls {res.classified}, UNK {res.unknown}")
-            else:
-                dup += 1
-                self._append(f"{alias}: duplicate skipped ({res.frame})")
-        self._append(f"Capture done: {new} new, {dup} duplicate(s), {err} error(s).")
+        # Loading indicator — disable capture while a burst runs.
+        self._set_capturing(True)
+        new = dup = err = warned = 0
+        try:
+            for alias in aliases:
+                world = self._world_by_alias(alias)
+                try:
+                    image, error = self._capture_image(world)
+                except Exception as exc:  # capture must never crash the page
+                    image, error = None, str(exc)
+                # Pre-flight quality: warn about detached/zoom/resolution/dup so the
+                # operator never wastes time on unusable data.
+                for w in assess_capture(image, world=world, capture_error=error):
+                    warned += 1
+                    self._append(f"⚠ {alias}: {w.message}  →  {w.fix}")
+                if image is None:
+                    err += 1
+                    continue
+                res = capture_frame(image, world=world, session=self._session)
+                if res.is_new:
+                    new += 1
+                    self._append(f"✔ {alias}: {res.frame} — det {res.detected}, "
+                                 f"cls {res.classified}, UNK {res.unknown}")
+                else:
+                    dup += 1
+                    self._append(f"↺ {alias}: duplicate skipped ({res.frame})")
+        finally:
+            self._set_capturing(False)
+        self._append(f"— Capture done: {new} new · {dup} duplicate(s) · "
+                     f"{err} error(s) · {warned} warning(s).")
+        self.refresh()
+
+    def _set_capturing(self, on: bool) -> None:
+        for b in (self.capture_sel_btn, self.capture_all_btn, self.start_btn):
+            b.setEnabled(not on)
+        self.capture_all_btn.setText("⏳ Capturing…" if on else "📷 Capture All Worlds")
+        QApplication.processEvents()  # let the label repaint during a burst
+
+    def _warn(self, title: str, detail: str) -> None:
+        self._append(f"⚠ {title}: {detail}")
+        QMessageBox.warning(self, title, detail)
+
+    def _quick(self, filt, srt) -> None:
+        """One-tap view: set the filter + sort together and refresh."""
+        idx = next((i for i, (_, f) in enumerate(_FILTERS) if f == filt), 0)
+        self.filter_combo.setCurrentIndex(idx)
+        sidx = next((i for i, (_, s) in enumerate(_SORTS) if s == srt), 0)
+        self.sort_combo.setCurrentIndex(sidx)
         self.refresh()
 
     def refresh(self) -> None:
         self.session_lbl.setText(self._session_text())
+        self._refresh_dashboard()
+        self._refresh_status()
         self._refresh_queue()
         self._refresh_stats()
+
+    def _refresh_dashboard(self) -> None:
+        d = session_dashboard(self._session)
+        if not d.get("active"):
+            self.dashboard_lbl.setText("<i>No active session — click Start Session "
+                                       "to begin collecting.</i>")
+            return
+        rate = f"{d['capture_rate_per_hour']}/h" if d["capture_rate_per_hour"] else "—"
+        self.dashboard_lbl.setText(
+            f"<b>Today's session</b> · Worlds {d['worlds_attached']} · "
+            f"captured <b>{d['frames_captured']}</b> · skipped {d['frames_skipped']} · "
+            f"reviewed {d['frames_reviewed']} · pending {d['frames_pending']} · "
+            f"duplicates {d['duplicates']} · rate {rate} · "
+            f"duration {d['duration_human']}")
+
+    def _refresh_status(self) -> None:
+        try:
+            ss = status_summary()
+        except Exception as exc:
+            self.status_lbl.setText(f"<i>(dataset status unavailable: {exc})</i>")
+            return
+        pc = ss["per_class"]
+        t = ss["today"]
+        cls = " ".join(f"{k}%=<b>{pc[k]}</b>" for k in ("20", "40", "60", "80", "100"))
+        zero = ", ".join(f"{c}%" for c in ss["shortages"]["zero_example_classes"])
+        zero_txt = f" · <span style='color:#c0392b'>zero: {zero}</span>" if zero else ""
+        self.status_lbl.setText(
+            f"<b>Dataset</b>: reviewed {ss['reviewed']} · pending {ss['pending']} · "
+            f"negative {ss['negative']} · UNKNOWN {ss['unknown']}<br>"
+            f"Classes: {cls}{zero_txt}<br>"
+            f"<b>Today</b>: +{t['frames']} frames, {t['reviewed']} reviewed, "
+            f"{t['negative']} negative · "
+            + " ".join(f"{k}%+{t['per_class'][k]}" for k in ('20', '40', '60', '80', '100')))
 
     def _session_text(self) -> str:
         if self._session is None:
@@ -245,6 +356,14 @@ class ForgeCollectionWindow(QWidget):
         _, sort = _SORTS[self.sort_combo.currentIndex()]
         rows = build_queue(filters=self._current_filters(), sort=sort,
                            today=self.today_check.isChecked())
+        if not rows:
+            self.queue_hint.setText(
+                "No frames match this view. "
+                + ("Capture a World to begin." if self._session else
+                   "Start a session and Capture All Worlds to begin."))
+            self.queue_hint.show()
+        else:
+            self.queue_hint.hide()
         self.table.setRowCount(len(rows))
         for r, e in enumerate(rows):
             res = f"{e.capture_w}x{e.capture_h}" if e.capture_w else "—"

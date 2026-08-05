@@ -177,6 +177,7 @@ class ForgeReviewWindow(QMainWindow):
         self._world = world
         self._detector = detector
         self._img = None
+        self._content_dups = self._compute_content_dups()
         self.setWindowTitle("Forge Vision Debugger — Review Mode  ·  OBSERVE ONLY")
 
         central = QWidget()
@@ -219,6 +220,16 @@ class ForgeReviewWindow(QMainWindow):
         save_row.addWidget(self.reviewed_check)
         save_row.addStretch(1)
         v.addLayout(save_row)
+        # Prominent, always-visible review-state pill (reviewed / pending / negative)
+        # and a content-duplicate indicator. Visual only — reflects existing state.
+        self.state_pill = QLabel("")
+        self.state_pill.setToolTip("Review state of THIS frame. Reviewed = counted as "
+                                   "ground truth. Negative = reviewed with zero badges.")
+        v.addWidget(self.state_pill)
+        self.content_dup_lbl = QLabel("")
+        self.content_dup_lbl.setWordWrap(True)
+        self.content_dup_lbl.setStyleSheet("color:#b8860b; font-size:11px;")
+        v.addWidget(self.content_dup_lbl)
         self.save_status = QLabel("")
         v.addWidget(self.save_status)
         self.labels_path_lbl = QLabel("")
@@ -330,8 +341,41 @@ class ForgeReviewWindow(QMainWindow):
         self.reviewed_check.setChecked(self._session.current().reviewed)
         self.reviewed_check.blockSignals(False)
         self._refresh_save_ui()
+        self._refresh_state_pill()
 
     # --- explicit save / dirty state (M4.14) --------------------------------
+
+    def _compute_content_dups(self) -> set:
+        """Frames whose image content is byte-identical to another frame (so the
+        operator can avoid double-labelling the same capture). Computed once."""
+        import hashlib
+        from collections import defaultdict
+        by_md5 = defaultdict(list)
+        if self._frames_dir.is_dir():
+            for p in self._frames_dir.glob("*.png"):
+                try:
+                    by_md5[hashlib.md5(p.read_bytes()).hexdigest()].append(p.name)
+                except OSError:
+                    continue
+        return {n for group in by_md5.values() if len(group) > 1 for n in group}
+
+    def _refresh_state_pill(self) -> None:
+        label = self._session.current()
+        negative = label.reviewed and len(label.badges) == 0
+        if negative:
+            text, color = "✅ REVIEWED · NEGATIVE (0 badges)", "#2e7d32"
+        elif label.reviewed:
+            text, color = "✅ REVIEWED", "#2e7d32"
+        else:
+            text, color = "● PENDING REVIEW", "#b8860b"
+        self.state_pill.setText(text)
+        self.state_pill.setStyleSheet(
+            f"color:white; background:{color}; font-weight:bold; "
+            "padding:3px 8px; border-radius:3px;")
+        dup = self._session.current_file() in self._content_dups
+        self.content_dup_lbl.setText(
+            "⧉ DUPLICATE IMAGE — another frame has identical pixels; labelling both "
+            "adds no new data." if dup else "")
 
     def _refresh_save_ui(self) -> None:
         path = self._session.store.path

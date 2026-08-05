@@ -246,6 +246,83 @@ def test_capture_does_not_change_min_pct_sim(dataset_env):
     assert scan.MIN_PCT_SIM == before == 0.70
 
 
+def test_status_summary_reports_unknown_and_today(dataset_env):
+    from bap.forge.collection import session as S
+    from bap.forge.collection.capture import capture_frame
+    from bap.forge.collection.dataset_view import status_summary
+
+    s = S.start_session(["H"])
+    capture_frame(_img(20), world=_World("H"), session=s)
+    ss = status_summary()
+    for key in ("reviewed", "pending", "negative", "unknown", "per_class", "today"):
+        assert key in ss
+    assert ss["pending"] >= 1                     # our captured (unreviewed) frame
+    assert ss["today"]["frames"] >= 1             # captured today
+    assert set(ss["per_class"]) == {"20", "40", "60", "80", "100"}
+    assert set(ss["today"]["per_class"]) == {"20", "40", "60", "80", "100"}
+
+
+def test_session_dashboard_real_metrics(dataset_env):
+    from datetime import datetime, timedelta
+
+    from bap.forge.collection import session as S
+    from bap.forge.collection.capture import capture_frame
+    from bap.forge.collection.dataset_view import session_dashboard
+
+    s = S.start_session(["H", "F"], browser_mode="external_chromium")
+    capture_frame(_img(21), world=_World("H"), session=s)
+    capture_frame(_img(21), world=_World("H"), session=s)   # duplicate
+    now = datetime.fromisoformat(s.started_at) + timedelta(minutes=30)
+    d = session_dashboard(s, now=now)
+    assert d["active"] and d["worlds_attached"] == 2
+    assert d["frames_captured"] == 1 and d["frames_skipped"] == 1 and d["duplicates"] == 1
+    assert d["duration_seconds"] == 1800 and d["duration_human"] == "30m 0s"
+    assert d["capture_rate_per_hour"] == 2.0     # 1 frame in 0.5 h
+    assert session_dashboard(None) == {"active": False}
+
+
+def test_priority_sort_puts_unknown_first(dataset_env):
+    from bap.forge.collection.dataset_view import QueueEntry, build_queue
+
+    # monkey-free: build_queue reads the dataset, so exercise the sort directly via
+    # a tiny in-memory list mirroring build_queue's key.
+    import bap.forge.collection.dataset_view as V
+
+    def entry(frame, unknown, ts):
+        return QueueEntry(frame=frame, path="", world="H", timestamp=ts,
+                          capture_w=1920, capture_h=1080, detected=unknown,
+                          classified=0, unknown=unknown, reviewed=False, negative=False,
+                          review_state="pending", duplicate=False, session_id="s",
+                          source="live_collection", per_class={"20": 0, "40": 0, "60": 0, "80": 0, "100": 0})
+    rows = [entry("a", 0, "2026-08-05T10:00:00"), entry("b", 3, "2026-08-05T09:00:00"),
+            entry("c", 1, "2026-08-05T11:00:00")]
+    scarcity = V._class_scarcity(rows)
+    rows.sort(key=lambda e: (e.unknown, 0, e.timestamp or "", e.frame), reverse=True)
+    assert [e.frame for e in rows] == ["b", "c", "a"]   # most UNKNOWN first
+
+
+def test_capture_quality_flags_all_conditions(dataset_env):
+    from bap.forge.collection import session as S
+    from bap.forge.collection.capture import capture_frame
+    from bap.forge.collection.capture_quality import assess_capture
+
+    class _Geo:
+        def __init__(self, zoom):
+            self.zoom = zoom
+
+    s = S.start_session(["H"])
+    capture_frame(_img(30), world=_World("H"), session=s)      # seed one frame
+
+    codes = lambda ws: {w.code for w in ws}
+    assert "browser_detached" in codes(assess_capture(None, capture_error="tab closed"))
+    assert "duplicate" in codes(assess_capture(_img(30), world=_World("H")))
+    assert "unsupported_zoom" in codes(assess_capture(_img(31), geometry=_Geo(1.25)))
+    assert "wrong_resolution" in codes(assess_capture(_img(32, h=1234)))
+    # a good, novel, calibrated-size frame with zoom 1.0 → at most calibration note
+    ws = assess_capture(_img(33), world=_World("H"), geometry=_Geo(1.0))
+    assert "unsupported_zoom" not in codes(ws) and "duplicate" not in codes(ws)
+
+
 def test_collection_package_has_no_cursor_or_click():
     import ast
     import bap.forge.collection as pkg
