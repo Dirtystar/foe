@@ -18,7 +18,16 @@ click, never automated or scheduler-triggered.
 ## Branch / commit
 
 - Branch: `claude/browser-automation-architecture-5784h1`.
-- Latest work: Milestone 5A.1 (Real Windows browser geometry) — measures the
+- Latest work: Milestone 5B (Live percentage-classifier hardening) — folding the
+  reviewed live exemplars into the bank made the raw 1-NN wrong-accept two
+  cross-scale crops at ~0.702 (combined wrong-accepted 0 → 2). Fix adds a
+  **class-confirmed** acceptance gate (`PercentClassifier.confirmed`, ≥2 of top-3
+  nearest exemplars agree) layered on top of the **unchanged** `MIN_PCT_SIM = 0.70`
+  bar, applied in `scan` and `live_eval`; wrong-accepted is back to 0 with no
+  threshold change. Root cause measured: live-capture scale gap + few-pixel centring
+  sensitivity of the percent-patch cosine. Observe-only unchanged. See
+  `LIVE_CLASSIFIER_HARDENING_REPORT.md`.
+- Prior: Milestone 5A.1 (Real Windows browser geometry) — measures the
   Chrome window + content viewport (CDP window bounds + layout metrics, DPR derived)
   and an operator content-origin calibration keyed by geometry, so the M5A cursor
   preview can map raw→physical screen without guessing; `MainWindow._window_geometry`

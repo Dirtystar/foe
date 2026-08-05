@@ -218,12 +218,17 @@ def test_regression_full_capture_pipeline(tmp_path):
     for d in scan.detections:
         assert bm.x <= d.cx <= bm.x + bm.w and bm.y <= d.cy <= bm.y + bm.h
 
-    # The high-confidence 40% badge classifies; every accepted pct is a valid
-    # class, and none is a wrong value (at MIN_PCT_SIM 0.62 a marginal read stays
-    # UNKNOWN rather than being accepted wrongly).
-    pcts = {d.pct for d in scan.detections if d.pct is not None}
-    assert 40 in pcts
-    assert pcts <= {20, 40, 60, 80, 100}
+    # The high-confidence 40% badge is still RECOGNISED — its nearest exemplar is
+    # 40% at high similarity in the diagnostics. Under the Milestone 5B
+    # class-confirmation safety gate a percentage is only ACCEPTED when a second
+    # same-class neighbour agrees; the grading-only bank holds just two 40%
+    # exemplars, so this badge's top-3 is [40, 100, 100] and it is (safely) held
+    # UNKNOWN rather than accepted on a lone neighbour. Any accepted pct is still a
+    # valid class, and none is a wrong value.
+    diag40 = [c for c in scan.classify_diag if c["predicted"] == 40]
+    assert diag40 and max(c["similarity"] for c in diag40) > 0.7  # recognised
+    accepted = {d.pct for d in scan.detections if d.pct is not None}
+    assert accepted <= {20, 40, 60, 80, 100}
     # Every candidate has a classification diagnostic (predicted / similarity / reason).
     assert len(scan.classify_diag) == len(scan.detections)
     assert all("reason" in c for c in scan.classify_diag)

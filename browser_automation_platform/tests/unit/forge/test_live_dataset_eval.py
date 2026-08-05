@@ -69,9 +69,10 @@ def test_samples_carry_geometry_rois_badges_weakening():
 def test_review_batch_absent_is_clean_skip(tmp_path):
     # A missing batch root is a clean skip (empty list), never an error.
     assert load_review_batch(tmp_path / "does_not_exist") == []
-    # load_all only ever contains the known source tags.
+    # load_all only ever contains the known source tags (the canonical reviewed
+    # dataset/ is tagged "snapshot" once it holds reviewed frames).
     sources = {s.source for s in load_all()}
-    assert sources <= {"historical", "live", "review_batch_002"}
+    assert sources <= {"historical", "live", "review_batch_002", "snapshot"}
 
 
 def test_review_batch_002_shape_with_negatives():
@@ -128,7 +129,9 @@ def test_load_all_dedups_by_content_keeping_last(tmp_path, monkeypatch):
     # Make the two roots share identical bytes (copy a's frame into b).
     import shutil
     shutil.copy2(a / "frames" / "dup.png", b / "frames" / "dup.png")
-    samples = ds.load_all(historical=a, live=empty, review_batch=b)
+    # Isolate from the real canonical dataset/ (snapshot source) by pointing the
+    # snapshot root at an empty directory, so this measures only the dedup.
+    samples = ds.load_all(historical=a, live=empty, review_batch=b, snapshots=empty)
     # empty live -> no samples; dup collapsed to one, reviewed batch (60) wins.
     assert len(samples) == 1
     assert samples[0].badges[0].pct == 60 and samples[0].source == "review_batch_002"

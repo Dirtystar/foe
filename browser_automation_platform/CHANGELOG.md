@@ -4,6 +4,40 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 5B: Live percentage-classifier hardening (no click)
+
+Hardens the OCR-free percentage classifier against low-similarity live Chrome
+captures **without lowering the `MIN_PCT_SIM = 0.70` acceptance bar** and without
+increasing wrong-accepted percentages (the primary safety metric stays 0). Folding
+the newly reviewed live exemplars into the bank made the raw 1-NN accept two
+isolated cross-scale crops at ~0.702 as the wrong class (combined wrong-accepted
+0 → 2, a mutual 40↔60 confusion). Measured root cause: live captures sit at a
+different scale than the historical 1080-tall training frames, and the
+percent-patch cosine is acutely sensitive to a few-pixel centring offset, so a lone
+near neighbour is untrustworthy. Fix is a **safety gate layered on top of** the
+unchanged 0.70 bar — a percentage is accepted only when the nearest class is
+**class-confirmed** by ≥ 2 of the top-3 nearest exemplars; otherwise it stays
+UNKNOWN. Detector thresholds, OCR stance, cursor preview, geometry, scheduler and
+UI are untouched; the slice remains observe-only. See
+`LIVE_CLASSIFIER_HARDENING_REPORT.md`.
+
+### Added
+
+- **`PercentClassifier.confirmed(patch, k=3, need=2)`** — class-conditioned
+  nearest-neighbour confirmation; `predict()` remains the raw 1-NN and is documented
+  as gated by `confirmed()`.
+- Contact sheet `live_classifier_hardening/contact_sheet_live_badges.png` (per live
+  badge: raw crop, normalized input, nearest-5 exemplars with pct/similarity,
+  accepted/UNKNOWN) diagnosing the scale + centring mismatch.
+
+### Changed
+
+- **`scan._classify` / `scan._panel_state`** now require `confirmed()` in addition
+  to the 0.70 bar before accepting a percentage; a cleared-bar-but-unconfirmed match
+  records a distinct "unconfirmed" diagnostic reason and stays UNKNOWN.
+- **`live_eval`** classification and full-slice acceptance both apply `confirmed()`,
+  so the honest before/after evaluation reflects the runtime gate.
+
 ## [Unreleased] — Milestone 5A.1: Real Windows browser geometry (no click)
 
 Closes the M5A gap where `MainWindow._window_geometry` returned `None`, so the
