@@ -1,0 +1,44 @@
+{
+  "version": 2,
+  "weakening_regions": {
+    "1600x900": {
+      "x": 157,
+      "y": -2,
+      "w": 43,
+      "h": 27
+    },
+    "1920x912": {
+      "x": 235,
+      "y": 0,
+      "w": 61,
+      "h": 26
+    }
+  },
+  "battle_map_regions": {
+    "1600x900": {
+      "x": 13,
+      "y": 20,
+      "w": 1510,
+      "h": 881
+    },
+    "1920x912": {
+      "x": 18,
+      "y": 47,
+      "w": 1869,
+      "h": 839
+    }
+  },
+  "geometry": {
+    "1920x912": {
+      "raw_w": 1920,
+      "raw_h": 912,
+      "viewport_w": null,
+      "viewport_h": null,
+      "device_pixel_ratio": null,
+      "zoom": null,
+      "browser_mode": null,
+      "cdp_endpoint": null,
+      "key": "1920x912"
+    }
+  }
+}
