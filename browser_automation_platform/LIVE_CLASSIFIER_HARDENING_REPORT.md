@@ -218,7 +218,12 @@ cursor was not moved.
   grading fixture's 40 % badge is *recognised* (nearest = 40 % at 0.94) and that the
   confirmation gate governs *acceptance*, since the grading-only bank cannot confirm
   it (see §7).
-- Forge + perf suites: **289 passed, 0 failed** after the fixes.
+- One pre-existing, unrelated bug was also fixed because it deterministically hung
+  the whole suite (so "run the suite once" could never complete):
+  `test_reopen_restores_saved_state` walked FORWARD with `next()` to reach an
+  *earlier* frame, but `next()` clamps at the last index — an infinite loop latent
+  since M4.14. Navigate back with `prev()` instead (test-only; no production code).
+- Full unit suite: **1020 passed, 1 skipped** (`tests/unit`, offscreen).
 
 _No detector threshold, `MIN_PCT_SIM`, OCR, cursor-preview, geometry, scheduler, or UI
 was changed. The only behavioural change is the class-confirmation safety gate above
