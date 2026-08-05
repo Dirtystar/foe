@@ -4,6 +4,58 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 5A.1: Real Windows browser geometry (no click)
+
+Closes the M5A gap where `MainWindow._window_geometry` returned `None`, so the
+cursor-preview gate always blocked with "window geometry unavailable". Measures the
+real Chrome/Chromium window + web-content viewport so the coordinate contract can
+map raw screenshot → physical screen without guessing. **Clicking remains
+unimplemented**; the calibration overlay reads two operator clicks on BAP's own
+window and sends nothing to Chrome. See `M5A1_WINDOWS_GEOMETRY_REPORT.md`.
+
+### Added
+
+- **`bap.forge.cursor.window_geometry`**:
+  - `measure_via_cdp(send, …)` — window rect + identity + state from
+    `Browser.getWindowForTarget`/`getWindowBounds`, viewport from
+    `Page.getLayoutMetrics`, **DPR derived** from capture÷viewport (no
+    `Runtime.evaluate`), zoom from the visual viewport. `send` is injected (fake in
+    tests).
+  - `ContentOriginCalibration` + `CalibrationKey` — persisted content rectangle
+    (physical px) keyed by browser mode, endpoint/profile, capture, viewport, DPR,
+    zoom, monitor scale, monitor; **never reused when any key changes**.
+  - `resolve_native_window` — unique CDP↔native association; **ambiguous or missing
+    blocks** (no title/process guessing).
+  - `build_window_geometry` — merges measurement + content origin; returns
+    `(None, "content_origin_unavailable")` when unknown.
+- **`WindowGeometry`** gains a measured/calibrated **`content_rect`** (physical px)
+  plus `source`, `native_window_id`, `windows_dpi`, `measured_at`; `image_to_screen`
+  maps directly across the content rect when present (absorbing DPR, title bar,
+  toolbar, monitor scale), and `identity()` includes them for staleness.
+- **Vision Debugger**: a **Set Browser Content Origin** action (a translucent,
+  BAP-owned overlay — `gui/cursor_calibration.py` — where the operator clicks the
+  content area's corners; no input to Chrome); the confirmation dialog now shows the
+  browser window id + rect, content rect, DPR, Windows scaling, and whether geometry
+  is measured or operator-calibrated; a blocked "no geometry" preview points to the
+  calibration action.
+- **MainWindow** builds a calibrated `WindowGeometry` from the persisted content
+  origin for the current geometry key (and re-reads it at move time, so a changed
+  viewport/DPR/zoom invalidates it); `_window_geometry` no longer returns a
+  hard-coded `None`.
+- Tests (25): CDP measurement + derived DPR + maximized; calibration persistence +
+  invalidation; native-window association (unique/ambiguous/missing); calibrated
+  transform at 100/125/150 % scaling, second monitor, negative coords; move-time
+  staleness (moved/resized/viewport/DPR/zoom) blocks; one valid request → `move_to`
+  once (External + Managed); debugger calibration action + MainWindow geometry build.
+
+### Limitations
+
+- Live CDP/Win32 measurement plumbing is integration-only and unverified in the
+  headless container; the operator content-origin calibration is the tested,
+  reliable path. A pure window *drag* needs live re-measurement (the staleness logic
+  is complete and tested); a live desktop target overlay was omitted (cross-DPI
+  placement would itself be subject to the scaling under test).
+
 ## [Unreleased] — Milestone 5A: Manual Move Cursor Preview (one-shot, no click)
 
 The first real **output** action: a manual, operator-confirmed, one-shot cursor

@@ -157,6 +157,16 @@ class DebuggerWindow(QMainWindow):
         self.preview_cursor_button.setEnabled(False)
         self.preview_cursor_button.clicked.connect(self._on_preview_cursor_target)
         row.addWidget(self.preview_cursor_button)
+        # M5A.1 — measure the real content origin once, when CDP cannot.
+        self.calibrate_origin_button = QPushButton("Set Browser Content Origin…")
+        self.calibrate_origin_button.setToolTip(
+            "Mark the top-left and bottom-right of the Forge content area so the "
+            "cursor point can be mapped to the physical screen. No click is sent to Chrome.")
+        self.calibrate_origin_button.clicked.connect(self._on_calibrate_content_origin)
+        can_calibrate = bool(self._cursor_context and getattr(
+            self._cursor_context, "calibrate_content_origin", None))
+        self.calibrate_origin_button.setEnabled(can_calibrate)
+        row.addWidget(self.calibrate_origin_button)
         row.addStretch(1)
         lay.addLayout(row)
 
@@ -168,6 +178,22 @@ class DebuggerWindow(QMainWindow):
             self.enable_cursor_button.setEnabled(False)
             self.cursor_state_label.setText("Cursor Preview: UNAVAILABLE (no cursor adapter)")
         return box
+
+    def _on_calibrate_content_origin(self) -> None:
+        """Run the operator content-origin calibration (M5A.1). Persists the content
+        rectangle for the current geometry key; never sends input to Chrome."""
+        cb = getattr(self._cursor_context, "calibrate_content_origin", None) if self._cursor_context else None
+        if cb is None:
+            self.cursor_result_label.setText("Content-origin calibration is unavailable.")
+            return
+        try:
+            ok = cb()
+        except Exception as exc:
+            self.cursor_result_label.setText(f"Calibration failed: {exc}")
+            return
+        self.cursor_result_label.setStyleSheet("")
+        self.cursor_result_label.setText(
+            "Browser content origin saved." if ok else "Calibration cancelled.")
 
     def _on_enable_cursor_preview(self) -> None:
         if self._cursor_controller is None:
@@ -206,7 +232,12 @@ class DebuggerWindow(QMainWindow):
         decision = self._cursor_controller.preview(req)
         if not decision.ok:
             self.cursor_result_label.setStyleSheet("color:#C0563A;")
-            self.cursor_result_label.setText(f"Blocked: {decision.reason}")
+            hint = ""
+            if decision.code == "no_geometry":
+                status = self._cursor_context.geometry_status_getter()
+                if status:
+                    hint = f"  ({status})"
+            self.cursor_result_label.setText(f"Blocked: {decision.reason}{hint}")
             return
         if not self._confirm_cursor_move(decision):
             self.cursor_result_label.setStyleSheet("")
@@ -234,6 +265,12 @@ class DebuggerWindow(QMainWindow):
             f"Badge: {f.get('pct')}%   confidence {f.get('confidence')}",
             f"Weakening: {f.get('weakening')}   limit {f.get('world_limit')}   "
             f"decision {f.get('decision')}",
+            "",
+            f"Browser window {f.get('window_id')}  rect {f.get('window_rect')}",
+            f"Content rect:   {f.get('content_rect')}   ({f.get('geometry_source')})",
+            f"DPR {f.get('dpr')}   ·   Windows scaling {f.get('monitor_scale')}"
+            + (f"  (DPI {f.get('windows_dpi')})" if f.get('windows_dpi') else ""),
+            "",
             f"Image point:    {f.get('image_point')}",
             f"Viewport point: {f.get('viewport_point')}",
             f"Screen point:   {f.get('screen_point')}",

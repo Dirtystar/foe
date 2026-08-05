@@ -49,6 +49,13 @@ class CursorPreviewContext:
     after_move_capture: Callable[[], object] | None = None
     cursor_position_getter: Callable[[], tuple[int, int] | None] | None = None
 
+    # M5A.1 — "Set Browser Content Origin". Runs the operator calibration and
+    # returns True on success; None when calibration is not offered here.
+    calibrate_content_origin: Callable[[], bool] | None = None
+    # A short human note about why geometry is unavailable (e.g. "content origin not
+    # calibrated"), shown alongside a blocked preview.
+    geometry_status_getter: Callable[[], str | None] = _none
+
     def build_request(
         self, *, enabled: bool, target_point, pct, confidence, weakening_value,
         world_limit, decision,

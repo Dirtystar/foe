@@ -59,19 +59,40 @@ class WindowGeometry:
     # Stable identity of the window, so a different/rearranged window is rejected.
     window_id: str | None = None
     monitor_id: str | None = None
+    # M5A.1 — real measurement provenance.
+    #
+    # ``content_rect`` is the captured viewport's rectangle on the PHYSICAL screen,
+    # (left, top, right, bottom) in device pixels — the authoritative content origin
+    # + size, either measured (CDP window bounds + Win32 client area) or set by the
+    # operator ("Set Browser Content Origin"). When present the transform maps
+    # directly across it (absorbing DPR, title bar, toolbar, and monitor scale), so
+    # nothing is assumed from constants. ``source`` records how it was obtained.
+    content_rect: tuple[int, int, int, int] | None = None
+    source: str = "measured"                # "measured" | "operator_calibrated" | "unavailable"
+    native_window_id: str | None = None     # HWND / native identifier, when resolved
+    windows_dpi: int | None = None          # e.g. 96 at 100 %, 120 at 125 %, 144 at 150 %
+    measured_at: str | None = None          # ISO timestamp of the measurement
 
     def identity(self) -> tuple:
         """The fields whose change between scan and move must block a move: the
         window/monitor identity and every geometry factor that would shift where a
         point lands."""
         return (
-            self.window_id, self.monitor_id,
+            self.window_id, self.monitor_id, self.native_window_id,
             self.window_x, self.window_y, self.window_w, self.window_h,
-            self.content_offset_x, self.content_offset_y,
+            self.content_offset_x, self.content_offset_y, self.content_rect,
             round(self.device_pixel_ratio, 4), round(self.zoom, 4),
             self.viewport_w, self.viewport_h, self.capture_w, self.capture_h,
-            round(self.monitor_scale, 4),
+            round(self.monitor_scale, 4), self.windows_dpi,
         )
+
+    @property
+    def is_calibrated(self) -> bool:
+        return self.source == "operator_calibrated"
+
+    @property
+    def outer_rect(self) -> tuple[int, int, int, int]:
+        return (self.window_x, self.window_y, self.window_w, self.window_h)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -124,8 +145,20 @@ def _capture_to_viewport_scale(geom: WindowGeometry) -> tuple[float, float]:
 
 def image_to_screen(image_point: tuple[int, int], geom: WindowGeometry) -> CoordinateTrace:
     """Transform a raw-capture pixel to a Windows physical-screen pixel, returning
-    the full stage-by-stage trace. Pure; performs no movement."""
+    the full stage-by-stage trace. Pure; performs no movement.
+
+    Two contracts, one result:
+    * **Content-rectangle (measured/calibrated)** — when ``content_rect`` is set it
+      is the captured viewport's PHYSICAL-screen rectangle, so the raw point maps by
+      direct linear interpolation across it. This absorbs DPR, title bar, toolbar,
+      and monitor scale with no assumed constants (M5A.1).
+    * **Window+offset+scale** — the original M5A path, used when only the window
+      rectangle and offsets are known.
+    """
     ix, iy = int(image_point[0]), int(image_point[1])
+
+    if geom.content_rect is not None:
+        return _image_to_screen_via_content_rect(ix, iy, geom)
 
     # 1. raw image px → captured viewport CSS px (divide out capture/DPR scale once)
     sx, sy = _capture_to_viewport_scale(geom)
@@ -155,6 +188,37 @@ def image_to_screen(image_point: tuple[int, int], geom: WindowGeometry) -> Coord
         monitor_scale=scale,
         window_origin=(geom.window_x, geom.window_y),
         content_offset=(geom.content_offset_x, geom.content_offset_y),
+    )
+
+
+def _image_to_screen_via_content_rect(ix: int, iy: int, geom: WindowGeometry) -> CoordinateTrace:
+    """Map a raw-capture pixel across the measured/calibrated content rectangle
+    (physical screen px). ``content_rect`` covers exactly the captured viewport, so
+    the fraction of the point across the capture is the fraction across the rect."""
+    left, top, right, bottom = geom.content_rect
+    cap_w = geom.capture_w or 1
+    cap_h = geom.capture_h or 1
+    fx = ix / cap_w if cap_w else 0.0
+    fy = iy / cap_h if cap_h else 0.0
+    screen_x = int(round(left + fx * (right - left)))
+    screen_y = int(round(top + fy * (bottom - top)))
+    # Viewport CSS (for display/diagnostics only).
+    sx, sy = _capture_to_viewport_scale(geom)
+    vp_x, vp_y = ix * sx, iy * sy
+    # The effective device-px-per-css factor implied by the content rect.
+    eff_scale = ((right - left) / geom.viewport_w) if geom.viewport_w else (geom.monitor_scale or 1.0)
+    return CoordinateTrace(
+        image=(ix, iy),
+        viewport_css=(vp_x, vp_y),
+        content_css=(vp_x, vp_y),
+        screen_logical=(float(screen_x), float(screen_y)),
+        screen_physical=(screen_x, screen_y),
+        scale_x=sx, scale_y=sy,
+        device_pixel_ratio=geom.device_pixel_ratio,
+        zoom=geom.zoom,
+        monitor_scale=round(eff_scale, 4),
+        window_origin=(geom.window_x, geom.window_y),
+        content_offset=(left - geom.window_x, top - geom.window_y),
     )
 
 

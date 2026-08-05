@@ -1002,15 +1002,81 @@ class MainWindow(QMainWindow):
             self._cursor_ctl = None  # no real cursor here → preview unavailable
         return self._cursor_ctl
 
-    def _window_geometry(self, image, geometry_meta):
-        """Best-effort browser-window geometry for the image→screen transform.
+    def _content_calibration(self):
+        """The persisted operator content-origin calibration (M5A.1), loaded once."""
+        if getattr(self, "_content_cal", None) is None:
+            try:
+                from bap.forge.cursor.window_geometry import (
+                    ContentOriginCalibration,
+                    default_calibration_path,
+                )
 
-        Returns None by default: precise window position, content-area offset,
-        DPR/zoom, and monitor scaling are OS-level facts not available headless, and
-        the safety gate MUST refuse to move without them (never guess). On Windows
-        this is where a calibrated/measured WindowGeometry is supplied — see
-        M5A_CURSOR_PREVIEW_REPORT.md."""
-        return None
+                self._content_cal = ContentOriginCalibration.load(default_calibration_path())
+            except Exception:
+                from bap.forge.cursor.window_geometry import ContentOriginCalibration
+
+                self._content_cal = ContentOriginCalibration()
+        return self._content_cal
+
+    def _calibration_key(self, image, geometry_meta):
+        from bap.forge.browser_settings import BrowserMode
+        from bap.forge.cursor.window_geometry import CalibrationKey
+
+        h, w = (image.shape[0], image.shape[1]) if image is not None else (0, 0)
+        meta = geometry_meta or {}
+        mode = meta.get("browser_mode") or (
+            BrowserMode.EXTERNAL.value if self._external_chrome else BrowserMode.MANAGED.value)
+        endpoint = meta.get("cdp_endpoint") or (
+            self._browser_settings.cdp_endpoint if self._external_chrome else "managed")
+        dpr = float(meta.get("device_pixel_ratio") or 1.0)
+        zoom = float(meta.get("zoom") or 1.0)
+        return CalibrationKey(mode, endpoint, w, h, w, h, dpr, zoom, 1.0, "primary")
+
+    def _window_geometry(self, image, geometry_meta):
+        """A usable WindowGeometry from the persisted content-origin calibration for
+        the current geometry key, or None (the gate then blocks and the operator
+        uses "Set Browser Content Origin"). Precise window position and monitor
+        scaling are OS facts; this measures the content rectangle the operator marked
+        rather than guessing constants (M5A.1)."""
+        from bap.forge.cursor.geometry import WindowGeometry
+
+        key = self._calibration_key(image, geometry_meta)
+        rect = self._content_calibration().get(key)
+        if rect is None:
+            return None
+        h, w = (image.shape[0], image.shape[1]) if image is not None else (0, 0)
+        left, top, right, bottom = rect
+        return WindowGeometry(
+            window_x=left, window_y=top, window_w=right - left, window_h=bottom - top,
+            content_offset_x=0, content_offset_y=0,
+            device_pixel_ratio=key.device_pixel_ratio, zoom=key.zoom,
+            viewport_w=w, viewport_h=h, capture_w=w, capture_h=h,
+            monitor_scale=key.monitor_scale, window_id="calibrated",
+            monitor_id=key.monitor_id, content_rect=(left, top, right, bottom),
+            source="operator_calibrated", native_window_id="calibrated",
+        )
+
+    def _calibrate_content_origin(self, image, geometry_meta) -> bool:
+        """Operator marks the Forge content rectangle on screen; persist it keyed by
+        the current geometry. Reads screen coordinates only — sends no input to
+        Chrome and never clicks anything in the game."""
+        rect = self._capture_content_rect_overlay()
+        if rect is None:
+            return False
+        self._content_calibration().set(self._calibration_key(image, geometry_meta), rect)
+        return True
+
+    def _capture_content_rect_overlay(self):
+        """A translucent, BAP-owned full-screen overlay: the operator clicks the
+        content area's top-left then bottom-right. Returns (l,t,r,b) in physical
+        pixels, or None if cancelled. Best-effort across DPI (see the M5A.1 report)."""
+        try:
+            from bap.gui.cursor_calibration import capture_content_rect
+
+            return capture_content_rect(self)
+        except Exception as exc:  # never crash the debugger over a calibration attempt
+            self._append_log(f"Content-origin calibration unavailable: {exc}")
+            return None
 
     def _build_cursor_context(self, world, alias, tab_id, image, captured_at, geometry_meta):
         from bap.forge.browser_settings import BrowserMode
@@ -1018,7 +1084,7 @@ class MainWindow(QMainWindow):
 
         h, w = (image.shape[0], image.shape[1]) if image is not None else (0, 0)
         mode = (BrowserMode.EXTERNAL.value if self._external_chrome else BrowserMode.MANAGED.value)
-        geom = self._window_geometry(image, geometry_meta)
+        geom_at_scan = self._window_geometry(image, geometry_meta)
 
         def selected_alias():
             return self._current_test_scan_alias()
@@ -1027,14 +1093,22 @@ class MainWindow(QMainWindow):
             assigned = self._assignment.get(alias) if (self._assignment and alias) else None
             return assigned.tab_id if assigned is not None else None
 
+        def geometry_status():
+            return None if geom_at_scan is not None else \
+                "browser content origin not calibrated — use “Set Browser Content Origin”"
+
         return CursorPreviewContext(
             world_alias=alias, hostname=getattr(world, "hostname", None), browser_mode=mode,
             tab_id_at_scan=tab_id, live=True, captured_at=captured_at,
-            capture_w=w, capture_h=h, geometry_at_scan=geom,
+            capture_w=w, capture_h=h, geometry_at_scan=geom_at_scan,
             selected_alias_getter=selected_alias,
             current_tab_getter=current_tab,
-            current_geometry_getter=lambda: geom,
+            # Re-read at move time so a changed viewport/DPR/zoom (a new key) → no
+            # calibration match → geometry None → blocked.
+            current_geometry_getter=lambda: self._window_geometry(image, geometry_meta),
             window_owned_getter=lambda: bool(self._browser_open),
+            calibrate_content_origin=lambda: self._calibrate_content_origin(image, geometry_meta),
+            geometry_status_getter=geometry_status,
         )
 
     def _forge_calibration(self):

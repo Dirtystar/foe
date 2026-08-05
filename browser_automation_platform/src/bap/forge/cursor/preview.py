@@ -143,7 +143,8 @@ def evaluate_preview(req: PreviewRequest, *, now: datetime | None = None) -> Pre
         return block("geometry_changed",
                      "Browser window moved/resized or DPR/zoom changed since the scan — run Test Scan again.")
 
-    trace = image_to_screen(req.target_point, req.current_geometry)
+    geom = req.current_geometry
+    trace = image_to_screen(req.target_point, geom)
     return PreviewDecision(
         ok=True, code="ok", reason="All manual-gate conditions pass.",
         screen_point=trace.screen_physical, trace=trace, age_s=age,
@@ -156,6 +157,14 @@ def evaluate_preview(req: PreviewRequest, *, now: datetime | None = None) -> Pre
             "viewport_point": [round(v, 1) for v in trace.viewport_css],
             "screen_point": list(trace.screen_physical),
             "age_s": round(age, 2),
+            # M5A.1 geometry diagnostics for the confirmation dialog.
+            "window_id": geom.native_window_id or geom.window_id,
+            "window_rect": list(geom.outer_rect),
+            "content_rect": list(geom.content_rect) if geom.content_rect else None,
+            "dpr": geom.device_pixel_ratio,
+            "monitor_scale": geom.monitor_scale,
+            "windows_dpi": geom.windows_dpi,
+            "geometry_source": ("operator-calibrated" if geom.is_calibrated else "measured"),
         },
     )
 

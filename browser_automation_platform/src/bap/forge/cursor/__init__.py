@@ -19,6 +19,14 @@ from bap.forge.cursor.preview import (
     PreviewRequest,
     evaluate_preview,
 )
+from bap.forge.cursor.window_geometry import (
+    CalibrationKey,
+    ContentOriginCalibration,
+    GeometryMeasurement,
+    build_window_geometry,
+    measure_via_cdp,
+    resolve_native_window,
+)
 
 __all__ = [
     "CursorPreviewPort",
@@ -33,4 +41,10 @@ __all__ = [
     "PreviewDecision",
     "evaluate_preview",
     "DEFAULT_MAX_SCAN_AGE_S",
+    "CalibrationKey",
+    "ContentOriginCalibration",
+    "GeometryMeasurement",
+    "build_window_geometry",
+    "measure_via_cdp",
+    "resolve_native_window",
 ]

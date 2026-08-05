@@ -18,13 +18,17 @@ click, never automated or scheduler-triggered.
 ## Branch / commit
 
 - Branch: `claude/browser-automation-architecture-5784h1`.
-- Latest work: Milestone 5A (Manual Move Cursor Preview) — the first output action:
-  a manual, confirmed, one-shot cursor MOVE to the validated would-click point that
+- Latest work: Milestone 5A.1 (Real Windows browser geometry) — measures the
+  Chrome window + content viewport (CDP window bounds + layout metrics, DPR derived)
+  and an operator content-origin calibration keyed by geometry, so the M5A cursor
+  preview can map raw→physical screen without guessing; `MainWindow._window_geometry`
+  now returns a calibrated `WindowGeometry` (was `None`). Still manual, one-shot, no
+  click. See `M5A1_WINDOWS_GEOMETRY_REPORT.md`.
+- Prior: Milestone 5A (Manual Move Cursor Preview) — the first output action: a
+  manual, confirmed, one-shot cursor MOVE to the validated would-click point that
   **never clicks** (`bap.forge.cursor`, `CursorPreviewPort` exposes only
   `move_to`). Strict manual gate + explicit image→screen coordinate contract +
-  append-only `CURSOR_PREVIEW_ONLY` audit. Live window-geometry acquisition is a
-  documented follow-up (gate safely blocks without it). See
-  `M5A_CURSOR_PREVIEW_REPORT.md`.
+  append-only `CURSOR_PREVIEW_ONLY` audit. See `M5A_CURSOR_PREVIEW_REPORT.md`.
 - Prior: Milestone 4.16 (External Chrome Attach) — BAP can attach to an
   operator-launched Chrome over CDP (`bap.adapters.browser.cdp_attach_adapter`)
   as a read-only guest that never launches or closes Chrome; explicit
