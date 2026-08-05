@@ -5,23 +5,52 @@
       "file": "2026-08-04_17-58-59_H.png",
       "badges": [
         {
-          "cx": 1059,
-          "cy": 806,
-          "pct": null
-        },
+          "cx": 915,
+          "cy": 744,
+          "pct": 20
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-04_23-28-35_H.png",
+      "badges": [
         {
-          "cx": 1031,
-          "cy": 797,
-          "pct": null
-        },
-        {
-          "cx": 913,
-          "cy": 749,
+          "cx": 1242,
+          "cy": 537,
           "pct": null
         }
       ],
-      "reviewed": false,
-      "weakening": null
+      "reviewed": true,
+      "weakening": 12
+    },
+    {
+      "file": "2026-08-05_10-13-33_B.png",
+      "badges": [
+        {
+          "cx": 129,
+          "cy": 131,
+          "pct": 60
+        },
+        {
+          "cx": 1604,
+          "cy": 105,
+          "pct": 60
+        },
+        {
+          "cx": 1681,
+          "cy": 200,
+          "pct": 60
+        },
+        {
+          "cx": 830,
+          "cy": 848,
+          "pct": 60
+        }
+      ],
+      "reviewed": true,
+      "weakening": 0
     }
   ]
 }
