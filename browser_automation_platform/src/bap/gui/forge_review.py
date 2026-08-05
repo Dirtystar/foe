@@ -438,7 +438,12 @@ class ForgeReviewWindow(QMainWindow):
 
     def keyPressEvent(self, e: QKeyEvent) -> None:  # noqa: N802
         key = e.key()
-        if key in _PCT_KEYS:
+        ctrl = bool(e.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        if ctrl and key == Qt.Key.Key_S:                       # Ctrl+S = Save
+            self._save_now()
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):     # Enter = Save and Next
+            self._save_and_next()
+        elif key in _PCT_KEYS:
             self._session.arm_pct(_PCT_KEYS[key]); self._mark_dirty(); self._load()
         elif key in (Qt.Key.Key_Right, Qt.Key.Key_D):
             self._nav(+1)
@@ -448,8 +453,37 @@ class ForgeReviewWindow(QMainWindow):
             if self._session.remove_active():
                 self._mark_dirty()
             self._load()
+        elif key == Qt.Key.Key_N:                              # N = reviewed negative
+            self._mark_reviewed_negative()
+        elif key == Qt.Key.Key_R:                              # R = toggle Reviewed
+            self.reviewed_check.setChecked(not self.reviewed_check.isChecked())
+        elif key == Qt.Key.Key_Escape:                         # Escape = cancel edit only
+            self._cancel_edit()
         else:
             super().keyPressEvent(e)
+
+    def _save_and_next(self) -> None:
+        """Explicit Save, then advance — a reopen restores everything (the whole
+        in-memory store is written on Save)."""
+        self._save_now()
+        self._nav(+1)
+
+    def _mark_reviewed_negative(self) -> None:
+        """One-key negative frame: clear detections and mark THIS frame reviewed
+        with zero badges. Explicit (never inferred); persisted on Save."""
+        self._session.current().badges.clear()
+        self._session.set_reviewed(True)
+        self.reviewed_check.blockSignals(True)
+        self.reviewed_check.setChecked(True)
+        self.reviewed_check.blockSignals(False)
+        self._mark_dirty()
+        self._load()
+
+    def _cancel_edit(self) -> None:
+        """Cancel the current in-progress edit (disarm the pending percentage and
+        deselect) — never discards saved work or navigates."""
+        self._session.arm_pct(None)
+        self._load()
 
     def _nav(self, delta: int) -> None:
         # No implicit reviewed write on navigation — reviewed is set only by the

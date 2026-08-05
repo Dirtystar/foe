@@ -4,6 +4,42 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 5D: Live Data Collection Mode (observe-only)
+
+One fast operator workflow to collect, review, and validate live Chrome badge data
+across many Worlds — because M5C showed the limit is data, not the algorithm. Every
+reviewed frame lands in the canonical dataset immediately, with provenance and
+image-hash dedup. No clicking, cursor, retraining, or threshold/detector/classifier
+change.
+
+### Added
+
+- **`bap.forge.collection`** (Qt-free core): named sessions that survive restart
+  (id/time/browser-mode/Worlds/notes/git-commit/dataset-path/targets); one-click
+  `capture_frame` → existing detector/classifier for *suggestions only* →
+  `dataset_store.add_frame` (dedup, unreviewed seed) → provenance in
+  `imported_meta/`; a filterable/sortable **capture queue**; canonical
+  **statistics** with shortage hints and target progress; **validate_dataset**
+  (reports, never repairs, with explicit fixes); **prepare_commit** (read-only git
+  status + class-count delta + suggested Git Bash commands — never runs git);
+  **active_learning_priority**; **session_report**; bulk review-assist actions
+  (accept-all-positions / remove-all / mark-all-pct behind explicit confirm /
+  reset-to-suggestions — none ever marks a frame reviewed).
+- **Live Data Collection window** (`bap.gui.forge_collection`, `Tools → Live Data
+  Collection…`): World multi-select, Capture Selected / Capture All, the queue
+  table with filters + sorts, live statistics + targets, Validate / Prepare Commit /
+  Write Report / Open-in-Review.
+- **Fast keyboard review** in Review Mode: `N` reviewed-negative, `R` toggle
+  reviewed, `Ctrl+S` save, `Enter` Save-and-Next, `Esc` cancel-edit (never discards
+  saved work) — alongside the existing `1–5` / Delete / arrows. Frame position,
+  reviewed/unsaved state, labels path, and Save confirmation are visible; the
+  explicit Save button stays. No implicit reviewed logic.
+- Docs: **`LIVE_DATA_COLLECTION_GUIDE.md`** (exact tomorrow workflow). Tests:
+  `tests/unit/forge/test_collection.py` + `tests/unit/gui/test_collection_gui.py`
+  (multi-World queue, snapshot→dataset, hash dedup, session persistence, keyboard
+  actions, Save-and-Next persistence, negatives, statistics, class-count delta,
+  validation, no-implicit-reviewed, `MIN_PCT_SIM` unchanged, no cursor/click path).
+
 ## [Unreleased] — Milestone 5C: Percentage classifier V2 benchmark (research, no click)
 
 Experimental, observe-only classifier research: builds and compares candidate

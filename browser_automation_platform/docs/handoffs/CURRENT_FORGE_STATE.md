@@ -18,7 +18,18 @@ click, never automated or scheduler-triggered.
 ## Branch / commit
 
 - Branch: `claude/browser-automation-architecture-5784h1`.
-- Latest work: Milestone 5C (Percentage classifier V2 benchmark) — **experimental,
+- Latest work: Milestone 5D (Live Data Collection Mode) — a fast, traceable
+  operator workflow to collect/review/validate live Chrome badge data across many
+  Worlds (`bap.forge.collection` core + `Tools → Live Data Collection…`). One-click
+  read-only capture → existing detector/classifier suggestions → canonical dataset
+  with provenance + image-hash dedup; filterable/sortable capture queue; live stats
+  with 80%-zero / 40%-100%-scarce shortage hints + session targets; Validate Dataset
+  (reports, never repairs); Prepare Dataset Commit (shows exact Git Bash commands,
+  never runs git); session report; active-learning priority. Fast keyboard review
+  adds `N`/`R`/`Ctrl+S`/`Enter`/`Esc`. **Observe-only**: no clicking, cursor,
+  retraining, or threshold/detector/classifier/geometry change. See
+  `LIVE_DATA_COLLECTION_GUIDE.md`.
+- Prior: Milestone 5C (Percentage classifier V2 benchmark) — **experimental,
   observe-only research**. Built a leakage-free frame-grouped harness
   (`bap.forge.research.classifier_bench`, `python -m bap.forge.research`) comparing
   v1 (A) against a robust-recentre cosine (B) and a numpy logistic regression (C),

@@ -274,6 +274,7 @@ class MainWindow(QMainWindow):
         # the ops layer; the window holds no automation logic.
         bar = self.menuBar()
         tools = bar.addMenu("&Tools")
+        tools.addAction("Live Data Collection…", self._open_live_collection)
         tools.addAction("Install browser…", self._install_browser)
         tools.addAction("Export diagnostics…", self._export_diagnostics)
         tools.addSeparator()
@@ -304,6 +305,19 @@ class MainWindow(QMainWindow):
         box.exec()
         if box.clickedButton() is open_btn:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
+
+    def _open_live_collection(self) -> None:
+        """Open the Live Data Collection window (Milestone 5D) — read-only capture
+        across Worlds into the canonical dataset. Never clicks or moves the cursor."""
+        from bap.gui.forge_collection import ForgeCollectionWindow
+
+        mode = self.browser_mode_combo.currentData() if hasattr(self, "browser_mode_combo") else "unknown"
+        self._collection_window = ForgeCollectionWindow(
+            world_store=self._world_store, assignment=self._assignment,
+            capture_callback=self._capture_callback, browser_open=self._browser_open,
+            browser_mode=str(mode),
+        )
+        self._collection_window.show()
 
     def _open_data_folder(self) -> None:
         from bap.ops.paths import ensure_dirs, get_paths
