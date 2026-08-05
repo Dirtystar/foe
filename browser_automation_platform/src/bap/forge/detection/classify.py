@@ -72,7 +72,8 @@ class PercentClassifier:
 
     def predict(self, patch) -> tuple[int | None, float]:
         """Return (pct, similarity) for the nearest exemplar, or (None, 0.0) if
-        the classifier is empty or the patch is None."""
+        the classifier is empty or the patch is None. This is the raw 1-NN — the
+        acceptance gate additionally requires :meth:`confirmed` (see below)."""
         if patch is None or not self._exemplars:
             return None, 0.0
         best_pct, best_sim = None, -1.0
@@ -81,6 +82,23 @@ class PercentClassifier:
             if sim > best_sim:
                 best_sim, best_pct = sim, ex.pct
         return best_pct, best_sim
+
+    def confirmed(self, patch, *, k: int = 3, need: int = 2) -> bool:
+        """Class-conditioned nearest-neighbour confirmation (Milestone 5B): the
+        nearest exemplar's class must be shared by at least ``need`` of the ``k``
+        nearest exemplars. A lone near neighbour of one class is NOT enough.
+
+        This is a **safety** gate layered on top of the ``similarity >= MIN_PCT_SIM``
+        bar (it does not change that bar). Measured motivation: after new live
+        exemplars were added, two isolated cross-class matches (a 40% crop and a
+        60% crop from different capture scales) reached ~0.702 similarity and were
+        wrong-accepted; requiring a second same-class neighbour removes both without
+        lowering the threshold. Returns False for an empty classifier / None patch."""
+        top = self.predict_topk(patch, k)
+        if not top:
+            return False
+        winner = top[0][0]
+        return sum(1 for pct, _sim in top if pct == winner) >= need
 
     def predict_topk(self, patch, k: int = 5) -> list[tuple[int, float]]:
         """The k nearest labelled exemplars as (pct, similarity), best first —

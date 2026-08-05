@@ -166,8 +166,9 @@ def evaluate_classification(samples, *, min_sim: float = MIN_PCT_SIM) -> dict[st
                 continue
             # Frame-grouped LOFO: drop every exemplar from THIS frame.
             clf = PercentClassifier().fit([(v, p) for (v, p, k) in bank if k != s.key and v is not None])
-            guess, sim = clf.predict(percent_patch(img, b.cx, b.cy))
-            accepted = guess is not None and sim >= min_sim
+            patch = percent_patch(img, b.cx, b.cy)
+            guess, sim = clf.predict(patch)
+            accepted = guess is not None and sim >= min_sim and clf.confirmed(patch)
             for g in (_group(s), "combined"):
                 r = groups.setdefault(g, ClassResult())
                 r.total += 1
@@ -235,8 +236,9 @@ def evaluate_full_slice(samples, *, detector: BadgeDetector, min_sim: float = MI
             r.false_positives += len(um_p)
             for pi, ti, _d in pairs:
                 gt = s.badges[ti].pct
-                guess, sim = clf.predict(percent_patch(img, preds[pi].cx, preds[pi].cy))
-                if guess is None or sim < min_sim:
+                patch = percent_patch(img, preds[pi].cx, preds[pi].cy)
+                guess, sim = clf.predict(patch)
+                if guess is None or sim < min_sim or not clf.confirmed(patch):
                     r.unknown_pct += 1
                 elif gt is not None and guess == gt:
                     r.correct_pct += 1

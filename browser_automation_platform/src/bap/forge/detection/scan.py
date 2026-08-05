@@ -305,11 +305,20 @@ def _classify(img, detections, classifier) -> tuple[list[Detection], list[dict]]
             continue
         guess, sim = classifier.predict(patch)
         nearest = [[p, round(float(s), 4)] for p, s in topk(patch, 5)] if topk else []
-        accepted = guess is not None and sim >= MIN_PCT_SIM
+        # Class-confirmed acceptance (M5B): a confident nearest match must also be
+        # confirmed by a second same-class neighbour, else it stays UNKNOWN. The
+        # 0.70 bar is unchanged.
+        confirm = getattr(classifier, "confirmed", None)
+        confirmed = confirm(patch) if confirm is not None else True
+        clears_bar = guess is not None and sim >= MIN_PCT_SIM
+        accepted = clears_bar and confirmed
         if accepted:
-            reason = f"nearest exemplar {guess}% at similarity {sim:.2f} >= {MIN_PCT_SIM:.2f}"
+            reason = f"nearest exemplar {guess}% at similarity {sim:.2f} >= {MIN_PCT_SIM:.2f}, class-confirmed"
         elif guess is None:
             reason = "classifier returned no match"
+        elif clears_bar and not confirmed:
+            reason = (f"best match {guess}% at similarity {sim:.2f} >= {MIN_PCT_SIM:.2f} but "
+                      "unconfirmed (no second same-class neighbour) — left UNKNOWN")
         else:
             reason = (f"best match {guess}% but similarity {sim:.2f} < {MIN_PCT_SIM:.2f} "
                       "— left UNKNOWN (not treated as valid)")
@@ -329,10 +338,13 @@ def _panel_state(img, detector: BadgeDetector, classifier) -> tuple[dict, Detect
     ox, oy = detector._offset
     ax, ay = px - ox, py - oy
     score = detector.score_at(img, ax, ay)
-    pct, sim = (None, 0.0)
+    pct, sim, confirmed = (None, 0.0, False)
     if classifier is not None and len(classifier):
-        pct, sim = classifier.predict(percent_patch(img, px, py))
-    present = score >= PANEL_SCORE_MIN and pct is not None and sim >= MIN_PCT_SIM
+        patch = percent_patch(img, px, py)
+        pct, sim = classifier.predict(patch)
+        confirm = getattr(classifier, "confirmed", None)
+        confirmed = confirm(patch) if confirm is not None else True
+    present = score >= PANEL_SCORE_MIN and pct is not None and sim >= MIN_PCT_SIM and confirmed
     if present:
         reason = f"emblem {score:.2f} + {pct}% at similarity {sim:.2f} — panel corroborated open"
     elif score < PANEL_SCORE_MIN:

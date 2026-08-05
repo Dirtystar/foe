@@ -88,6 +88,68 @@ def test_empty_classifier_returns_none():
     assert PercentClassifier().predict(np.ones(10, np.float32)) == (None, 0.0)
 
 
+def _unit(rng, seed, base):
+    v = base + np.random.RandomState(seed).normal(0, 0.01, base.shape).astype("float32")
+    return v / np.linalg.norm(v)
+
+
+def test_confirmed_requires_a_second_same_class_neighbour():
+    # Milestone 5B: a percentage is accepted only when the nearest class is
+    # shared by >= 2 of the top-3 neighbours. Two 40% exemplars near the query
+    # and one lone 60% => confirmed.
+    p40 = np.zeros(24 * 40, np.float32); p40[0] = 1.0
+    p60 = np.zeros(24 * 40, np.float32); p60[-1] = 1.0
+    clf = PercentClassifier().fit([(_unit(None, 1, p40), 40),
+                                   (_unit(None, 2, p40), 40),
+                                   (p60, 60)])
+    query = _unit(None, 3, p40)
+    assert clf.predict(query)[0] == 40
+    assert clf.confirmed(query) is True
+
+
+def test_confirmed_rejects_a_lone_cross_class_neighbour():
+    # The wrong-accept case: the single nearest exemplar is 40% but the next two
+    # neighbours are 60% => NOT confirmed, so the >=0.70 match is held UNKNOWN.
+    p40 = np.zeros(24 * 40, np.float32); p40[0] = 1.0
+    p60 = np.zeros(24 * 40, np.float32); p60[5] = 1.0
+    q = p40 * 0.6 + p60 * 0.4
+    q = q / np.linalg.norm(q)  # nearest is the lone 40%, then two 60%
+    clf = PercentClassifier().fit([(p40, 40),
+                                   (_unit(None, 4, p60), 60),
+                                   (_unit(None, 5, p60), 60)])
+    assert clf.predict(q)[0] == 40      # raw 1-NN still points at 40
+    assert clf.confirmed(q) is False    # but confirmation rejects it
+
+
+def test_confirmed_false_on_empty_or_none():
+    clf = PercentClassifier()
+    assert clf.confirmed(np.ones(24 * 40, np.float32)) is False  # empty bank
+    p = np.zeros(24 * 40, np.float32); p[0] = 1.0
+    assert PercentClassifier().fit([(p, 20)]).confirmed(None) is False
+
+
+def test_scan_holds_unconfirmed_high_similarity_as_unknown():
+    # M5B safety wiring: a detection whose nearest exemplar clears MIN_PCT_SIM but
+    # is NOT class-confirmed must stay UNKNOWN (pct=None) in the scan output — the
+    # regression that reintroduced wrong-accepted percentages when live exemplars
+    # were folded in.
+    from bap.forge.detection.scan import MIN_PCT_SIM, _classify
+
+    class _Stub:
+        """A classifier whose 1-NN clears the bar but never confirms."""
+        def __len__(self): return 3
+        def predict(self, patch): return 40, MIN_PCT_SIM + 0.05
+        def predict_topk(self, patch, k=5): return [(40, 0.75), (60, 0.74), (60, 0.73)][:k]
+        def confirmed(self, patch, **kw): return False
+
+    img = np.random.RandomState(0).randint(0, 255, (1080, 1920, 3), dtype=np.uint8)
+    det = Detection(cx=900, cy=740, x=880, y=720, w=40, h=40, confidence=1.0)
+    out, diag = _classify(img, [det], _Stub())
+    assert out[0].pct is None, "unconfirmed >=0.70 match must not be accepted"
+    assert diag[0]["accepted"] is False
+    assert "unconfirmed" in diag[0]["reason"]
+
+
 def test_percent_patch_out_of_bounds_is_none():
     img = np.zeros((1080, 1920, 3), np.uint8)
     assert percent_patch(img, 5, 5) is None  # patch would fall off the left edge
