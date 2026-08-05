@@ -114,10 +114,13 @@ def test_reopen_restores_saved_state(qapp, tmp_path):
     try:
         a = s2.store.get("a.png")
         assert a.reviewed is True and a.badges[0].pct == 40
-        # The session resumes at the first UNREVIEWED frame; navigate to a.png to
-        # confirm the UI restores its reviewed state on load.
+        # The session resumes at the first UNREVIEWED frame ("neg.png"); navigate
+        # BACK to the reviewed "a.png" (which sorts first) to confirm the UI
+        # restores its reviewed state on load. Use prev(): next() clamps at the
+        # last index, so a forward walk from the resume point can never reach an
+        # earlier frame and would spin forever.
         while s2.current_file() != "a.png":
-            s2.next()
+            s2.prev()
         win2._load()
         assert win2.reviewed_check.isChecked() is True  # UI restores reviewed state
     finally:
