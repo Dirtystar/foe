@@ -18,7 +18,18 @@ click, never automated or scheduler-triggered.
 ## Branch / commit
 
 - Branch: `claude/browser-automation-architecture-5784h1`.
-- Latest work: Milestone 5B (Live percentage-classifier hardening) — folding the
+- Latest work: Milestone 5C (Percentage classifier V2 benchmark) — **experimental,
+  observe-only research**. Built a leakage-free frame-grouped harness
+  (`bap.forge.research.classifier_bench`, `python -m bap.forge.research`) comparing
+  v1 (A) against a robust-recentre cosine (B) and a numpy logistic regression (C),
+  with a train-fold-tuned rejection layer and shift/scale/blur robustness curves.
+  **Outcome C — reject all v2 candidates, keep v1, more data required**: under
+  grouped LOFO with wrong-accepted = 0 required, A=35 correct/0 wrong, B=30/**1**
+  (unsafe off-centre), C=0/0 (safe only by abstaining), D not built (audit: 80 %
+  has 0 examples, 40 %=8, 100 %=5). All 9 live badges stay UNKNOWN for every
+  candidate. **Production v1 is unchanged** (research code is isolated, imports v1
+  read-only). See `CLASSIFIER_V2_BENCHMARK_REPORT.md` and `classifier_v2/`.
+- Prior: Milestone 5B (Live percentage-classifier hardening) — folding the
   reviewed live exemplars into the bank made the raw 1-NN wrong-accept two
   cross-scale crops at ~0.702 (combined wrong-accepted 0 → 2). Fix adds a
   **class-confirmed** acceptance gate (`PercentClassifier.confirmed`, ≥2 of top-3

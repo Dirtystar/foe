@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Milestone 5C: Percentage classifier V2 benchmark (research, no click)
+
+Experimental, observe-only classifier research: builds and compares candidate
+percentage classifiers under a **leakage-free, frame-grouped** evaluation to see
+whether any can tolerate the measured ≈7 px detector centre error and live-Chrome
+domain gap **without any wrong-accepted percentages**. Production v1 is imported
+read-only as the baseline and is **not** changed.
+
+### Added
+
+- **`bap.forge.research.classifier_bench`** (experimental, isolated): crop
+  extraction with context, near-duplicate fold grouping (aHash union), bounded
+  robust preprocessing (class-independent ±8 px recentre + CLAHE + translation
+  tolerance), candidates **A** (v1), **B** (robust cosine), **C** (numpy
+  multinomial logistic regression), a Step-5 **train-fold-tuned rejection layer**,
+  grouped LOFO evaluation, and a controlled robustness perturbation
+  (shift/scale/blur/contrast — no flips/rotations). Reproduce via
+  `python -m bap.forge.research`; data audit via `classifier_v2/make_audit.py`.
+- **`classifier_v2/`** artifacts: dataset audit, fold manifest, per-model metrics,
+  robustness curves (JSON + CSV), live-snapshot recheck, performance, and a live
+  contact sheet. **`CLASSIFIER_V2_BENCHMARK_REPORT.md`**.
+- Tests (`tests/unit/forge/test_classifier_bench.py`): no same-frame/near-dup fold
+  leakage, deterministic preprocessing, bounded label-preserving augmentation,
+  UNKNOWN-rejection support, safe failure to UNKNOWN, wrong-accepted enforcement,
+  and no cursor/click reachable from the benchmark.
+
+### Result
+
+**Outcome C — reject all v2 candidates; keep v1; more data required.** Under grouped
+LOFO with wrong-accepted = 0 required: A (v1) 35 correct / 0 wrong; B 30 / **1**
+(worse and unsafe off-centre); C 0 / 0 (safe only by abstaining); D not built (the
+audit — 80 %: 0 examples, 40 %: 8, 100 %: 5, 65 % one class — does not support it).
+All 9 live badges stay UNKNOWN for every candidate (no target, no wrong target). No
+production classifier, threshold, or behaviour changed.
+
 ## [Unreleased] — Milestone 5B: Live percentage-classifier hardening (no click)
 
 Hardens the OCR-free percentage classifier against low-similarity live Chrome

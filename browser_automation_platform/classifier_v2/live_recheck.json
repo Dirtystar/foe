@@ -1,0 +1,206 @@
+{
+  "n_live_badges": 9,
+  "thresholds": {
+    "B": 0.809,
+    "C": 1.0
+  },
+  "summary": {
+    "v1": {
+      "accepted": 0,
+      "correct": 0,
+      "wrong": 0
+    },
+    "B": {
+      "accepted": 0,
+      "correct": 0,
+      "wrong": 0
+    },
+    "C": {
+      "accepted": 0,
+      "correct": 0,
+      "wrong": 0
+    }
+  },
+  "rows": [
+    {
+      "frame": "H_20260712_231606_382772.png",
+      "source": "live",
+      "gt": 20,
+      "v1": {
+        "pred": 20,
+        "conf": 0.519,
+        "accepted": false
+      },
+      "B": {
+        "pred": 60,
+        "conf": 0.486,
+        "accepted": false
+      },
+      "C": {
+        "pred": 20,
+        "conf": 0.988,
+        "accepted": false
+      }
+    },
+    {
+      "frame": "H_20260712_231606_382772.png",
+      "source": "live",
+      "gt": 60,
+      "v1": {
+        "pred": 40,
+        "conf": 0.473,
+        "accepted": false
+      },
+      "B": {
+        "pred": 20,
+        "conf": 0.413,
+        "accepted": false
+      },
+      "C": {
+        "pred": 60,
+        "conf": 0.944,
+        "accepted": false
+      }
+    },
+    {
+      "frame": "F_20260712_231811_628314.png",
+      "source": "live",
+      "gt": 60,
+      "v1": {
+        "pred": 100,
+        "conf": 0.662,
+        "accepted": false
+      },
+      "B": {
+        "pred": 20,
+        "conf": 0.678,
+        "accepted": false
+      },
+      "C": {
+        "pred": 60,
+        "conf": 0.723,
+        "accepted": false
+      }
+    },
+    {
+      "frame": "F_20260712_231811_628314.png",
+      "source": "live",
+      "gt": 100,
+      "v1": {
+        "pred": 40,
+        "conf": 0.528,
+        "accepted": false
+      },
+      "B": {
+        "pred": 20,
+        "conf": 0.368,
+        "accepted": false
+      },
+      "C": {
+        "pred": 20,
+        "conf": 1.0,
+        "accepted": false
+      }
+    },
+    {
+      "frame": "2026-08-04_17-58-59_H.png",
+      "source": "snapshot",
+      "gt": 20,
+      "v1": {
+        "pred": 60,
+        "conf": 0.256,
+        "accepted": false
+      },
+      "B": {
+        "pred": 20,
+        "conf": 0.298,
+        "accepted": false
+      },
+      "C": {
+        "pred": 20,
+        "conf": 0.99,
+        "accepted": false
+      }
+    },
+    {
+      "frame": "2026-08-05_10-13-33_B.png",
+      "source": "snapshot",
+      "gt": 60,
+      "v1": {
+        "pred": 20,
+        "conf": 0.624,
+        "accepted": false
+      },
+      "B": {
+        "pred": 40,
+        "conf": 0.75,
+        "accepted": false
+      },
+      "C": {
+        "pred": 20,
+        "conf": 0.949,
+        "accepted": false
+      }
+    },
+    {
+      "frame": "2026-08-05_10-13-33_B.png",
+      "source": "snapshot",
+      "gt": 60,
+      "v1": {
+        "pred": 40,
+        "conf": 0.612,
+        "accepted": false
+      },
+      "B": {
+        "pred": 60,
+        "conf": 0.713,
+        "accepted": false
+      },
+      "C": {
+        "pred": 60,
+        "conf": 0.607,
+        "accepted": false
+      }
+    },
+    {
+      "frame": "2026-08-05_10-13-33_B.png",
+      "source": "snapshot",
+      "gt": 60,
+      "v1": {
+        "pred": 60,
+        "conf": 0.4,
+        "accepted": false
+      },
+      "B": {
+        "pred": 20,
+        "conf": 0.599,
+        "accepted": false
+      },
+      "C": {
+        "pred": 20,
+        "conf": 0.963,
+        "accepted": false
+      }
+    },
+    {
+      "frame": "2026-08-05_10-13-33_B.png",
+      "source": "snapshot",
+      "gt": 60,
+      "v1": {
+        "pred": 40,
+        "conf": 0.702,
+        "accepted": false
+      },
+      "B": {
+        "pred": 60,
+        "conf": 0.633,
+        "accepted": false
+      },
+      "C": {
+        "pred": 60,
+        "conf": 0.93,
+        "accepted": false
+      }
+    }
+  ]
+}

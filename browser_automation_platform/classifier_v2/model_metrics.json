@@ -1,0 +1,624 @@
+{
+  "A_v1_fixedcrop_cosine": {
+    "gate": "fixed 0.70 + top-3 confirmation (production v1)",
+    "combined": {
+      "total": 150,
+      "correct": 35,
+      "unknown": 115,
+      "wrong_accepted": 0,
+      "correct_rate": 0.233,
+      "unknown_rate": 0.767,
+      "per_class": {
+        "20": {
+          "total": 95,
+          "correct": 26,
+          "wrong": 0,
+          "unknown": 69
+        },
+        "40": {
+          "total": 8,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 8
+        },
+        "60": {
+          "total": 42,
+          "correct": 9,
+          "wrong": 0,
+          "unknown": 33
+        },
+        "100": {
+          "total": 5,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 5
+        }
+      },
+      "confusion": {}
+    },
+    "per_source": {
+      "historical": {
+        "total": 26,
+        "correct": 10,
+        "unknown": 16,
+        "wrong_accepted": 0,
+        "correct_rate": 0.385,
+        "unknown_rate": 0.615,
+        "per_class": {
+          "20": {
+            "total": 16,
+            "correct": 6,
+            "wrong": 0,
+            "unknown": 10
+          },
+          "40": {
+            "total": 2,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 2
+          },
+          "60": {
+            "total": 7,
+            "correct": 4,
+            "wrong": 0,
+            "unknown": 3
+          },
+          "100": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          }
+        },
+        "confusion": {}
+      },
+      "live": {
+        "total": 4,
+        "correct": 0,
+        "unknown": 4,
+        "wrong_accepted": 0,
+        "correct_rate": 0.0,
+        "unknown_rate": 1.0,
+        "per_class": {
+          "20": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          },
+          "60": {
+            "total": 2,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 2
+          },
+          "100": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          }
+        },
+        "confusion": {}
+      },
+      "review_batch_002": {
+        "total": 115,
+        "correct": 25,
+        "unknown": 90,
+        "wrong_accepted": 0,
+        "correct_rate": 0.217,
+        "unknown_rate": 0.783,
+        "per_class": {
+          "20": {
+            "total": 77,
+            "correct": 20,
+            "wrong": 0,
+            "unknown": 57
+          },
+          "40": {
+            "total": 6,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 6
+          },
+          "60": {
+            "total": 29,
+            "correct": 5,
+            "wrong": 0,
+            "unknown": 24
+          },
+          "100": {
+            "total": 3,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 3
+          }
+        },
+        "confusion": {}
+      },
+      "snapshot": {
+        "total": 5,
+        "correct": 0,
+        "unknown": 5,
+        "wrong_accepted": 0,
+        "correct_rate": 0.0,
+        "unknown_rate": 1.0,
+        "per_class": {
+          "20": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          },
+          "60": {
+            "total": 4,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 4
+          }
+        },
+        "confusion": {}
+      }
+    }
+  },
+  "B_robust_recentre_cosine": {
+    "gate": "train-fold-tuned rejection threshold + confirmation (Step 5)",
+    "combined": {
+      "total": 150,
+      "correct": 30,
+      "unknown": 119,
+      "wrong_accepted": 1,
+      "correct_rate": 0.2,
+      "unknown_rate": 0.793,
+      "per_class": {
+        "20": {
+          "total": 95,
+          "correct": 22,
+          "wrong": 0,
+          "unknown": 73
+        },
+        "40": {
+          "total": 8,
+          "correct": 1,
+          "wrong": 0,
+          "unknown": 7
+        },
+        "60": {
+          "total": 42,
+          "correct": 7,
+          "wrong": 1,
+          "unknown": 34
+        },
+        "100": {
+          "total": 5,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 5
+        }
+      },
+      "confusion": {
+        "60->20": 1
+      }
+    },
+    "per_source": {
+      "historical": {
+        "total": 26,
+        "correct": 8,
+        "unknown": 18,
+        "wrong_accepted": 0,
+        "correct_rate": 0.308,
+        "unknown_rate": 0.692,
+        "per_class": {
+          "20": {
+            "total": 16,
+            "correct": 5,
+            "wrong": 0,
+            "unknown": 11
+          },
+          "40": {
+            "total": 2,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 2
+          },
+          "60": {
+            "total": 7,
+            "correct": 3,
+            "wrong": 0,
+            "unknown": 4
+          },
+          "100": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          }
+        },
+        "confusion": {}
+      },
+      "live": {
+        "total": 4,
+        "correct": 0,
+        "unknown": 4,
+        "wrong_accepted": 0,
+        "correct_rate": 0.0,
+        "unknown_rate": 1.0,
+        "per_class": {
+          "20": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          },
+          "60": {
+            "total": 2,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 2
+          },
+          "100": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          }
+        },
+        "confusion": {}
+      },
+      "review_batch_002": {
+        "total": 115,
+        "correct": 22,
+        "unknown": 92,
+        "wrong_accepted": 1,
+        "correct_rate": 0.191,
+        "unknown_rate": 0.8,
+        "per_class": {
+          "20": {
+            "total": 77,
+            "correct": 17,
+            "wrong": 0,
+            "unknown": 60
+          },
+          "40": {
+            "total": 6,
+            "correct": 1,
+            "wrong": 0,
+            "unknown": 5
+          },
+          "60": {
+            "total": 29,
+            "correct": 4,
+            "wrong": 1,
+            "unknown": 24
+          },
+          "100": {
+            "total": 3,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 3
+          }
+        },
+        "confusion": {
+          "60->20": 1
+        }
+      },
+      "snapshot": {
+        "total": 5,
+        "correct": 0,
+        "unknown": 5,
+        "wrong_accepted": 0,
+        "correct_rate": 0.0,
+        "unknown_rate": 1.0,
+        "per_class": {
+          "20": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          },
+          "60": {
+            "total": 4,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 4
+          }
+        },
+        "confusion": {}
+      }
+    },
+    "tuned_threshold": {
+      "min": 0.8,
+      "median": 0.809,
+      "max": 0.809
+    }
+  },
+  "B_robust_recentre_cosine_fixedgate_pre_safety": {
+    "combined": {
+      "total": 150,
+      "correct": 54,
+      "unknown": 88,
+      "wrong_accepted": 8,
+      "correct_rate": 0.36,
+      "unknown_rate": 0.587,
+      "per_class": {
+        "20": {
+          "total": 95,
+          "correct": 41,
+          "wrong": 3,
+          "unknown": 51
+        },
+        "40": {
+          "total": 8,
+          "correct": 2,
+          "wrong": 2,
+          "unknown": 4
+        },
+        "60": {
+          "total": 42,
+          "correct": 11,
+          "wrong": 3,
+          "unknown": 28
+        },
+        "100": {
+          "total": 5,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 5
+        }
+      },
+      "confusion": {
+        "20->60": 3,
+        "40->20": 2,
+        "60->20": 3
+      }
+    }
+  },
+  "C_logreg_numpy": {
+    "gate": "train-fold-tuned rejection threshold + confirmation (Step 5)",
+    "combined": {
+      "total": 150,
+      "correct": 0,
+      "unknown": 150,
+      "wrong_accepted": 0,
+      "correct_rate": 0.0,
+      "unknown_rate": 1.0,
+      "per_class": {
+        "20": {
+          "total": 95,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 95
+        },
+        "40": {
+          "total": 8,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 8
+        },
+        "60": {
+          "total": 42,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 42
+        },
+        "100": {
+          "total": 5,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 5
+        }
+      },
+      "confusion": {}
+    },
+    "per_source": {
+      "historical": {
+        "total": 26,
+        "correct": 0,
+        "unknown": 26,
+        "wrong_accepted": 0,
+        "correct_rate": 0.0,
+        "unknown_rate": 1.0,
+        "per_class": {
+          "20": {
+            "total": 16,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 16
+          },
+          "40": {
+            "total": 2,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 2
+          },
+          "60": {
+            "total": 7,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 7
+          },
+          "100": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          }
+        },
+        "confusion": {}
+      },
+      "live": {
+        "total": 4,
+        "correct": 0,
+        "unknown": 4,
+        "wrong_accepted": 0,
+        "correct_rate": 0.0,
+        "unknown_rate": 1.0,
+        "per_class": {
+          "20": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          },
+          "60": {
+            "total": 2,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 2
+          },
+          "100": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          }
+        },
+        "confusion": {}
+      },
+      "review_batch_002": {
+        "total": 115,
+        "correct": 0,
+        "unknown": 115,
+        "wrong_accepted": 0,
+        "correct_rate": 0.0,
+        "unknown_rate": 1.0,
+        "per_class": {
+          "20": {
+            "total": 77,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 77
+          },
+          "40": {
+            "total": 6,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 6
+          },
+          "60": {
+            "total": 29,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 29
+          },
+          "100": {
+            "total": 3,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 3
+          }
+        },
+        "confusion": {}
+      },
+      "snapshot": {
+        "total": 5,
+        "correct": 0,
+        "unknown": 5,
+        "wrong_accepted": 0,
+        "correct_rate": 0.0,
+        "unknown_rate": 1.0,
+        "per_class": {
+          "20": {
+            "total": 1,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 1
+          },
+          "60": {
+            "total": 4,
+            "correct": 0,
+            "wrong": 0,
+            "unknown": 4
+          }
+        },
+        "confusion": {}
+      }
+    },
+    "tuned_threshold": {
+      "min": 1.0,
+      "median": 1.0,
+      "max": 1.0
+    }
+  },
+  "C_logreg_numpy_fixedgate_pre_safety": {
+    "combined": {
+      "total": 150,
+      "correct": 100,
+      "unknown": 1,
+      "wrong_accepted": 49,
+      "correct_rate": 0.667,
+      "unknown_rate": 0.007,
+      "per_class": {
+        "20": {
+          "total": 95,
+          "correct": 74,
+          "wrong": 20,
+          "unknown": 1
+        },
+        "40": {
+          "total": 8,
+          "correct": 1,
+          "wrong": 7,
+          "unknown": 0
+        },
+        "60": {
+          "total": 42,
+          "correct": 24,
+          "wrong": 18,
+          "unknown": 0
+        },
+        "100": {
+          "total": 5,
+          "correct": 1,
+          "wrong": 4,
+          "unknown": 0
+        }
+      },
+      "confusion": {
+        "20->60": 20,
+        "40->20": 4,
+        "40->60": 3,
+        "60->20": 18,
+        "100->20": 2,
+        "100->60": 2
+      }
+    }
+  },
+  "A_identityfolds_parity": {
+    "combined": {
+      "total": 150,
+      "correct": 35,
+      "unknown": 115,
+      "wrong_accepted": 0,
+      "correct_rate": 0.233,
+      "unknown_rate": 0.767,
+      "per_class": {
+        "20": {
+          "total": 95,
+          "correct": 26,
+          "wrong": 0,
+          "unknown": 69
+        },
+        "40": {
+          "total": 8,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 8
+        },
+        "60": {
+          "total": 42,
+          "correct": 9,
+          "wrong": 0,
+          "unknown": 33
+        },
+        "100": {
+          "total": 5,
+          "correct": 0,
+          "wrong": 0,
+          "unknown": 5
+        }
+      },
+      "confusion": {}
+    }
+  }
+}
