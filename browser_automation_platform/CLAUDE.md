@@ -30,6 +30,8 @@ unless explicitly asked.
 - `tests/forge_assets/` — labelled datasets + vision reports:
   `grading/` (historical), `live_review/` (reviewed live H/F).
 - `docs/handoffs/CURRENT_FORGE_STATE.md` — the living status handoff; read it first.
+- `docs/reports/` — historical milestone reports + research evidence (archive,
+  indexed by `docs/reports/README.md`); `Marek/` — contributor onboarding.
 
 ## Working here
 

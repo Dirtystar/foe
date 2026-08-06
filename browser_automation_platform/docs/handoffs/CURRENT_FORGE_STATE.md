@@ -26,7 +26,7 @@ click, never automated or scheduler-triggered.
   an **Analysis threads** cap, a close-during-capture prompt, and **Resume Unfinished**
   crash/cancel recovery. The heavy stats refresh was moved off-thread too. OpenCV
   releases the GIL, so one worker keeps the loop responsive (measured max tick gap
-  ~48 ms); outputs are identical. Observe-only. See `CAPTURE_ALL_CONCURRENCY_REPORT.md`.
+  ~48 ms); outputs are identical. Observe-only. See `docs/reports/CAPTURE_ALL_CONCURRENCY_REPORT.md`.
 - Prior: Milestone 5D (Live Data Collection Mode) — a fast, traceable
   operator workflow to collect/review/validate live Chrome badge data across many
   Worlds (`bap.forge.collection` core + `Tools → Live Data Collection…`). One-click
@@ -37,7 +37,7 @@ click, never automated or scheduler-triggered.
   never runs git); session report; active-learning priority. Fast keyboard review
   adds `N`/`R`/`Ctrl+S`/`Enter`/`Esc`. **Observe-only**: no clicking, cursor,
   retraining, or threshold/detector/classifier/geometry change. See
-  `LIVE_DATA_COLLECTION_GUIDE.md`.
+  `docs/LIVE_DATA_COLLECTION_GUIDE.md`.
 - Prior: Milestone 5C (Percentage classifier V2 benchmark) — **experimental,
   observe-only research**. Built a leakage-free frame-grouped harness
   (`bap.forge.research.classifier_bench`, `python -m bap.forge.research`) comparing
@@ -48,7 +48,7 @@ click, never automated or scheduler-triggered.
   (unsafe off-centre), C=0/0 (safe only by abstaining), D not built (audit: 80 %
   has 0 examples, 40 %=8, 100 %=5). All 9 live badges stay UNKNOWN for every
   candidate. **Production v1 is unchanged** (research code is isolated, imports v1
-  read-only). See `CLASSIFIER_V2_BENCHMARK_REPORT.md` and `classifier_v2/`.
+  read-only). See `docs/reports/CLASSIFIER_V2_BENCHMARK_REPORT.md` and `classifier_v2/`.
 - Prior: Milestone 5B (Live percentage-classifier hardening) — folding the
   reviewed live exemplars into the bank made the raw 1-NN wrong-accept two
   cross-scale crops at ~0.702 (combined wrong-accepted 0 → 2). Fix adds a
@@ -57,23 +57,23 @@ click, never automated or scheduler-triggered.
   bar, applied in `scan` and `live_eval`; wrong-accepted is back to 0 with no
   threshold change. Root cause measured: live-capture scale gap + few-pixel centring
   sensitivity of the percent-patch cosine. Observe-only unchanged. See
-  `LIVE_CLASSIFIER_HARDENING_REPORT.md`.
+  `docs/reports/LIVE_CLASSIFIER_HARDENING_REPORT.md`.
 - Prior: Milestone 5A.1 (Real Windows browser geometry) — measures the
   Chrome window + content viewport (CDP window bounds + layout metrics, DPR derived)
   and an operator content-origin calibration keyed by geometry, so the M5A cursor
   preview can map raw→physical screen without guessing; `MainWindow._window_geometry`
   now returns a calibrated `WindowGeometry` (was `None`). Still manual, one-shot, no
-  click. See `M5A1_WINDOWS_GEOMETRY_REPORT.md`.
+  click. See `docs/reports/M5A1_WINDOWS_GEOMETRY_REPORT.md`.
 - Prior: Milestone 5A (Manual Move Cursor Preview) — the first output action: a
   manual, confirmed, one-shot cursor MOVE to the validated would-click point that
   **never clicks** (`bap.forge.cursor`, `CursorPreviewPort` exposes only
   `move_to`). Strict manual gate + explicit image→screen coordinate contract +
-  append-only `CURSOR_PREVIEW_ONLY` audit. See `M5A_CURSOR_PREVIEW_REPORT.md`.
+  append-only `CURSOR_PREVIEW_ONLY` audit. See `docs/reports/M5A_CURSOR_PREVIEW_REPORT.md`.
 - Prior: Milestone 4.16 (External Chrome Attach) — BAP can attach to an
   operator-launched Chrome over CDP (`bap.adapters.browser.cdp_attach_adapter`)
   as a read-only guest that never launches or closes Chrome; explicit
   `BrowserOwnership`; persisted `BrowserMode` (default Managed). See
-  `EXTERNAL_CHROME_IMPLEMENTATION_REPORT.md`.
+  `docs/reports/EXTERNAL_CHROME_IMPLEMENTATION_REPORT.md`.
 - Prior: Milestone 4.15 (one unified Dataset / Snapshot / Review workflow) — a
   single editable Reviewed Dataset (`bap.forge.dataset_store`) that every Review
   entry point edits; snapshots are immutable archives imported into it. See

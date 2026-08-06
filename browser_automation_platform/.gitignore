@@ -10,3 +10,8 @@ packaging/windows/Output/
 
 # Active-learning per-frame checkpoint cache (generated)
 tests/forge_assets/**/.cache/
+
+# Regenerated classifier-v2 research artifacts. `python -m bap.forge.research`
+# writes a fresh classifier_v2/ at the repo root; the committed evidence snapshot
+# lives under docs/reports/classifier_v2/ (root-anchored ignore keeps that copy).
+/classifier_v2/

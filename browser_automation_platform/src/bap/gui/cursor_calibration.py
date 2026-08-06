@@ -9,7 +9,7 @@ border constants.
 It is strictly a read of the operator's two clicks on BAP's own window: it sends
 **no input to Chrome**, never clicks in the game, and moves nothing. Escape (or a
 right-click) cancels. Cross-DPI placement is best-effort — see
-M5A1_WINDOWS_GEOMETRY_REPORT.md.
+docs/reports/M5A1_WINDOWS_GEOMETRY_REPORT.md.
 """
 
 from __future__ import annotations
