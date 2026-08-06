@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QTableWidget,
@@ -73,7 +72,19 @@ class ForgeCollectionWindow(QWidget):
         self._session = sess_mod.active_session()
         self._world_checks: dict[str, QCheckBox] = {}
         self._build()
+        self._install_shortcuts()
+        self._restore_geometry()
         self.refresh()
+        self.capture_all_btn.setFocus()   # ready to capture immediately
+
+    def _install_shortcuts(self) -> None:
+        from PySide6.QtGui import QKeySequence, QShortcut
+        # Capture All is the all-day action → give it a one-key shortcut.
+        for seq, slot in (("Ctrl+Return", lambda: self._capture(selected_only=False)),
+                          ("Ctrl+Enter", lambda: self._capture(selected_only=False)),
+                          ("F5", self.refresh),
+                          ("Ctrl+E", self._open_selected_row)):
+            QShortcut(QKeySequence(seq), self, activated=slot)
 
     # ---- construction ----
     def _build(self) -> None:
@@ -109,7 +120,7 @@ class ForgeCollectionWindow(QWidget):
                                         "World into the dataset (duplicates skipped).")
         self.capture_sel_btn.clicked.connect(lambda: self._capture(selected_only=True))
         session_row.addWidget(self.capture_sel_btn)
-        self.capture_all_btn = QPushButton("📷 Capture All Worlds")
+        self.capture_all_btn = QPushButton("📷 Capture All Worlds  (Ctrl+↵)")
         self.capture_all_btn.setToolTip("Capture every World once. Move the map between "
                                         "bursts to gather fresh badges.")
         self.capture_all_btn.clicked.connect(lambda: self._capture(selected_only=False))
@@ -176,6 +187,11 @@ class ForgeCollectionWindow(QWidget):
         self.table = QTableWidget(0, len(_QUEUE_COLS))
         self.table.setHorizontalHeaderLabels(_QUEUE_COLS)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setToolTip("Double-click a row to open that frame in Review "
+                              "(or select it and press Ctrl+E).")
+        self.table.itemDoubleClicked.connect(
+            lambda *_: self._open_selected_row())
         root.addWidget(self.table, 2)
 
         # stats + actions
@@ -185,19 +201,33 @@ class ForgeCollectionWindow(QWidget):
         root.addWidget(self.stats, 1)
 
         actions = QHBoxLayout()
-        for text, slot in (("Validate Dataset", self._validate),
-                           ("Prepare Dataset Commit", self._prepare_commit),
-                           ("Write Session Report", self._write_report),
-                           ("Refresh", self.refresh)):
+        for text, slot, tip in (
+                ("Validate Dataset", self._validate,
+                 "Check the dataset for problems (shown below — never auto-fixed)."),
+                ("Prepare Dataset Commit", self._prepare_commit,
+                 "Show the files, class delta, and the exact Git Bash commands to run."),
+                ("Write Session Report", self._write_report,
+                 "Write LIVE_COLLECTION_SESSION_<id>.md for this session."),
+                ("Refresh  (F5)", self.refresh, "Reload the queue and status.")):
             b = QPushButton(text)
+            b.setToolTip(tip)
             b.clicked.connect(slot)
             actions.addWidget(b)
         actions.addStretch(1)
         root.addLayout(actions)
 
+        # Inline results (Validate / Prepare Commit / Report) — no interrupting
+        # dialogs, so a long day of collecting is never blocked by a popup.
+        self.results = QPlainTextEdit()
+        self.results.setReadOnly(True)
+        self.results.setPlaceholderText("Validate / Prepare Commit / Report results "
+                                        "appear here.")
+        root.addWidget(self.results, 1)
+
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
-        self.log.setMaximumBlockCount(200)
+        self.log.setMaximumBlockCount(400)
+        self.log.setPlaceholderText("Capture activity log.")
         root.addWidget(self.log, 1)
 
     # ---- helpers ----
@@ -285,12 +315,12 @@ class ForgeCollectionWindow(QWidget):
     def _set_capturing(self, on: bool) -> None:
         for b in (self.capture_sel_btn, self.capture_all_btn, self.start_btn):
             b.setEnabled(not on)
-        self.capture_all_btn.setText("⏳ Capturing…" if on else "📷 Capture All Worlds")
+        self.capture_all_btn.setText("⏳ Capturing…" if on else "📷 Capture All Worlds  (Ctrl+↵)")
         QApplication.processEvents()  # let the label repaint during a burst
 
     def _warn(self, title: str, detail: str) -> None:
+        # Inline, non-blocking — a trivial popup would interrupt an all-day flow.
         self._append(f"⚠ {title}: {detail}")
-        QMessageBox.warning(self, title, detail)
 
     def _quick(self, filt, srt) -> None:
         """One-tap view: set the filter + sort together and refresh."""
@@ -399,15 +429,22 @@ class ForgeCollectionWindow(QWidget):
                     for k, v in prog.items()))
         self.stats.setPlainText("\n".join(lines))
 
+    def _show_results(self, title: str, lines: list[str]) -> None:
+        import time
+        self.results.setPlainText(f"── {title}  ·  {time.strftime('%H:%M:%S')} ──\n"
+                                  + "\n".join(lines))
+
     def _validate(self) -> None:
         v = validate_dataset()
         head = ("✅ OK" if v["ok"] else "❌ errors present")
         msg = [f"{head} — {v['counts']['errors']} error(s), "
                f"{v['counts']['warnings']} warning(s)"]
-        for it in v["issues"][:40]:
+        for it in v["issues"][:60]:
             msg.append(f"[{it['severity']}] {it['kind']} · {it['frame']}: "
                        f"{it['detail']}  → {it['suggested_fix']}")
-        QMessageBox.information(self, "Validate Dataset", "\n".join(msg))
+        if v["ok"] and not v["issues"]:
+            msg.append("No problems found.")
+        self._show_results("Validate Dataset", msg)
 
     def _prepare_commit(self) -> None:
         p = prepare_commit(session=self._session)
@@ -423,17 +460,17 @@ class ForgeCollectionWindow(QWidget):
         lines.append("")
         lines.append("Run these yourself in Git Bash:")
         lines += p["suggested_commands"]
-        QMessageBox.information(self, "Prepare Dataset Commit", "\n".join(lines))
+        self._show_results("Prepare Dataset Commit", lines)
 
     def _write_report(self) -> None:
         if self._session is None:
-            QMessageBox.information(self, "Session Report", "No active session.")
+            self._show_results("Session Report", ["No active session — Start Session first."])
             return
         path = write_session_report(self._session)
         self._append(f"Session report written: {path}")
-        QMessageBox.information(self, "Session Report", f"Written:\n{path}")
+        self._show_results("Session Report", [f"Written: {path}"])
 
-    def _open_review(self) -> None:
+    def _open_review(self, frame: str | None = None) -> None:
         from bap.forge.dataset_store import dataset_review_paths
         from bap.gui.forge_review import ForgeReviewWindow
         from bap.forge.detection.calibration import WeakeningCalibration
@@ -442,8 +479,36 @@ class ForgeCollectionWindow(QWidget):
         frames_dir, labels_path, calib_path = dataset_review_paths()
         session = LabelSession.open(frames_dir, labels_path)
         cal = WeakeningCalibration.load(calib_path)
+        if frame:                                   # open straight at the chosen frame
+            try:
+                idx = session._frames.index(frame)
+                session.goto(idx)
+            except (ValueError, AttributeError):
+                pass
         self._review = ForgeReviewWindow(session, frames_dir, cal)
         self._review.show()
+
+    def _open_selected_row(self) -> None:
+        row = self.table.currentRow()
+        if row < 0:
+            self._open_review()
+            return
+        item = self.table.item(row, len(_QUEUE_COLS) - 1)   # last col = frame name
+        self._open_review(item.text() if item else None)
+
+    # ---- window geometry memory ----
+    def _settings(self):
+        from PySide6.QtCore import QSettings
+        return QSettings("BAP", "ForgeCollection")
+
+    def _restore_geometry(self) -> None:
+        geo = self._settings().value("geometry")
+        if geo is not None:
+            self.restoreGeometry(geo)
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self._settings().setValue("geometry", self.saveGeometry())
+        super().closeEvent(event)
 
 
 __all__ = ["ForgeCollectionWindow"]

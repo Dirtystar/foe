@@ -196,6 +196,50 @@ def test_review_state_pill_and_duplicate_indicator(qapp, dataset_env):
         win.close()
 
 
+def test_actions_write_inline_results_not_modal(qapp, dataset_env):
+    from bap.gui.forge_collection import ForgeCollectionWindow
+
+    win = ForgeCollectionWindow(world_store=_Store([_World("H")]),
+                                capture_fn=lambda w: _img(50))
+    win._start_session()
+    win._capture(selected_only=False)
+    win._validate()                       # would previously pop a modal
+    assert "Validate Dataset" in win.results.toPlainText()
+    win._prepare_commit()
+    assert "git add" in win.results.toPlainText()
+    win._write_report()
+    assert "LIVE_COLLECTION_SESSION" in win.results.toPlainText()
+
+
+def test_double_click_row_opens_review_at_frame(qapp, dataset_env):
+    from bap.gui.forge_collection import ForgeCollectionWindow
+
+    win = ForgeCollectionWindow(world_store=_Store([_World("H")]),
+                                capture_fn=lambda w: _img(51))
+    win._start_session()
+    win._capture(selected_only=False)
+    win.refresh()
+    frame = win.table.item(0, win.table.columnCount() - 1).text()  # Frame is the last col
+    win.table.setCurrentCell(0, 0)
+    win._open_selected_row()
+    assert hasattr(win, "_review")
+    assert win._review._session.current_file() == frame
+
+
+def test_review_bracket_keys_skip_reviewed(qapp, dataset_env):
+    win, session, _fd, _lp = _review_win(qapp, dataset_env)   # 2 frames
+    try:
+        # add a third so there is a pending frame past a reviewed one
+        session.goto(1)
+        session.set_reviewed(True)          # mark the middle-ish frame reviewed
+        session.goto(0)
+        _key(win, Qt.Key.Key_BracketRight)  # ] → next PENDING, skipping frame 1
+        assert session.index != 1           # skipped the reviewed frame
+    finally:
+        win._dirty = False
+        win.close()
+
+
 def test_ctrl_s_saves(qapp, dataset_env):
     from bap.forge.labeling.model import LabelStore
 

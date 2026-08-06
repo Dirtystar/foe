@@ -63,6 +63,22 @@ change.
   re-enable in a `finally`. Tooltips, better labels, spacing, and an empty-state
   hint throughout.
 
+### Production-readiness pass (all-day ergonomics, no AI change)
+
+- **No interrupting dialogs**: Validate / Prepare Commit / Session Report now write
+  to an **inline results panel** instead of modal popups; the trivial "no Worlds
+  selected" popup is gone (inline log only) — so a 6–8 hour session is never blocked.
+- **Keyboard-first collection**: `Ctrl+Enter` = Capture All (the all-day action),
+  `F5` = Refresh, `Ctrl+E` = open the selected frame in Review; **double-click a
+  queue row** opens that exact frame. Shortcut hints on the buttons.
+- **Faster review**: `[` / `]` jump to the previous / next **pending** frame
+  (skipping reviewed ones); the Review window now **grabs keyboard focus on open**
+  so shortcuts work immediately, and the legend lists every key.
+- **Windows remember size & position** (Live Data Collection and Review Mode) via
+  `QSettings`, so the operator arranges them once.
+- The queue table is read-only (no accidental in-cell edits) with a "double-click to
+  review" tooltip.
+
 ## [Unreleased] — Milestone 5C: Percentage classifier V2 benchmark (research, no click)
 
 Experimental, observe-only classifier research: builds and compares candidate

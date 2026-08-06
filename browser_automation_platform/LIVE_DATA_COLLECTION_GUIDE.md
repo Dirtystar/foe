@@ -27,8 +27,10 @@ algorithm**. Priorities, in order:
 4. **Start a session.** Click **Start Session** (records id, time, browser mode,
    Worlds, git commit, dataset path; it survives an app restart). Optionally set a
    per-class target (default 20 each + 20 negatives).
-5. **Capture All Worlds.** Click **Capture All Worlds** (or tick specific Worlds and
-   **Capture Selected**). Each capture:
+5. **Capture All Worlds.** Click **Capture All Worlds** (or press **`Ctrl+Enter`**;
+   or tick specific Worlds and **Capture Selected**). `F5` refreshes the queue,
+   `Ctrl+E` (or a **double-click** on a queue row) opens that frame in Review. Each
+   capture:
    - takes one read-only screenshot,
    - runs the existing detector/classifier for suggestions,
    - saves a snapshot into the canonical dataset with full provenance
@@ -50,7 +52,11 @@ algorithm**. Priorities, in order:
    | `Ctrl+S` | Save |
    | `Enter` | **Save and Next** |
    | `← / →` | previous / next frame |
+   | `[` / `]` | previous / **next pending** frame (skips already-reviewed) |
    | `Esc` | cancel the current edit (never discards saved work) |
+
+   The Review window grabs keyboard focus on open, so these work immediately. It also
+   remembers its size and position between sessions.
 
    The window always shows the frame position (e.g. `12 / 47`), the selected badge,
    the reviewed state, the unsaved-changes state, the labels-file path, and a Save

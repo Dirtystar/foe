@@ -195,12 +195,19 @@ class ForgeReviewWindow(QMainWindow):
         body.addWidget(self._build_side_panel(), stretch=2)
         root.addLayout(body)
 
-        legend = QLabel("Badges: left-click add/select · right-click remove · 1-5 set 20/40/60/80/100"
-                        "   |   ←/→ frame   ·   Set Weakening / Battle-Map Region → drag a box")
+        legend = QLabel(
+            "Keys:  1-5 set 20/40/60/80/100 · Del remove · N reviewed-negative · "
+            "R toggle reviewed · Ctrl+S save · Enter save+next · ←/→ frame · "
+            "[ / ] prev/next pending · Esc cancel edit")
         legend.setWordWrap(True)
         root.addWidget(legend)
         self.setCentralWidget(central)
+        # Grab keyboard focus so the shortcuts work the moment the window opens,
+        # and remember the window size/position across sessions.
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._restore_geometry()
         self._load()
+        self.setFocus()
 
     def _build_side_panel(self) -> QWidget:
         panel = QWidget()
@@ -501,10 +508,29 @@ class ForgeReviewWindow(QMainWindow):
             self._mark_reviewed_negative()
         elif key == Qt.Key.Key_R:                              # R = toggle Reviewed
             self.reviewed_check.setChecked(not self.reviewed_check.isChecked())
+        elif key == Qt.Key.Key_BracketRight:                   # ] = next pending frame
+            self._goto_pending(+1)
+        elif key == Qt.Key.Key_BracketLeft:                    # [ = previous pending frame
+            self._goto_pending(-1)
         elif key == Qt.Key.Key_Escape:                         # Escape = cancel edit only
             self._cancel_edit()
         else:
             super().keyPressEvent(e)
+
+    def _goto_pending(self, direction: int) -> None:
+        """Jump to the next/previous UNREVIEWED frame (navigation only — no label or
+        reviewed change). Stays put if there is no pending frame in that direction."""
+        n = self._session.total
+        idx = self._session.index
+        for step in range(1, n + 1):
+            j = idx + direction * step
+            if not 0 <= j < n:
+                break
+            label = self._session.store.get(self._session._frames[j])
+            if label is None or not label.reviewed:
+                self._session.goto(j)
+                self._load()
+                return
 
     def _save_and_next(self) -> None:
         """Explicit Save, then advance — a reopen restores everything (the whole
@@ -551,9 +577,19 @@ class ForgeReviewWindow(QMainWindow):
             return "cancel"
         return "save" if clicked is save_b else "discard"
 
+    def _settings(self):
+        from PySide6.QtCore import QSettings
+        return QSettings("BAP", "ForgeReview")
+
+    def _restore_geometry(self) -> None:
+        geo = self._settings().value("geometry")
+        if geo is not None:
+            self.restoreGeometry(geo)
+
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
         # Never lose edits silently: prompt when there are unsaved changes.
         if not self._dirty:
+            self._settings().setValue("geometry", self.saveGeometry())
             super().closeEvent(event)
             return
         choice = self._prompt_unsaved()
@@ -562,6 +598,7 @@ class ForgeReviewWindow(QMainWindow):
             return
         if choice == "save":
             self._save_now()
+        self._settings().setValue("geometry", self.saveGeometry())
         super().closeEvent(event)  # Discard: proceed without writing
 
 
