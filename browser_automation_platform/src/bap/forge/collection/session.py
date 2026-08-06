@@ -64,6 +64,12 @@ class CollectionSession:
     targets: dict = field(default_factory=lambda: dict(DEFAULT_TARGETS))
     captured_frames: list[str] = field(default_factory=list)  # frame names added this session
     duplicates_skipped: int = 0
+    # Crash/cancel-safe batch state for the async Capture All (Milestone 5D P0):
+    # which Worlds a batch requested vs finished, so a reopened session can resume
+    # only the unfinished Worlds and never re-captures completed ones.
+    batch: dict = field(default_factory=lambda: {"requested": [], "done": [],
+                                                 "failed": [], "cancelled": False,
+                                                 "running": False})
 
     # ---- persistence ----
     def path(self) -> Path:
@@ -82,6 +88,28 @@ class CollectionSession:
         else:
             self.duplicates_skipped += 1
         self.save()
+
+    # ---- crash/cancel-safe batch tracking (async Capture All) ----
+    def start_batch(self, aliases: list[str]) -> None:
+        self.batch = {"requested": list(aliases), "done": [], "failed": [],
+                      "cancelled": False, "running": True}
+        self.save()
+
+    def mark_batch(self, alias: str, *, ok: bool) -> None:
+        key = "done" if ok else "failed"
+        if alias not in self.batch.get(key, []):
+            self.batch.setdefault(key, []).append(alias)
+        self.save()
+
+    def end_batch(self, *, cancelled: bool = False) -> None:
+        self.batch["running"] = False
+        self.batch["cancelled"] = cancelled
+        self.save()
+
+    def unfinished_worlds(self) -> list[str]:
+        """Requested Worlds that neither completed nor failed — resume candidates."""
+        done = set(self.batch.get("done", [])) | set(self.batch.get("failed", []))
+        return [a for a in self.batch.get("requested", []) if a not in done]
 
     @classmethod
     def from_dict(cls, d: dict) -> "CollectionSession":

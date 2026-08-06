@@ -18,7 +18,16 @@ click, never automated or scheduler-triggered.
 ## Branch / commit
 
 - Branch: `claude/browser-automation-architecture-5784h1`.
-- Latest work: Milestone 5D (Live Data Collection Mode) — a fast, traceable
+- Latest work: **P0 fix — Capture All is asynchronous.** It ran the whole per-World
+  pipeline (~3 s/World × 8 ≈ 24 s) synchronously on the Qt thread and froze the
+  window. Now a single bounded background thread (`bap.forge.collection.capture_job`)
+  runs capture → detector/classifier → atomic write off the GUI thread, with a live
+  progress line, per-World queue refresh, **Cancel Capture** (completed results kept),
+  an **Analysis threads** cap, a close-during-capture prompt, and **Resume Unfinished**
+  crash/cancel recovery. The heavy stats refresh was moved off-thread too. OpenCV
+  releases the GIL, so one worker keeps the loop responsive (measured max tick gap
+  ~48 ms); outputs are identical. Observe-only. See `CAPTURE_ALL_CONCURRENCY_REPORT.md`.
+- Prior: Milestone 5D (Live Data Collection Mode) — a fast, traceable
   operator workflow to collect/review/validate live Chrome badge data across many
   Worlds (`bap.forge.collection` core + `Tools → Live Data Collection…`). One-click
   read-only capture → existing detector/classifier suggestions → canonical dataset

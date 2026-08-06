@@ -38,6 +38,13 @@ algorithm**. Priorities, in order:
    - **skips duplicates automatically** (by image hash),
    - seeds detected badge positions as **unreviewed** suggestions.
    Move around the battle map between captures to get fresh badges.
+
+   Capture All now runs **in the background** — the window stays fully responsive
+   (you can move/resize it, scroll the queue, and switch filters while it works). A
+   live line shows `[3/8] H: analysing`, results appear per World, and you can
+   **Cancel Capture** at any time (completed Worlds are always kept). If a run is
+   interrupted, a **Resume Unfinished** button captures only the Worlds that didn't
+   finish. Leave **Analysis threads** on “1 (responsive)” unless the machine is idle.
 6. **Review useful frames.** Select a row → **Open in Review**. Use the queue's
    **Sort → Highest uncertainty** or **Rarest class**, and the **Filter** (Has
    UNKNOWN, 80%, a specific World…) to find the frames worth your time.

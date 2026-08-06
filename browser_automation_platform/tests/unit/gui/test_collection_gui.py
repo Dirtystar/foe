@@ -38,6 +38,23 @@ def _img(seed):
     return np.random.RandomState(seed).randint(0, 255, (1080, 1920, 3), np.uint8)
 
 
+def _drain(qapp, win, timeout_s=40):
+    """Pump the Qt event loop until the async Capture-All batch finishes."""
+    import time
+    end = time.time() + timeout_s
+    while win._job_running and time.time() < end:
+        qapp.processEvents()
+        time.sleep(0.005)
+    qapp.processEvents()
+
+
+def _sync_stats(win):
+    """Render the corpus statistics synchronously (the GUI computes them off-thread;
+    tests render inline to assert on the text without pumping)."""
+    win._refresh_status()
+    win._refresh_stats()
+
+
 def test_collection_window_captures_across_worlds(qapp, dataset_env):
     from bap.gui.forge_collection import ForgeCollectionWindow
 
@@ -51,9 +68,11 @@ def test_collection_window_captures_across_worlds(qapp, dataset_env):
     win._start_session()
     assert win._session is not None
     win._capture(selected_only=False)
+    _drain(qapp, win)                                # async batch runs off-thread
     assert win.table.rowCount() == 2                 # one per World
     # duplicate capture adds nothing new
     win._capture(selected_only=False)
+    _drain(qapp, win)
     assert win.table.rowCount() == 2
     assert win._session.duplicates_skipped == 2
 
@@ -65,6 +84,7 @@ def test_collection_window_captures_across_worlds(qapp, dataset_env):
     win.refresh()
     assert win.table.rowCount() == 0
     # stats render without error
+    _sync_stats(win)
     assert "Per class" in win.stats.toPlainText()
 
 
@@ -149,10 +169,13 @@ def test_collection_dashboard_status_and_quick_filters(qapp, dataset_env):
     assert win._session is None
     win._start_session()
     win._capture(selected_only=False)
+    _drain(qapp, win)
+    win._refresh_dashboard()
     # dashboard shows real session metrics
     dash = win.dashboard_lbl.text()
     assert "Today's session" in dash and "captured" in dash
     # always-visible dataset status
+    _sync_stats(win)
     status = win.status_lbl.text()
     assert "Dataset" in status and "UNKNOWN" in status and "Today" in status
     # quick filter wires filter + sort together
@@ -203,6 +226,7 @@ def test_actions_write_inline_results_not_modal(qapp, dataset_env):
                                 capture_fn=lambda w: _img(50))
     win._start_session()
     win._capture(selected_only=False)
+    _drain(qapp, win)
     win._validate()                       # would previously pop a modal
     assert "Validate Dataset" in win.results.toPlainText()
     win._prepare_commit()
@@ -218,7 +242,8 @@ def test_double_click_row_opens_review_at_frame(qapp, dataset_env):
                                 capture_fn=lambda w: _img(51))
     win._start_session()
     win._capture(selected_only=False)
-    win.refresh()
+    _drain(qapp, win)
+    win._refresh_queue()
     frame = win.table.item(0, win.table.columnCount() - 1).text()  # Frame is the last col
     win.table.setCurrentCell(0, 0)
     win._open_selected_row()

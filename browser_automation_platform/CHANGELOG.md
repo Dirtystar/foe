@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — P0 fix: Capture All is now asynchronous (no GUI freeze)
+
+Capture All ran the whole per-World pipeline (CDP capture → detector → classifier →
+dataset write) synchronously on the Qt GUI thread — ~3 s/World × 8 ≈ **24 s of frozen
+window** ("Not Responding"). It now runs on a **single bounded background thread**, so
+the window stays responsive throughout. No detector/classifier/OCR/threshold/cursor
+change; dataset outputs are byte/semantically identical. See
+`CAPTURE_ALL_CONCURRENCY_REPORT.md`.
+
+### Changed / Added
+
+- **`bap.forge.collection.capture_job.CaptureJob`** (Qt-free): sequential, cancellable,
+  observable batch pipeline (capture → analyse off the GUI thread → atomic write →
+  per-World progress), with per-World error containment, capture timeout reporting,
+  and an OpenCV thread cap. The detector + classifier are built **once per batch**
+  (was per World). Chosen boundary: one worker thread — measured that OpenCV releases
+  the GIL, so the Qt loop keeps ticking (max gap ~10 ms during heavy work);
+  multiprocessing rejected (can't serialise a browser Page / would pickle images).
+- **Async Capture All** in the Live Data Collection window: returns to the event loop
+  immediately; live progress line + per-World queue refresh; **Cancel Capture**
+  (cooperative — completed results preserved, "Cancelled after k / 8 — k preserved");
+  **Analysis threads** selector (1 responsive / 2 / Auto); close-during-capture prompt
+  (Cancel and close / Keep running / Stay open); **Resume Unfinished** after a
+  crash/cancel (never re-captures completed Worlds via persisted batch state).
+- The heavy corpus **statistics refresh** (`load_all()`, ~5.4 s) was also moved
+  off-thread, so no refresh/filter change blocks the GUI either.
+- Tests: `tests/unit/forge/test_capture_job.py` (8) + `tests/unit/gui/test_capture_async.py`
+  (7) — immediate return, event-loop keeps ticking during a batch, no overlapping
+  jobs, cancel/timeout/failure containment, no-UI-from-worker, session-recovery resume,
+  and output parity with the synchronous pipeline.
+
 ## [Unreleased] — Milestone 5D: Live Data Collection Mode (observe-only)
 
 One fast operator workflow to collect, review, and validate live Chrome badge data
