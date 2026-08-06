@@ -1,0 +1,20 @@
+{
+  "frame": "2026-08-06_11-41-29_D.png",
+  "md5": "9777c6d26bd36495184c045325963d18",
+  "alias": "D",
+  "hostname": "cz4.forgeofempires.com",
+  "url": "https://cz4.forgeofempires.com/game/index?",
+  "capture_w": 1920,
+  "capture_h": 869,
+  "viewport_w": null,
+  "viewport_h": null,
+  "dpr": null,
+  "zoom": null,
+  "browser_mode": "external_chrome",
+  "timestamp": "2026-08-06T11:41:29",
+  "session_id": "20260806_103342",
+  "source": "live_collection",
+  "detected": 0,
+  "classified": 0,
+  "unknown": 0
+}
