@@ -1,0 +1,4 @@
+# Windows batch launchers must use CRLF line endings so cmd.exe parses the
+# retry loops (goto/labels) correctly, regardless of the committer's OS.
+*.bat text eol=crlf
+*.cmd text eol=crlf

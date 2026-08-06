@@ -1,5 +1,11 @@
 # Browser Automation Platform
 
+> **Helping collect Forge data? Start here:** [CONTRIBUTOR_QUICKSTART.md](CONTRIBUTOR_QUICKSTART.md)
+> (printable PDF: [docs/contributor/CONTRIBUTOR_QUICKSTART.pdf](docs/contributor/CONTRIBUTOR_QUICKSTART.pdf)).
+> On Windows the whole workflow is five double-click scripts — `install.bat`,
+> `update.bat`, `start-chrome.bat`, `run.bat`, `push.bat`. No commands needed after
+> the one-time clone.
+
 A generic, site-agnostic visual browser automation platform in Python, built on
 Playwright with a hexagonal (ports & adapters) architecture. It drives multiple
 browser tabs on a configurable tick, captures what is on screen, runs pluggable
