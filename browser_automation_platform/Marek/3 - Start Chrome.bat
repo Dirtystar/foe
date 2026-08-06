@@ -7,7 +7,7 @@ REM  uses its own private profile in %LOCALAPPDATA%\BAP\chrome-profile.
 REM  After it opens: log into Forge and open your World tabs.
 REM ===================================================================
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 set "PROFILE=%LOCALAPPDATA%\BAP\chrome-profile"
 set "PORT=9222"
@@ -32,7 +32,7 @@ echo   Profile: %PROFILE%
 echo   Port   : %PORT%
 echo(
 echo When Chrome opens: log into Forge and open your World tabs,
-echo then leave it open and double-click  run.bat.
+echo then leave it open and double-click  "4 - Run.bat".
 echo(
 
 start "" "%CHROME%" --remote-debugging-port=%PORT% --user-data-dir="%PROFILE%"

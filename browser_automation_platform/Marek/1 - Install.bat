@@ -6,7 +6,7 @@ REM  Creates a private Python environment and installs everything.
 REM  Does NOT touch your Chrome, your game, or the internet beyond pip.
 REM ===================================================================
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo(
 echo === Forge Assistant: installing ===
@@ -45,7 +45,7 @@ if errorlevel 1 goto :fail
 
 echo(
 echo === DONE. Install finished successfully. ===
-echo Next: double-click  start-chrome.bat  then  run.bat
+echo Next: double-click  "3 - Start Chrome.bat"  then  "4 - Run.bat"
 echo(
 pause
 exit /b 0

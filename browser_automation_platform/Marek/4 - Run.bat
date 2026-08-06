@@ -2,14 +2,14 @@
 REM ===================================================================
 REM  Forge Assistant - RUN (step 2 of collecting)
 REM  Opens the Forge Assistant app.
-REM  Do start-chrome.bat FIRST and log into Forge, then run this.
+REM  Do "3 - Start Chrome.bat" FIRST and log into Forge, then run this.
 REM  The app only takes screenshots - it never clicks or plays for you.
 REM ===================================================================
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 if not exist ".venv\Scripts\python.exe" (
-    echo [X] Not installed yet. Double-click  install.bat  first.
+    echo [X] Not installed yet. Double-click  "1 - Install.bat"  first.
     echo(
     pause
     exit /b 1

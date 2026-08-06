@@ -6,7 +6,7 @@ REM  captured and reviewed frames in the app.
 REM  It saves ONLY the dataset folder and uploads it. Safe to re-run.
 REM ===================================================================
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo(
 echo === Forge Assistant: sending your data ===
@@ -46,7 +46,7 @@ if not errorlevel 1 goto :done
 set /a N+=1
 if %N% GEQ 4 (
     echo [X] Upload failed after several tries.
-    echo     Check your internet, then run push.bat again - your commit is saved.
+    echo     Check your internet, then run  "5 - Push.bat"  again - your commit is saved.
     goto :fail
 )
 echo   ...retry %N% in a moment

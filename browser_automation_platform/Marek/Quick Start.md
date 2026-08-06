@@ -21,14 +21,15 @@ git clone -b claude/browser-automation-architecture-5784h1 https://github.com/Di
 ```
 
 This downloads everything into a folder called **`foe`** inside your user folder
-(e.g. `C:\Users\YourName\foe`). Open it in File Explorer and go into the sub-folder:
+(e.g. `C:\Users\YourName\foe`). Open it in File Explorer and go into this sub-folder
+— **this `Marek` folder is your home base**:
 
 ```
-foe  ▸  browser_automation_platform
+foe  ▸  browser_automation_platform  ▸  Marek
 ```
 
-**Everything from here is done by double-clicking the `.bat` files in that folder.**
-You will not need the command line again.
+**Everything from here is done by double-clicking the numbered files in the `Marek`
+folder, in order.** You will not need the command line again.
 
 > If Windows shows a blue "Windows protected your PC" box when you double-click,
 > click **More info → Run anyway** — these are local helper scripts, not downloads.
@@ -37,7 +38,7 @@ You will not need the command line again.
 
 ## Step 2 — Install (one time)
 
-Double-click **`install.bat`**.
+Double-click **`1 - Install.bat`**.
 
 It builds a private workspace and downloads the app's libraries (2–4 minutes the
 first time). When it says **"DONE. Install finished successfully."**, close the
@@ -49,11 +50,11 @@ window. You never have to do this again unless Radek says so.
 
 Do these three double-clicks **in order**:
 
-| # | Double-click | What happens |
-|---|---|---|
-| 1 | **`update.bat`** | Grabs the latest version. Wait for "You are on the latest version." |
-| 2 | **`start-chrome.bat`** | Opens a **dedicated** Chrome. **Log into Forge and open your World tabs here.** (Your normal Chrome is untouched.) |
-| 3 | **`run.bat`** | Opens the Forge Assistant app. |
+| Double-click | What happens |
+|---|---|
+| **`2 - Update.bat`** | Grabs the latest version. Wait for "You are on the latest version." |
+| **`3 - Start Chrome.bat`** | Opens a **dedicated** Chrome. **Log into Forge and open your World tabs here.** (Your normal Chrome is untouched.) |
+| **`4 - Run.bat`** | Opens the Forge Assistant app. |
 
 The app opens on a dashboard that always says **OBSERVE ONLY — NO CLICK PERFORMED**.
 That banner is your guarantee: it is watching, not playing.
@@ -62,10 +63,10 @@ That banner is your guarantee: it is watching, not playing.
 
 On the left, click **Worlds**. Set **Browser mode** to **External Chrome (CDP)**.
 The app will say *"Restart BAP to use External Chrome"* — that's normal:
-**close the app and double-click `run.bat` again.** Now the Worlds page looks like
-this, with an **Attach Chrome** button:
+**close the app and double-click `4 - Run.bat` again.** Now the Worlds page looks
+like this, with an **Attach Chrome** button:
 
-![Worlds page in External Chrome mode](docs/contributor/img/worlds_attach.png)
+![Worlds page in External Chrome mode](img/worlds_attach.png)
 
 Click **Test Connection** (should go green), then **Attach Chrome**, then
 **Scan && Reattach**. Your worlds now show as attached. You only configure this once
@@ -77,7 +78,7 @@ Click **Test Connection** (should go green), then **Attach Chrome**, then
 
 Open **Tools ▸ Live Data Collection…**. This window is your workbench:
 
-![Live Data Collection window](docs/contributor/img/collection.png)
+![Live Data Collection window](img/collection.png)
 
 1. Click **Start Session**.
 2. Click **Capture All Worlds** (or press **`Ctrl`+`Enter`**). It screenshots every
@@ -114,13 +115,13 @@ press number keys.
 1. In the Live Data Collection window, click **Validate Dataset**. It just *reports*
    — if it lists problems, tell Radek; it never breaks anything.
 2. **Close the app.**
-3. Double-click **`push.bat`**. It packages only your new data and uploads it. The
+3. Double-click **`5 - Push.bat`**. It packages only your new data and uploads it. The
    **first** upload opens a browser window asking you to sign in to GitHub — do that
    once and it's remembered. When it says **"Your data is uploaded. Thank you!"**,
    you're done.
 
 Chrome can stay open for next time. That's the entire loop:
-**update → start-chrome → run → collect → review → validate → push.**
+**2 - Update → 3 - Start Chrome → 4 - Run → collect → review → validate → 5 - Push.**
 
 ---
 
@@ -128,12 +129,12 @@ Chrome can stay open for next time. That's the entire loop:
 
 | You see… | Do this |
 |---|---|
-| `install.bat`: "Python was not found" | Reinstall Python from python.org and **tick "Add python.exe to PATH"**, then run `install.bat` again. |
-| `start-chrome.bat`: "Could not find Google Chrome" | Chrome is installed somewhere unusual — send Radek a message. |
-| **Test Connection** stays red | Make sure you opened Chrome with **`start-chrome.bat`** (not your normal Chrome), and that it's still open. |
+| `1 - Install.bat`: "Python was not found" | Reinstall Python from python.org and **tick "Add python.exe to PATH"**, then run `1 - Install.bat` again. |
+| `3 - Start Chrome.bat`: "Could not find Google Chrome" | Chrome is installed somewhere unusual — send Radek a message. |
+| **Test Connection** stays red | Make sure you opened Chrome with **`3 - Start Chrome.bat`** (not your normal Chrome), and that it's still open. |
 | Worlds won't attach | In that dedicated Chrome, make sure you're **logged into Forge** with the world tabs open, then click **Scan && Reattach**. |
-| `push.bat`: "Nothing new to send" | You haven't captured/reviewed anything yet, or already uploaded. Capture some frames first. |
-| `push.bat`: "Upload failed" | Check your internet and run **`push.bat`** again — your work is saved on your PC and nothing is lost. |
+| `5 - Push.bat`: "Nothing new to send" | You haven't captured/reviewed anything yet, or already uploaded. Capture some frames first. |
+| `5 - Push.bat`: "Upload failed" | Check your internet and run **`5 - Push.bat`** again — your work is saved on your PC and nothing is lost. |
 | The app won't open / shows red text | Screenshot the black window and send it to Radek. Nothing is harmed. |
 | Anything else | Take a screenshot and ask Radek. You cannot break the game or the project. |
 

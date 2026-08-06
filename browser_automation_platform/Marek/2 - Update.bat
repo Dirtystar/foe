@@ -6,7 +6,7 @@ REM  Pulls the newest code + data, then refreshes libraries.
 REM  Safe to run again any time.
 REM ===================================================================
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo(
 echo === Forge Assistant: updating ===
@@ -27,7 +27,7 @@ if not errorlevel 1 goto :pulled
 set /a N+=1
 if %N% GEQ 4 (
     echo [X] Could not download updates after several tries.
-    echo     Check your internet, then run update.bat again.
+    echo     Check your internet, then run  "2 - Update.bat"  again.
     goto :fail
 )
 echo   ...retry %N% in a moment
@@ -38,14 +38,14 @@ goto :pull
 REM --- Refresh libraries in case they changed (fast if nothing changed) ---
 if not exist ".venv\Scripts\python.exe" (
     echo [!] No environment yet - running install instead.
-    call "%~dp0install.bat"
+    call "%~dp01 - Install.bat"
     exit /b %errorlevel%
 )
 ".venv\Scripts\python.exe" -m pip install -e ".[production,gui]" >nul
 
 echo(
 echo === DONE. You are on the latest version. ===
-echo Next: double-click  start-chrome.bat  then  run.bat
+echo Next: double-click  "3 - Start Chrome.bat"  then  "4 - Run.bat"
 echo(
 pause
 exit /b 0
