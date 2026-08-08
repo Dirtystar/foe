@@ -1470,6 +1470,169 @@
       ],
       "reviewed": true,
       "weakening": null
+    },
+    {
+      "file": "2026-08-07_22-39-00_H.png",
+      "badges": [],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-07_22-40-51_F.png",
+      "badges": [],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-07_22-42-37_G.png",
+      "badges": [],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-07_22-44-52_D.png",
+      "badges": [],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-07_22-46-11_B.png",
+      "badges": [
+        {
+          "cx": 195,
+          "cy": 196,
+          "pct": 60
+        },
+        {
+          "cx": 523,
+          "cy": 348,
+          "pct": 20
+        },
+        {
+          "cx": 751,
+          "cy": 529,
+          "pct": 20
+        },
+        {
+          "cx": 123,
+          "cy": 277,
+          "pct": 20
+        },
+        {
+          "cx": 1140,
+          "cy": 849,
+          "pct": 60
+        },
+        {
+          "cx": 1149,
+          "cy": 502,
+          "pct": 100
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-07_22-47-15_A.png",
+      "badges": [],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-07_22-48-55_C.png",
+      "badges": [
+        {
+          "cx": 1189,
+          "cy": 701,
+          "pct": 20
+        },
+        {
+          "cx": 427,
+          "cy": 410,
+          "pct": 20
+        },
+        {
+          "cx": 326,
+          "cy": 181,
+          "pct": 20
+        },
+        {
+          "cx": 959,
+          "cy": 417,
+          "pct": 20
+        },
+        {
+          "cx": 1342,
+          "cy": 221,
+          "pct": 20
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-07_22-51-13_E.png",
+      "badges": [
+        {
+          "cx": 163,
+          "cy": 433,
+          "pct": 40
+        },
+        {
+          "cx": 1706,
+          "cy": 703,
+          "pct": 40
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-08_11-36-56_B.png",
+      "badges": [
+        {
+          "cx": 253,
+          "cy": 114,
+          "pct": 20
+        },
+        {
+          "cx": 477,
+          "cy": 395,
+          "pct": 40
+        },
+        {
+          "cx": 707,
+          "cy": 641,
+          "pct": 40
+        },
+        {
+          "cx": 737,
+          "cy": 411,
+          "pct": 40
+        },
+        {
+          "cx": 1630,
+          "cy": 847,
+          "pct": 20
+        },
+        {
+          "cx": 1445,
+          "cy": 265,
+          "pct": 20
+        },
+        {
+          "cx": 1715,
+          "cy": 90,
+          "pct": 20
+        },
+        {
+          "cx": 1073,
+          "cy": 45,
+          "pct": 60
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
     }
   ]
 }
