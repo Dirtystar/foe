@@ -32,6 +32,8 @@ unless explicitly asked.
 - `docs/handoffs/CURRENT_FORGE_STATE.md` — the living status handoff; read it first.
 - `docs/reports/` — historical milestone reports + research evidence (archive,
   indexed by `docs/reports/README.md`); `Marek/` — contributor onboarding.
+- `docs/design/` — forward-looking design docs (e.g.
+  `M6_AUTONOMOUS_CLICKING_DESIGN.md`, the click-milestone spec — design only).
 
 ## Working here
 

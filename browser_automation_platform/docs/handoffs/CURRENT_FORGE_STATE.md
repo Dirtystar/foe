@@ -15,6 +15,17 @@ decision. The one output action is the M5A **Move Cursor Preview**: a manual,
 operator-confirmed, one-shot cursor *move* to that point — strictly gated, never a
 click, never automated or scheduler-triggered.
 
+## Next milestone (design only, not built)
+
+**M6 — Autonomous clicking** is specified in
+`docs/design/M6_AUTONOMOUS_CLICKING_DESIGN.md` (execution flow, full failure table,
+click state machine, gating/countdown/verification, recovery, UX, test strategy,
+tech-debt, and the exact **M6A — Manual Confirmed Single Click** checklist). It is a
+**design document only** — no click code exists. M6A reuses the M5A gate/controller
+pattern verbatim and adds a click-only `ClickPort`, `evaluate_click` (preview gate +
+C1–C10), a single-shot controller, read-only post-click verification, and a
+fail-closed click audit; it modifies none of the frozen vision/cursor subsystems.
+
 ## Branch / commit
 
 - Branch: `claude/browser-automation-architecture-5784h1`.
