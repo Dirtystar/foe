@@ -988,10 +988,15 @@ class MainWindow(QMainWindow):
             self._build_cursor_context(world, alias, tab_id, image, captured_at, geometry_meta)
             if (live and cursor_controller is not None) else None
         )
+        # M6A.1 — Open & Verify is offered ONLY for a fresh live scan (never offline),
+        # and only when a real click adapter exists (Windows). Disabled by default.
+        open_verify_controller = self._open_verify_controller() if live else None
         self._debugger = DebuggerWindow(
             image, world=world, classifier=_bundled_classifier(), source=source,
             geometry=geometry, rois=derive_rois(geometry, self._forge_calibration()),
             cursor_controller=cursor_controller, cursor_context=cursor_context,
+            open_verify_controller=open_verify_controller,
+            panel_calibration=(self._panel_calibration_store() if live else None),
         )
         self._debugger.resize(1280, 760)
         self._debugger.show()
@@ -1015,6 +1020,68 @@ class MainWindow(QMainWindow):
         except Exception:
             self._cursor_ctl = None  # no real cursor here → preview unavailable
         return self._cursor_ctl
+
+    def _open_verify_controller(self):
+        """The one session Open & Verify controller (M6A.1), created lazily and
+        DISABLED by default (its enable flag is never persisted). Returns None when
+        no real click adapter is available (e.g. non-Windows), so the section shows
+        as unavailable rather than being able to click. Reuses the cursor adapter for
+        the pre-click move, the bundled classifier for an INDEPENDENT panel read, a
+        live re-capture for panel detection, and a fail-closed click audit."""
+        if getattr(self, "_openverify_ctl", "unset") != "unset":
+            return self._openverify_ctl
+        self._openverify_ctl = None
+        try:
+            from bap.adapters.cursor.os_cursor import WindowsCursorPreview
+            from bap.adapters.input.os_click import WindowsSingleClick
+            from bap.forge.click.audit import ClickAudit, default_click_audit_path
+            from bap.forge.click.open_verify import OpenAndVerifyController
+            from bap.forge.click.panel_reader import PanelReader
+            from bap.forge.detection.scan import build_scan
+            from bap.gui.forge_debugger import _bundled_classifier
+            from bap.ops.paths import ensure_dirs, get_paths
+
+            click = WindowsSingleClick()          # raises off Windows / without win32
+            cursor = WindowsCursorPreview()
+            reader = PanelReader(_bundled_classifier())
+
+            def capture_fn():
+                alias = self._current_test_scan_alias()
+                if alias is None:
+                    return None
+                img, _lat, _err = self._capture_world_timed(alias)
+                return img
+
+            def panel_present_fn(img):
+                try:
+                    return build_scan(img, classifier=_bundled_classifier()).panel is not None
+                except Exception:
+                    return False
+
+            diag = ensure_dirs(get_paths()).data_dir / "forge" / "openverify_diagnostics"
+            self._openverify_ctl = OpenAndVerifyController(
+                cursor, click, reader, ClickAudit(default_click_audit_path()),
+                capture_fn=capture_fn, panel_present_fn=panel_present_fn,
+                cursor_pos_fn=getattr(cursor, "current_position", None),
+                diagnostics_dir=diag)
+        except Exception:
+            self._openverify_ctl = None  # no real click adapter → Open & Verify unavailable
+        return self._openverify_ctl
+
+    def _panel_calibration_store(self):
+        """The persistent Panel Click Point Calibration store (M6A.1), created once.
+        Measurement only — it records where a future action button sits; it never
+        clicks anything."""
+        if getattr(self, "_panel_cal_store", None) is None:
+            try:
+                from bap.forge.click.panel_calibration import (
+                    PanelClickCalibrationStore,
+                    default_calibration_path,
+                )
+                self._panel_cal_store = PanelClickCalibrationStore(default_calibration_path())
+            except Exception:
+                self._panel_cal_store = None
+        return self._panel_cal_store
 
     def _content_calibration(self):
         """The persisted operator content-origin calibration (M5A.1), loaded once."""

@@ -36,6 +36,16 @@ def bgr_to_qimage(bgr) -> QImage:
     return QImage(rgb.data, w, h, 3 * w, QImage.Format.Format_RGB888).copy()
 
 
+def _enabled_req(req):
+    """A copy of a PreviewRequest with the session-enable flag forced on, used only
+    to *display* the gate decision before the operator confirms (the controller
+    re-evaluates the real gate at click time)."""
+    if getattr(req, "enabled", False):
+        return req
+    from dataclasses import replace
+    return replace(req, enabled=True)
+
+
 class _AnnotatedView(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -62,7 +72,8 @@ class DebuggerWindow(QMainWindow):
 
     def __init__(self, image, *, world=None, classifier=None, source: str = "",
                  weakening_region=None, rois=None, geometry=None,
-                 dataset_dir=None, cursor_controller=None, cursor_context=None) -> None:
+                 dataset_dir=None, cursor_controller=None, cursor_context=None,
+                 open_verify_controller=None, panel_calibration=None) -> None:
         super().__init__()
         self._image = image
         self._classifier = classifier
@@ -77,6 +88,13 @@ class DebuggerWindow(QMainWindow):
         # operator explicitly enables it for this session.
         self._cursor_controller = cursor_controller
         self._cursor_context = cursor_context
+        # M6A.1 — Manual Open & Verify (one click, then read the panel). Optional and
+        # safe by default: with no controller the section is unavailable; disabled
+        # until the operator explicitly enables clicking for this session.
+        self._open_verify_controller = open_verify_controller
+        # M6A.1 — Panel Click Point Calibration (measurement only; never clicks the
+        # action). Optional store of operator-marked next-button points.
+        self._panel_calibration = panel_calibration
         self._scan = build_scan(image, world=world, classifier=classifier,
                                 weakening_region=weakening_region, rois=rois,
                                 geometry=geometry)
@@ -126,8 +144,198 @@ class DebuggerWindow(QMainWindow):
         root.addLayout(controls)
 
         root.addWidget(self._build_cursor_preview_section())
+        root.addWidget(self._build_open_verify_section())
 
         self.setCentralWidget(central)
+
+    # --- Manual Open & Verify: one click, then read the panel (M6A.1) --------
+
+    def _build_open_verify_section(self):
+        """A separate, warning-styled panel for the single Open & Verify click. One
+        gated, operator-confirmed left click that opens the province panel; the panel
+        percentage is then read independently and compared to the map. Then STOP —
+        there is no battle, loop, retry, or next-action button here."""
+        from PySide6.QtWidgets import QFrame
+
+        box = QFrame()
+        box.setObjectName("openVerifyBox")
+        box.setStyleSheet("#openVerifyBox { border: 2px solid #A21C34; border-radius: 6px; }")
+        lay = QVBoxLayout(box)
+        title = QLabel("Open Target & Verify  —  ONE manual left click, then STOP")
+        title.setStyleSheet("color:#A21C34; font-weight:bold;")
+        lay.addWidget(title)
+
+        row = QHBoxLayout()
+        self.click_state_label = QLabel("Clicking: DISABLED")
+        self.click_state_label.setStyleSheet("font-weight:bold;")
+        row.addWidget(self.click_state_label)
+        self.enable_click_button = QPushButton("Enable clicking for this session")
+        self.enable_click_button.clicked.connect(self._on_enable_clicking)
+        row.addWidget(self.enable_click_button)
+        self.open_verify_button = QPushButton("Open Target && Verify")
+        self.open_verify_button.setEnabled(False)
+        self.open_verify_button.clicked.connect(self._on_open_and_verify)
+        row.addWidget(self.open_verify_button)
+        # Calibration-only tool: teach the next-action button's position. Never clicks it.
+        self.calibrate_panel_button = QPushButton("Calibrate Next-Button Point…")
+        self.calibrate_panel_button.setToolTip(
+            "Measurement only: mark where the NEXT action button sits inside an open "
+            "panel, on several Worlds/positions, to see if it is at a fixed relative "
+            "spot. No action click is ever performed.")
+        self.calibrate_panel_button.clicked.connect(self._on_panel_calibration)
+        self.calibrate_panel_button.setEnabled(
+            bool(self._panel_calibration is not None and self._cursor_context is not None))
+        row.addWidget(self.calibrate_panel_button)
+        row.addStretch(1)
+        lay.addLayout(row)
+
+        self.open_verify_result_label = QLabel("")
+        self.open_verify_result_label.setWordWrap(True)
+        lay.addWidget(self.open_verify_result_label)
+
+        if self._open_verify_controller is None or self._cursor_context is None:
+            self.enable_click_button.setEnabled(False)
+            self.click_state_label.setText("Clicking: UNAVAILABLE (no click adapter / not a live scan)")
+        return box
+
+    def _on_enable_clicking(self) -> None:
+        if self._open_verify_controller is None:
+            return
+        self._open_verify_controller.enable_for_session()
+        self.click_state_label.setText("Clicking: ENABLED (this session only)")
+        self.open_verify_button.setEnabled(True)
+        self.enable_click_button.setEnabled(False)
+
+    def _on_open_and_verify(self) -> None:
+        """Confirm, perform exactly one click, wait for the panel, read it
+        independently, and report MAP vs PANEL. Then STOP."""
+        ctl, ctx = self._open_verify_controller, self._cursor_context
+        if ctl is None or ctx is None:
+            self.open_verify_result_label.setText("Open & Verify is unavailable.")
+            return
+        # Show the gate/target details and require an explicit confirmation first.
+        from bap.forge.cursor.preview import evaluate_preview
+        req = self._build_preview_request()
+        decision = evaluate_preview(_enabled_req(req))
+        if not decision.ok:
+            self.open_verify_result_label.setStyleSheet("color:#A21C34;")
+            self.open_verify_result_label.setText(f"Blocked: {decision.reason}")
+            return
+        fields = self._cursor_target_fields()
+        if not self._confirm_open_and_verify(decision, fields):
+            self.open_verify_result_label.setStyleSheet("")
+            self.open_verify_result_label.setText("Cancelled — no click.")
+            return
+        # Re-build NOW (fresh clock + live getters) so drift while the dialog was
+        # open is caught inside the controller's own gate re-evaluation.
+        res = ctl.open_and_verify(
+            self._build_preview_request(),
+            map_pct=fields.get("pct"), map_confidence=fields.get("confidence"),
+            confirmed=True, before_image=self._image)
+        self._show_open_verify_result(res)
+
+    def _confirm_open_and_verify(self, decision, fields) -> bool:
+        f = decision.fields
+        lines = [
+            f"World: {f.get('world')}  ({f.get('hostname')})",
+            f"MAP badge: {f.get('pct')}%   confidence {f.get('confidence')}",
+            f"Weakening: {f.get('weakening')}   decision {f.get('decision')}",
+            f"Screen point: {f.get('screen_point')}   ·   scan age {f.get('age_s')} s",
+            "",
+            "ONE left click will be performed at the point above.",
+            "The opened panel percentage will then be read independently and",
+            "compared to the map. A mismatch or UNKNOWN is a hard STOP.",
+            "There is NO battle, loop, or repeated clicking.",
+        ]
+        box = QMessageBox(self)
+        box.setWindowTitle("Open Target & Verify — perform ONE click")
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setText("\n".join(lines))
+        go = box.addButton("Click Once && Verify", QMessageBox.ButtonRole.ActionRole)
+        cancel = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(cancel)
+        box.setEscapeButton(cancel)
+        box.exec()
+        return box.clickedButton() is go
+
+    def _show_open_verify_result(self, res) -> None:
+        from bap.forge.click.open_verify import VERIFY_MATCH
+        map_line = f"MAP: {res.map_pct}%  (confidence {res.map_confidence})"
+        if res.panel is not None:
+            panel_line = (f"PANEL: {res.panel.pct}%  (confidence {round(res.panel.confidence, 2)}, "
+                          f"colour {res.panel.color_group})")
+        else:
+            panel_line = "PANEL: —"
+        verdict = {"MATCH": "Panel verification: MATCH ✅  — STOPPED, verification complete.",
+                   "MISMATCH": "Panel verification: MISMATCH ⛔ — hard STOP.",
+                   "UNKNOWN": "Panel verification: UNKNOWN ⛔ — hard STOP.",
+                   "PANEL_TIMEOUT": "Panel did not open — STOP (no retry).",
+                   "BLOCKED": f"Blocked: {res.reason}",
+                   "NOT_CONFIRMED": "Cancelled — no click."}.get(res.state, res.reason)
+        colour = "#1B7A3D" if res.state == VERIFY_MATCH else "#A21C34"
+        self.open_verify_result_label.setStyleSheet(f"color:{colour}; font-weight:bold;")
+        self.open_verify_result_label.setText(f"{map_line}\n{panel_line}\n{verdict}")
+
+    # --- Panel Click Point Calibration (measurement only) -------------------
+
+    def _on_panel_calibration(self) -> None:
+        """Capture one operator-marked next-button point (after a short countdown so
+        the operator can hover the intended button), store it with full context, and
+        report the running variance verdict. NEVER performs an action click."""
+        store, ctx = self._panel_calibration, self._cursor_context
+        if store is None or ctx is None:
+            return
+        pos_getter = getattr(ctx, "cursor_position_getter", None)
+        if pos_getter is None:
+            self.open_verify_result_label.setText(
+                "Calibration needs the cursor-position reader (Windows) — unavailable here.")
+            return
+
+        from PySide6.QtCore import QTimer
+
+        box = QMessageBox(self)
+        box.setWindowTitle("Calibrate Next-Button Point")
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setText("Hover the OS cursor over the NEXT action button in the open "
+                    "panel.\nCapturing the cursor position in 3 seconds…\n"
+                    "(This records a point only — nothing is clicked.)")
+        box.setStandardButtons(QMessageBox.StandardButton.Cancel)
+        QTimer.singleShot(3000, lambda: self._capture_calibration_sample(box))
+        box.exec()
+
+    def _capture_calibration_sample(self, box) -> None:
+        store, ctx = self._panel_calibration, self._cursor_context
+        try:
+            box.accept()
+        except Exception:
+            pass
+        try:
+            from bap.forge.click.panel_calibration import PanelClickSample
+
+            pos = ctx.cursor_position_getter()
+            geom = ctx.current_geometry_getter()
+            if pos is None or geom is None:
+                self.open_verify_result_label.setText(
+                    "Calibration: cursor position or geometry unavailable — not stored.")
+                return
+            rect = geom.content_rect or geom.outer_rect
+            sample = PanelClickSample(
+                screen_point=(int(pos[0]), int(pos[1])),
+                panel_rect=tuple(int(v) for v in rect),
+                viewport=(int(geom.viewport_w), int(geom.viewport_h)),
+                resolution=(int(geom.capture_w), int(geom.capture_h)),
+                dpr=float(geom.device_pixel_ratio), zoom=float(geom.monitor_scale),
+                browser_mode=ctx.browser_mode, world=ctx.world_alias)
+            store.add(sample)
+            v = store.analyze()
+            nx, ny = sample.normalized
+            tag = "VERIFIED ✅" if v.verified else "not yet verified"
+            self.open_verify_result_label.setStyleSheet("")
+            self.open_verify_result_label.setText(
+                f"Calibration sample stored at normalized ({nx:.3f}, {ny:.3f}). "
+                f"{v.samples} sample(s) — {tag}. {v.reason}")
+        except Exception as exc:
+            self.open_verify_result_label.setText(f"Calibration failed: {exc}")
 
     # --- Manual one-shot cursor preview (Milestone 5A) ----------------------
 
