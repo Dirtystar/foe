@@ -1633,6 +1633,256 @@
       ],
       "reviewed": true,
       "weakening": null
+    },
+    {
+      "file": "2026-08-17_11-25-54_D.png",
+      "badges": [
+        {
+          "cx": 663,
+          "cy": 611,
+          "pct": 20
+        },
+        {
+          "cx": 432,
+          "cy": 360,
+          "pct": 20
+        },
+        {
+          "cx": 1115,
+          "cy": 419,
+          "pct": 20
+        },
+        {
+          "cx": 1303,
+          "cy": 329,
+          "pct": 20
+        },
+        {
+          "cx": 1681,
+          "cy": 480,
+          "pct": 40
+        },
+        {
+          "cx": 126,
+          "cy": 527,
+          "pct": 80
+        },
+        {
+          "cx": 256,
+          "cy": 265,
+          "pct": 80
+        },
+        {
+          "cx": 256,
+          "cy": 104,
+          "pct": 100
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-17_11-27-41_C.png",
+      "badges": [
+        {
+          "cx": 896,
+          "cy": 288,
+          "pct": 20
+        },
+        {
+          "cx": 683,
+          "cy": 739,
+          "pct": 20
+        },
+        {
+          "cx": 1389,
+          "cy": 815,
+          "pct": 20
+        },
+        {
+          "cx": 1524,
+          "cy": 547,
+          "pct": 20
+        },
+        {
+          "cx": 1349,
+          "cy": 123,
+          "pct": 20
+        },
+        {
+          "cx": 624,
+          "cy": 43,
+          "pct": 20
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-17_12-08-35_C.png",
+      "badges": [
+        {
+          "cx": 591,
+          "cy": 125,
+          "pct": 20
+        },
+        {
+          "cx": 1110,
+          "cy": 624,
+          "pct": 40
+        },
+        {
+          "cx": 1083,
+          "cy": 468,
+          "pct": 20
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-17_13-13-43_C.png",
+      "badges": [
+        {
+          "cx": 336,
+          "cy": 247,
+          "pct": 40
+        },
+        {
+          "cx": 1081,
+          "cy": 194,
+          "pct": 40
+        },
+        {
+          "cx": 1493,
+          "cy": 670,
+          "pct": 20
+        },
+        {
+          "cx": 226,
+          "cy": 856,
+          "pct": 20
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-17_13-35-57_C.png",
+      "badges": [
+        {
+          "cx": 1485,
+          "cy": 675,
+          "pct": 20
+        },
+        {
+          "cx": 1090,
+          "cy": 194,
+          "pct": 40
+        },
+        {
+          "cx": 228,
+          "cy": 849,
+          "pct": 20
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-18_10-13-21_F.png",
+      "badges": [
+        {
+          "cx": 1462,
+          "cy": 515,
+          "pct": 40
+        },
+        {
+          "cx": 1044,
+          "cy": 343,
+          "pct": 60
+        },
+        {
+          "cx": 58,
+          "cy": 605,
+          "pct": 60
+        },
+        {
+          "cx": 219,
+          "cy": 502,
+          "pct": 60
+        },
+        {
+          "cx": 339,
+          "cy": 238,
+          "pct": 100
+        },
+        {
+          "cx": 570,
+          "cy": 184,
+          "pct": 100
+        },
+        {
+          "cx": 790,
+          "cy": 282,
+          "pct": 100
+        },
+        {
+          "cx": 223,
+          "cy": 853,
+          "pct": 20
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-18_11-09-01_B.png",
+      "badges": [
+        {
+          "cx": 1669,
+          "cy": 656,
+          "pct": 80
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-18_13-00-01_B.png",
+      "badges": [
+        {
+          "cx": 1306,
+          "cy": 648,
+          "pct": 80
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-18_14-20-33_A.png",
+      "badges": [
+        {
+          "cx": 1308,
+          "cy": 446,
+          "pct": 40
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
+    },
+    {
+      "file": "2026-08-18_14-36-16_D.png",
+      "badges": [
+        {
+          "cx": 365,
+          "cy": 361,
+          "pct": 40
+        }
+      ],
+      "reviewed": true,
+      "weakening": null
     }
   ]
 }
