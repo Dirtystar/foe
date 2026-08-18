@@ -109,6 +109,7 @@ class DebuggerWindow(QMainWindow):
             "background:#a01818; color:white; font-weight:bold; font-size:15px; padding:6px;"
         )
         root.addWidget(banner)
+        root.addWidget(self._build_ui_state_label())
 
         body = QHBoxLayout()
         self.view = _AnnotatedView()
@@ -147,6 +148,27 @@ class DebuggerWindow(QMainWindow):
         root.addWidget(self._build_open_verify_section())
 
         self.setCentralWidget(central)
+
+    # --- UI state indicator: "Where am I?" (Milestone A, read-only) ----------
+
+    def _build_ui_state_label(self) -> "QLabel":
+        """A read-only line answering "which Forge screen is this?" for the current
+        image. Reuses this scan's detections (no second scan); observe-only — it
+        drives no automation. Failures degrade to a quiet UNKNOWN, never a crash."""
+        label = QLabel("UI state: —")
+        label.setStyleSheet("color:#274; padding:2px 6px;")
+        try:
+            from bap.forge.state.detectors import DetectContext
+            from bap.forge.state.screen_state import classify_screen
+
+            ctx = DetectContext(map_detections=list(self._scan.detections))
+            r = classify_screen(self._image, context=ctx)
+            cands = "  ".join(f"{s.value}:{v:.2f}" for s, v in r.candidates.items())
+            label.setText(f"UI state: {r.state.value}   (confidence {r.confidence:.2f})   ·   {cands}")
+            label.setToolTip(r.reason)
+        except Exception:
+            label.setText("UI state: UNKNOWN (detector unavailable)")
+        return label
 
     # --- Manual Open & Verify: one click, then read the panel (M6A.1) --------
 
