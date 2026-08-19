@@ -55,8 +55,10 @@ def test_enable_then_button_becomes_available(qapp):
     w = DebuggerWindow(_img(), source="t", open_verify_controller=ctl)
     # disabled until enabled for the session
     assert not w.open_verify_button.isEnabled()
+    assert not w.open_observe_button.isEnabled()
     w._on_enable_clicking()
     assert w.open_verify_button.isEnabled()
+    assert w.open_observe_button.isEnabled()      # Open Province & Observe too
     assert "ENABLED" in w.click_state_label.text()
 
 

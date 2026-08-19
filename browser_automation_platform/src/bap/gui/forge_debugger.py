@@ -198,6 +198,11 @@ class DebuggerWindow(QMainWindow):
         self.open_verify_button.setEnabled(False)
         self.open_verify_button.clicked.connect(self._on_open_and_verify)
         row.addWidget(self.open_verify_button)
+        # Open the province, then observe the resulting UI state (expected PROVINCE_PANEL).
+        self.open_observe_button = QPushButton("Open Province && Observe State")
+        self.open_observe_button.setEnabled(False)
+        self.open_observe_button.clicked.connect(self._on_open_province_observe)
+        row.addWidget(self.open_observe_button)
         # Calibration-only tool: teach the next-action button's position. Never clicks it.
         self.calibrate_panel_button = QPushButton("Calibrate Next-Button Point…")
         self.calibrate_panel_button.setToolTip(
@@ -226,6 +231,7 @@ class DebuggerWindow(QMainWindow):
         self._open_verify_controller.enable_for_session()
         self.click_state_label.setText("Clicking: ENABLED (this session only)")
         self.open_verify_button.setEnabled(True)
+        self.open_observe_button.setEnabled(True)
         self.enable_click_button.setEnabled(False)
 
     def _on_open_and_verify(self) -> None:
@@ -297,6 +303,67 @@ class DebuggerWindow(QMainWindow):
         colour = "#1B7A3D" if res.state == VERIFY_MATCH else "#A21C34"
         self.open_verify_result_label.setStyleSheet(f"color:{colour}; font-weight:bold;")
         self.open_verify_result_label.setText(f"{map_line}\n{panel_line}\n{verdict}")
+
+    def _on_open_province_observe(self) -> None:
+        """Open the province with one gated click, then honestly observe the
+        resulting UI state (expected PROVINCE_PANEL). Reports exactly what it saw; an
+        unexpected state is saved for later review. No %-read, no retry."""
+        ctl, ctx = self._open_verify_controller, self._cursor_context
+        if ctl is None or ctx is None:
+            self.open_verify_result_label.setText("Open & Observe is unavailable.")
+            return
+        from bap.forge.cursor.preview import evaluate_preview
+        req = self._build_preview_request()
+        decision = evaluate_preview(_enabled_req(req))
+        if not decision.ok:
+            self.open_verify_result_label.setStyleSheet("color:#A21C34;")
+            self.open_verify_result_label.setText(f"Blocked: {decision.reason}")
+            return
+        if not self._confirm_open_and_verify(decision, self._cursor_target_fields()):
+            self.open_verify_result_label.setStyleSheet("")
+            self.open_verify_result_label.setText("Cancelled — no click.")
+            return
+        capture_dir = exec_context = None
+        try:
+            from bap.ops.paths import ensure_dirs, get_paths
+            capture_dir = ensure_dirs(get_paths()).data_dir / "forge" / "unknown_captures"
+        except Exception:
+            capture_dir = None
+        h, w = (self._image.shape[0], self._image.shape[1])
+        exec_context = {"world": ctx.world_alias, "resolution": [w, h],
+                        "browser_mode": ctx.browser_mode}
+        res = ctl.open_province_and_observe(
+            self._build_preview_request(), confirmed=True,
+            capture_dir=capture_dir, exec_context=exec_context)
+        self._show_open_province_result(res)
+
+    def _show_open_province_result(self, res) -> None:
+        from bap.forge.click.open_verify import BLOCKED, NOT_CONFIRMED, OBSERVED
+        from bap.forge.state.screen_state import ScreenState
+
+        if res.outcome == NOT_CONFIRMED:
+            self.open_verify_result_label.setStyleSheet("")
+            self.open_verify_result_label.setText("Cancelled — no click.")
+            return
+        if res.outcome == BLOCKED:
+            self.open_verify_result_label.setStyleSheet("color:#A21C34;")
+            self.open_verify_result_label.setText(f"Blocked: {res.reason}")
+            return
+        obs = res.observation
+        confirmed = res.observed is ScreenState.PROVINCE_PANEL
+        lines = [
+            "Attempted: open province",
+            "Expected:  PROVINCE_PANEL",
+            f"Observed:  {res.observed.value}   (confidence {obs.confidence:.2f})",
+        ]
+        if confirmed:
+            lines.append("Result: PROVINCE_PANEL ✅  — verified. STOPPED.")
+        else:
+            tail = f"  Saved for review: {obs.captured_path}" if obs.captured_path else ""
+            lines.append(f"Result: {res.observed.value} — not the expected panel. STOPPED.{tail}")
+        self.open_verify_result_label.setStyleSheet(
+            f"color:{'#1B7A3D' if confirmed else '#A21C34'}; font-weight:bold;")
+        self.open_verify_result_label.setText("\n".join(lines))
 
     # --- Panel Click Point Calibration (measurement only) -------------------
 

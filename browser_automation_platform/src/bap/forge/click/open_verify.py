@@ -64,6 +64,31 @@ VERIFY_MATCH = "MATCH"
 #: Result states that must stop the flow with no success (no further action).
 STOP_STATES = frozenset({NOT_CONFIRMED, BLOCKED, PANEL_TIMEOUT, VERIFY_UNKNOWN, VERIFY_MISMATCH})
 
+# Outcome of the leaner "open a province and observe the resulting UI state" flow.
+OBSERVED = "OBSERVED"
+
+
+@dataclass(frozen=True)
+class ProvinceOpenResult:
+    """Outcome of one "open a province, then observe the UI state" attempt. Honest:
+    ``observation`` records exactly what the classifier saw (never reinterpreted)."""
+
+    outcome: str                         # NOT_CONFIRMED | BLOCKED | OBSERVED
+    clicked: bool
+    reason: str
+    observation: object | None = None    # ProvinceOpenObservation | None
+    screen_point: tuple[int, int] | None = None
+    blocked_code: str | None = None
+    timing_ms: dict = field(default_factory=dict)
+
+    @property
+    def observed(self):
+        return self.observation.observed if self.observation is not None else None
+
+    @property
+    def confirmed(self) -> bool:
+        return bool(self.observation is not None and self.observation.confirmed)
+
 
 @dataclass(frozen=True)
 class OpenVerifyResult:
@@ -278,6 +303,118 @@ class OpenAndVerifyController:
                 self._sleep(self._poll)
         return None, (time.perf_counter() - start) * 1000
 
+    # --- open a province, then observe the resulting UI state (Milestone) ----
+    def open_province_and_observe(
+        self,
+        req: PreviewRequest,
+        *,
+        confirmed: bool,
+        now: datetime | None = None,
+        detectors=None,
+        detect_context=None,
+        capture_dir=None,
+        exec_context: dict | None = None,
+    ) -> ProvinceOpenResult:
+        """Open a province with the SAME gated single click as Open & Verify, wait a
+        bounded time for the UI to settle, then **observe** the resulting UI state and
+        report it honestly (expected PROVINCE_PANEL). On any other observed state the
+        screenshot + classifier signals + context are saved for later review. No
+        %-read, no retry, no next action — one click, one observation, STOP.
+        """
+        now = now or datetime.now(timezone.utc)
+        if not confirmed:
+            return ProvinceOpenResult(NOT_CONFIRMED, False, "Not confirmed — no click.")
+        if not self._enabled:
+            return self._block_observe(
+                "disabled", "Clicking is disabled — enable it for this session first.", req)
+
+        decision = evaluate_preview(_with_enabled(req, True), now=now)
+        if not decision.ok or decision.screen_point is None:
+            return self._block_observe(decision.code, decision.reason, req)
+
+        age = scan_age_seconds(req.captured_at, now)
+        if age is None or age > self._max_age:
+            return self._block_observe(
+                "expired_click",
+                f"Target too old for a click ({age}s > {self._max_age:.0f}s) — re-scan.", req)
+
+        sx, sy = decision.screen_point
+        try:
+            self._audit.record_or_raise(EVENT_CLICK_ARMED, {
+                "world": req.world_alias, "hostname": req.hostname,
+                "browser_mode": req.browser_mode, "screen_point": [sx, sy],
+                "image_point": list(req.target_point) if req.target_point else None,
+                "scan_age_s": round(age, 3), "purpose": "open_province_and_observe",
+            })
+        except Exception:
+            return self._block_observe(
+                "audit_unavailable",
+                "Could not write the click-armed audit record — refusing to click.",
+                req, screen_point=(sx, sy))
+
+        self._cursor.move_to(sx, sy)
+        if self._cursor_pos is not None:
+            pos = self._cursor_pos()
+            if pos is None or abs(pos[0] - sx) > self._tol or abs(pos[1] - sy) > self._tol:
+                return self._block_observe(
+                    "cursor_moved", "Cursor is not on the target (moved?) — refusing to click.",
+                    req, screen_point=(sx, sy))
+
+        # THE single click. One call, one place, no loop, no retry.
+        self._click.click_at(sx, sy)
+        self._audit.record(EVENT_CLICK_EXECUTED, {
+            "click": True, "screen_point": [sx, sy], "world": req.world_alias,
+            "purpose": "open_province_and_observe",
+        })
+
+        after_image, waited_ms = self._capture_after_settle()
+        timing = {"click_to_scan_ms": round(waited_ms, 1)}
+
+        from bap.forge.state.province_open import observe_province_open
+
+        ctx = dict(exec_context or {})
+        ctx.setdefault("world", req.world_alias)
+        ctx.setdefault("hostname", req.hostname)
+        ctx.setdefault("screen_point", [sx, sy])
+        obs = observe_province_open(after_image, detectors=detectors,
+                                    detect_context=detect_context,
+                                    capture_dir=capture_dir, exec_context=ctx)
+        self._audit.record("PROVINCE_OPEN_OBSERVED", {
+            "world": req.world_alias, "expected": obs.expected.value,
+            "observed": obs.observed.value, "confirmed": obs.confirmed,
+            "confidence": round(obs.confidence, 4), "captured_path": obs.captured_path,
+        })
+        reason = (f"Attempted to open a province. Expected {obs.expected.value}; "
+                  f"observed {obs.observed.value} (confidence {obs.confidence:.2f}).")
+        if not obs.confirmed and obs.captured_path:
+            reason += f" Saved for review: {obs.captured_path}."
+        return ProvinceOpenResult(OBSERVED, True, reason, observation=obs,
+                                  screen_point=(sx, sy), timing_ms=timing)
+
+    def _block_observe(self, code, reason, req, screen_point=None) -> ProvinceOpenResult:
+        self._audit.record(EVENT_CLICK_BLOCKED, {
+            "blocked_code": code, "reason": reason, "world": req.world_alias,
+            "purpose": "open_province_and_observe",
+            "screen_point": list(screen_point) if screen_point else None,
+        })
+        return ProvinceOpenResult(BLOCKED, False, reason, screen_point=screen_point,
+                                  blocked_code=code)
+
+    def _capture_after_settle(self):
+        """Wait a bounded time for the UI to transition, then capture whatever is on
+        screen. Unlike ``_wait_for_panel`` this returns the last capture regardless of
+        panel detection, so an unexpected state can be honestly observed + captured."""
+        start = time.perf_counter()
+        polls = max(1, int(round(self._panel_timeout / self._poll)))
+        img = None
+        for i in range(polls + 1):
+            img = self._capture()
+            if img is not None and self._panel_present(img):
+                break   # panel appeared early — observe it now
+            if i < polls:
+                self._sleep(self._poll)
+        return img, (time.perf_counter() - start) * 1000
+
     def _save_diagnostics(self, req, map_pct, map_confidence, reading, state, click_pt,
                           before_image, panel_image, timing) -> str | None:
         if self._diag is None:
@@ -318,7 +455,7 @@ def _with_enabled(req: PreviewRequest, enabled: bool) -> PreviewRequest:
 
 
 __all__ = [
-    "OpenAndVerifyController", "OpenVerifyResult",
-    "NOT_CONFIRMED", "BLOCKED", "PANEL_TIMEOUT",
+    "OpenAndVerifyController", "OpenVerifyResult", "ProvinceOpenResult",
+    "NOT_CONFIRMED", "BLOCKED", "PANEL_TIMEOUT", "OBSERVED",
     "VERIFY_UNKNOWN", "VERIFY_MISMATCH", "VERIFY_MATCH", "STOP_STATES",
 ]
