@@ -177,13 +177,21 @@ class MainWindow(QMainWindow):
         v.addWidget(self._build_title_bar())
 
         body = QHBoxLayout(); body.setContentsMargins(0, 0, 0, 0); body.setSpacing(0)
+        # The nav is split by audience: everyday "Play" actions a user needs, kept
+        # separate from "Developer" tools (validation, performance, reports) so the
+        # common path stays uncluttered. Every page is unchanged — only grouped.
         self._nav = widgets.NavRail()
         self._nav.add_header("Overview")
-        for key, label, ic in (("dashboard", "Dashboard", "compass"), ("worlds", "Worlds", "shield"),
-                               ("vision", "Vision", "eye"), ("validation", "Validation", "check"),
+        self._nav.add_section("dashboard", "Dashboard", "compass")
+        self._nav.add_header("Play")
+        for key, label, ic in (("worlds", "Worlds", "shield"), ("vision", "Vision", "eye"),
                                ("review", "Review", "quill"),
-                               ("datasets", "Datasets", "datasets"), ("reports", "Reports", "report"),
-                               ("performance", "Performance", "chart")):
+                               ("datasets", "Datasets", "datasets")):
+            self._nav.add_section(key, label, ic)
+        self._nav.add_header("Developer")
+        for key, label, ic in (("validation", "Validation", "check"),
+                               ("performance", "Performance", "chart"),
+                               ("reports", "Reports", "report")):
             self._nav.add_section(key, label, ic)
         self._nav.add_header("System")
         self._nav.add_section("settings", "Settings", "gear")

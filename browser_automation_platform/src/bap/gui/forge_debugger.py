@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -111,17 +113,21 @@ class DebuggerWindow(QMainWindow):
         root.addWidget(banner)
         root.addWidget(self._build_ui_state_label())
 
-        body = QHBoxLayout()
+        # Image and details live in a splitter so the user can drag the divider to
+        # give either pane more room (the fixed side-by-side layout could not resize).
+        body = QSplitter(Qt.Orientation.Horizontal)
         self.view = _AnnotatedView()
         self.view.set_image(bgr_to_qimage(annotate(image, self._scan)))
-        body.addWidget(self.view, stretch=3)
+        body.addWidget(self.view)
 
         self.details = QPlainTextEdit()
         self.details.setReadOnly(True)
         self.details.setPlainText(self._scan.explanation())
         self.details.setMinimumWidth(320)
-        body.addWidget(self.details, stretch=2)
-        root.addLayout(body)
+        body.addWidget(self.details)
+        body.setStretchFactor(0, 3)
+        body.setStretchFactor(1, 2)
+        root.addWidget(body)
 
         controls = QHBoxLayout()
         self.save_button = QPushButton("Save artifacts…")
@@ -147,7 +153,13 @@ class DebuggerWindow(QMainWindow):
         root.addWidget(self._build_cursor_preview_section())
         root.addWidget(self._build_open_verify_section())
 
-        self.setCentralWidget(central)
+        # Wrap the whole console in a scroll area so its stacked sections are always
+        # reachable on a short window instead of being clipped off the bottom.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setWidget(central)
+        self.setCentralWidget(scroll)
 
     # --- UI state indicator: "Where am I?" (Milestone A, read-only) ----------
 
