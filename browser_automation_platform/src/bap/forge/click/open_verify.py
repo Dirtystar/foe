@@ -313,12 +313,15 @@ class OpenAndVerifyController:
         detectors=None,
         detect_context=None,
         capture_dir=None,
+        capture_confirmed: bool = True,
         exec_context: dict | None = None,
     ) -> ProvinceOpenResult:
         """Open a province with the SAME gated single click as Open & Verify, wait a
         bounded time for the UI to settle, then **observe** the resulting UI state and
         report it honestly (expected PROVINCE_PANEL). On any other observed state the
-        screenshot + classifier signals + context are saved for later review. No
+        screenshot + classifier signals + context are saved for later review; when
+        ``capture_confirmed`` is set (default), a confirmed PROVINCE_PANEL is saved too
+        — the first real open then grows the panel dataset whatever the outcome. No
         %-read, no retry, no next action — one click, one observation, STOP.
         """
         now = now or datetime.now(timezone.utc)
@@ -378,7 +381,9 @@ class OpenAndVerifyController:
         ctx.setdefault("screen_point", [sx, sy])
         obs = observe_province_open(after_image, detectors=detectors,
                                     detect_context=detect_context,
-                                    capture_dir=capture_dir, exec_context=ctx)
+                                    capture_dir=capture_dir,
+                                    capture_confirmed=capture_confirmed,
+                                    exec_context=ctx)
         self._audit.record("PROVINCE_OPEN_OBSERVED", {
             "world": req.world_alias, "expected": obs.expected.value,
             "observed": obs.observed.value, "confirmed": obs.confirmed,
@@ -386,8 +391,9 @@ class OpenAndVerifyController:
         })
         reason = (f"Attempted to open a province. Expected {obs.expected.value}; "
                   f"observed {obs.observed.value} (confidence {obs.confidence:.2f}).")
-        if not obs.confirmed and obs.captured_path:
-            reason += f" Saved for review: {obs.captured_path}."
+        if obs.captured_path:
+            saved_what = "Panel frame saved" if obs.confirmed else "Saved for review"
+            reason += f" {saved_what}: {obs.captured_path}."
         return ProvinceOpenResult(OBSERVED, True, reason, observation=obs,
                                   screen_point=(sx, sy), timing_ms=timing)
 

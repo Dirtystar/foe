@@ -62,15 +62,11 @@ class ProvinceOpenObservation:
         }
 
 
-def save_unknown_capture(capture_dir, image, classification: ScreenClassification,
-                         exec_context: dict | None) -> str | None:
-    """Save a screenshot + classifier output + execution context for a
-    not-as-expected observation, so it can be reviewed (and maybe added to the
-    dataset) later. Best-effort: a write failure returns None and never raises.
-
-    Intentionally a plain function, not a store abstraction — if this pattern
-    repeats across several future milestones we can extract a component then.
-    """
+def _save_capture(capture_dir, image, classification: ScreenClassification,
+                  exec_context: dict | None, *, prefix: str) -> str | None:
+    """Write a screenshot + classifier output + execution context to a timestamped
+    ``<prefix>_<ts>`` folder. Best-effort: a write failure returns None and never
+    raises. Intentionally a plain function, not a store abstraction."""
     if capture_dir is None:
         return None
     try:
@@ -81,7 +77,7 @@ def save_unknown_capture(capture_dir, image, classification: ScreenClassificatio
         import cv2
 
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")[:-3]
-        out = Path(capture_dir) / f"unknown_{ts}"
+        out = Path(capture_dir) / f"{prefix}_{ts}"
         out.mkdir(parents=True, exist_ok=True)
         if image is not None:
             cv2.imwrite(str(out / "screen.png"), image)
@@ -94,23 +90,46 @@ def save_unknown_capture(capture_dir, image, classification: ScreenClassificatio
         }, indent=2), encoding="utf-8")
         return str(out)
     except Exception:  # never let a best-effort capture affect the flow
-        logger.warning("failed to save unknown-state capture", exc_info=True)
+        logger.warning("failed to save %s-state capture", prefix, exc_info=True)
         return None
 
 
+def save_unknown_capture(capture_dir, image, classification: ScreenClassification,
+                         exec_context: dict | None) -> str | None:
+    """Save a not-as-expected observation (screenshot + classifier output + context)
+    to an ``unknown_<ts>`` folder for later review. Best-effort; returns None on
+    failure. Thin wrapper over :func:`_save_capture`."""
+    return _save_capture(capture_dir, image, classification, exec_context,
+                         prefix="unknown")
+
+
+def save_confirmed_capture(capture_dir, image, classification: ScreenClassification,
+                           exec_context: dict | None) -> str | None:
+    """Save a **confirmed** ``PROVINCE_PANEL`` observation to a ``panel_<ts>`` folder.
+
+    The success frame is the exact screenshot the dataset is missing — capturing it
+    is how the first real open grows the panel dataset the weakening-reader needs.
+    Best-effort; returns None on failure. Thin wrapper over :func:`_save_capture`."""
+    return _save_capture(capture_dir, image, classification, exec_context,
+                         prefix="panel")
+
+
 def observe_province_open(after_image, *, detectors=None, detect_context=None,
-                          capture_dir=None,
+                          capture_dir=None, capture_confirmed: bool = False,
                           exec_context: dict | None = None) -> ProvinceOpenObservation:
     """Classify the post-click screenshot and report the observed UI state vs the
     expected `PROVINCE_PANEL`. On any other observed state, save the screenshot +
-    signals + context (when ``capture_dir`` is given). Honest and read-only: it
-    performs no click and takes no next action.
+    signals + context (when ``capture_dir`` is given). When ``capture_confirmed`` is
+    set, a confirmed `PROVINCE_PANEL` is *also* saved — the success frame is the panel
+    screenshot the dataset lacks. Honest and read-only: no click, no next action.
     """
     clf = classify_screen(after_image, detectors=detectors, context=detect_context)
     observed = clf.state
     captured = None
     if observed is not EXPECTED_STATE:
         captured = save_unknown_capture(capture_dir, after_image, clf, exec_context)
+    elif capture_confirmed:
+        captured = save_confirmed_capture(capture_dir, after_image, clf, exec_context)
     reason = (f"expected {EXPECTED_STATE.value}; observed {observed.value} "
               f"(confidence {clf.confidence:.2f})")
     obs = ProvinceOpenObservation(
@@ -123,5 +142,5 @@ def observe_province_open(after_image, *, detectors=None, detect_context=None,
 
 __all__ = [
     "ProvinceOpenObservation", "observe_province_open", "save_unknown_capture",
-    "EXPECTED_STATE",
+    "save_confirmed_capture", "EXPECTED_STATE",
 ]

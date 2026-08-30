@@ -14,6 +14,7 @@ import numpy as np
 from bap.forge.state.province_open import (
     ProvinceOpenObservation,
     observe_province_open,
+    save_confirmed_capture,
     save_unknown_capture,
 )
 from bap.forge.state.screen_state import (
@@ -44,6 +45,32 @@ def test_observed_province_panel_is_confirmed_no_capture(tmp_path):
     assert obs.confirmed is True
     assert obs.captured_path is None                 # success → nothing saved
     assert list(tmp_path.iterdir()) == []
+
+
+def test_confirmed_panel_is_captured_when_requested(tmp_path):
+    # The success frame is the panel screenshot the dataset lacks — save it too.
+    obs = observe_province_open(
+        _img(), detectors=_fake_detectors(0.1, 0.9), capture_dir=tmp_path,
+        capture_confirmed=True, exec_context={"world": "H"})
+    assert obs.confirmed is True
+    assert obs.captured_path is not None
+    d = list(tmp_path.iterdir())[0]
+    assert d.name.startswith("panel_")               # distinct from unknown_*
+    assert (d / "screen.png").exists()
+    ctx = json.loads((d / "context.json").read_text())
+    assert ctx["observed_state"] == "PROVINCE_PANEL" and ctx["world"] == "H"
+
+
+def test_confirmed_capture_off_by_default(tmp_path):
+    obs = observe_province_open(
+        _img(), detectors=_fake_detectors(0.1, 0.9), capture_dir=tmp_path)
+    assert obs.confirmed is True and obs.captured_path is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_save_confirmed_capture_is_best_effort(tmp_path):
+    clf = classify_screen(_img(), detectors=_fake_detectors(0.1, 0.9))
+    assert save_confirmed_capture("/nonexistent\0/bad", _img(), clf, {}) is None
 
 
 def test_observed_unknown_is_reported_and_captured(tmp_path):

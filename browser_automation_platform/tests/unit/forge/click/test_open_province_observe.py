@@ -104,6 +104,10 @@ def test_observed_province_panel_one_click_confirmed(tmp_path):
     assert click.count == 1                      # exactly one click
     events = [e["event"] for e in ClickAudit(tmp_path / "click_audit.jsonl").read_all()]
     assert "PROVINCE_OPEN_OBSERVED" in events
+    # the success frame is saved by default so the first real open grows the dataset
+    assert r.observation.captured_path is not None
+    saved = [p for p in tmp_path.iterdir() if p.name.startswith("panel_")]
+    assert saved and (saved[0] / "screen.png").exists()
 
 
 def test_observed_unknown_reported_and_captured_no_retry(tmp_path):
