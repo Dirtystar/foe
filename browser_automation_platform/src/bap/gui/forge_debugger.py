@@ -326,7 +326,7 @@ class DebuggerWindow(QMainWindow):
         capture_dir = exec_context = None
         try:
             from bap.ops.paths import ensure_dirs, get_paths
-            capture_dir = ensure_dirs(get_paths()).data_dir / "forge" / "unknown_captures"
+            capture_dir = ensure_dirs(get_paths()).data_dir / "forge" / "captures"
         except Exception:
             capture_dir = None
         h, w = (self._image.shape[0], self._image.shape[1])
@@ -357,7 +357,8 @@ class DebuggerWindow(QMainWindow):
             f"Observed:  {res.observed.value}   (confidence {obs.confidence:.2f})",
         ]
         if confirmed:
-            lines.append("Result: PROVINCE_PANEL ✅  — verified. STOPPED.")
+            saved = f"  Panel frame saved: {obs.captured_path}" if obs.captured_path else ""
+            lines.append("Result: PROVINCE_PANEL ✅  — verified. STOPPED." + saved)
         else:
             tail = f"  Saved for review: {obs.captured_path}" if obs.captured_path else ""
             lines.append(f"Result: {res.observed.value} — not the expected panel. STOPPED.{tail}")

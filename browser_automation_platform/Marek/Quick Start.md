@@ -123,6 +123,10 @@ press number keys.
 Chrome can stay open for next time. That's the entire loop:
 **2 - Update → 3 - Start Chrome → 4 - Run → collect → review → validate → 5 - Push.**
 
+> There's also a **`6 - Collect Frames.bat`** in the folder. You don't normally need it —
+> `5 - Push.bat` already includes everything. It's just a way to *see* how much you've
+> collected. It's read-only and safe: it never plays the game and never deletes anything.
+
 ---
 
 ## If something looks wrong

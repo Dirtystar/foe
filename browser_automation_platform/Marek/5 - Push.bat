@@ -18,6 +18,11 @@ if not defined BRANCH (
 )
 echo Branch: %BRANCH%
 
+REM --- Copy any frames the app collected into the dataset (best-effort) ---
+if exist ".venv\Scripts\python.exe" (
+    ".venv\Scripts\python.exe" -m bap.forge.collect --export
+)
+
 REM --- Stage only the dataset (never code, never your settings) ---
 git add dataset
 
