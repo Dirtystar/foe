@@ -1,10 +1,8 @@
 # Browser Automation Platform
 
-> **Helping collect Forge data?** Everything a contributor needs is in the
-> [`Marek/`](Marek/) folder: [Quick Start.md](Marek/Quick%20Start.md) (printable
-> **Quick Start.pdf** alongside it) plus five numbered double-click scripts —
-> `1 - Install.bat`, `2 - Update.bat`, `3 - Start Chrome.bat`, `4 - Run.bat`,
-> `5 - Push.bat`. No commands needed after the one-time clone.
+> **Collecting Forge data?** See the operator guide
+> [`docs/handoffs/COLLECTING_PANEL_FRAMES.md`](docs/handoffs/COLLECTING_PANEL_FRAMES.md)
+> and export collected frames with `python -m bap.forge.collect --export`.
 
 A generic, site-agnostic visual browser automation platform in Python, built on
 Playwright with a hexagonal (ports & adapters) architecture. It drives multiple

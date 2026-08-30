@@ -2,8 +2,8 @@
 
 _How to gather the open-panel screenshots the dataset is missing, using the one gated
 click already in the app. This is an **operator** task (it performs a real single click
-to open a province) — it is **not** part of Marek's non-technical, never-clicks
-screenshot loop. Keep it to yourself or a trusted operator._
+to open a province) — it is **not** part of a non-technical, screenshot-only
+collection loop. Keep it to yourself or a trusted operator._
 
 ## Why
 
@@ -56,8 +56,7 @@ python -m bap.forge.collect --export     # copy them into dataset/panels/ (idemp
 ```
 
 Each frame is copied to `dataset/panels/<state>_<world>_<ts>.png` with a `manifest.csv`
-row. Then commit `dataset/` and push (or, on Windows, `6 - Collect Frames.bat` runs the
-export for you and `5 - Push.bat` also exports automatically before sending).
+row. Then commit `dataset/` and push (`git add dataset && git commit && git push`).
 
 The export is **idempotent** — collect a few, export, push, repeat across sessions
 without duplicating frames.
@@ -74,5 +73,5 @@ click is wrong.
 - The clicking feature is **off by default** and must be enabled **per session**.
 - It performs a **single** click to open a province — no battle, no repeated clicking, no
   automation. Every click is audited.
-- This activity is for an operator who understands it opens provinces. Do **not** fold it
-  into the contributor (Marek) loop, which is promised to be screenshot-only.
+- This activity is for an operator who understands it opens provinces — not for a
+  screenshot-only contributor.

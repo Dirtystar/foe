@@ -3,8 +3,8 @@
 Milestone reports and research write-ups, kept for provenance. These are
 **point-in-time records** — the living status lives in
 [`../handoffs/CURRENT_FORGE_STATE.md`](../handoffs/CURRENT_FORGE_STATE.md), and the
-current operator/contributor guides live in [`../`](../) and
-[`../../Marek/`](../../Marek/). Reports are not maintained after their milestone.
+current operator guides live in [`../`](../). Reports are not maintained after
+their milestone.
 
 | Report | Milestone / topic |
 |---|---|
