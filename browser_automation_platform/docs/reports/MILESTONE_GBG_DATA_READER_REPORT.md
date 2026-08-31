@@ -59,6 +59,29 @@ advisor edge cases (own/negotiate/unknown excluded; locked filtering + ordering)
 - **Additive.** A brand-new package; nothing in the vision/gate/GUI paths changed. The
   vision pipeline stays as the fallback / cross-check.
 
+## Live scenario (added) — watch the running game
+
+`src/bap/forge/gbg_data/live.py` adds a live path, read-only:
+
+- **`LiveGbgReader`** — transport-agnostic core: `feed(body)` a `/game/json` response body,
+  it keeps the freshest `Battleground` snapshot (most `/game/json` calls carry no
+  battleground and are ignored, last good kept), and exposes `targets()`. Fully tested.
+- **`make_response_handler` / `run_live` / CLI** — thin Playwright wiring that
+  `connect_over_cdp` to your **already-running Chrome** (same `DEFAULT_CDP_ENDPOINT =
+  http://127.0.0.1:9222` the app uses), listens for `/game/json` responses on every page,
+  and re-renders the ranked targets on each update. Passive: no requests sent, no clicks.
+
+Run it while Forge is open in the CDP Chrome:
+
+```
+python -m bap.forge.gbg_data.live               # live ranked targets, refreshing
+python -m bap.forge.gbg_data.live --include-locked
+```
+
+Open/refresh GBG in the game and the target list updates live. The browser-wiring layer
+needs a real Chrome to exercise (marked `no cover`); the reader core, the `/game/json`
+filtering, body-read, and update logic are all unit-tested with fakes.
+
 ## Next (Phase 2 — action)
 
 The data now answers **what/when**. Phase 2 adds **where**: turn a chosen `province_id`
