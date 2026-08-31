@@ -15,3 +15,6 @@ tests/forge_assets/**/.cache/
 # writes a fresh classifier_v2/ at the repo root; the committed evidence snapshot
 # lives under docs/reports/classifier_v2/ (root-anchored ignore keeps that copy).
 /classifier_v2/
+
+# Live-collection smoke-test artifacts written to the repo root by run_gui tests.
+/LIVE_COLLECTION_SESSION_*.md
