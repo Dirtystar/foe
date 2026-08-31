@@ -23,6 +23,7 @@ def test_console_scripts_declared(project):
     scripts = project["scripts"]
     assert set(scripts) == {
         "bap", "bap-run", "bap-gui", "bap-forge-label", "bap-forge-review",
+        "bap-forge-collect", "bap-gbg", "bap-gbg-live", "bap-forge-click",
     }
 
 
@@ -34,6 +35,10 @@ def test_console_scripts_declared(project):
         ("bap-gui", "bap.gui.gui_main:main"),
         ("bap-forge-label", "bap.forge.labeling.__main__:main"),
         ("bap-forge-review", "bap.gui.forge_review:main"),
+        ("bap-forge-collect", "bap.forge.collect:main"),
+        ("bap-gbg", "bap.forge.gbg_data.__main__:main"),
+        ("bap-gbg-live", "bap.forge.gbg_data.live:main"),
+        ("bap-forge-click", "bap.forge.action.cdp_click:main"),
     ],
 )
 def test_console_script_targets_resolve(project, name, target):
