@@ -64,31 +64,77 @@ def run_click_loop(clicker, x: float, y: float, *, key: str | None = None,
     return done
 
 
-def _find_game_page(browser, host: str = "forgeofempires"):  # pragma: no cover - live glue
+def list_pages(browser) -> list:  # pragma: no cover - live glue
+    """All open pages as (index, url, title). Index is stable within one connection."""
+    out = []
+    i = 0
     for ctx in browser.contexts:
         for page in ctx.pages:
             try:
-                if host in (page.url or ""):
-                    return page
+                title = page.title()
+            except Exception:
+                title = ""
+            out.append((i, getattr(page, "url", "") or "", title))
+            i += 1
+    return out
+
+
+def _pages(browser):  # pragma: no cover - live glue
+    return [p for ctx in browser.contexts for p in ctx.pages]
+
+
+def _select_page(browser, *, index=None, match=None):  # pragma: no cover - live glue
+    """Pick the target page: by --tab-index, else by --tab substring (url or title), else
+    the sole forgeofempires page. Raises with a helpful list if the choice is ambiguous."""
+    pages = _pages(browser)
+    if not pages:
+        raise RuntimeError("no pages in the connected browser")
+    if index is not None:
+        if index < 0 or index >= len(pages):
+            raise RuntimeError(f"--tab-index {index} out of range (0..{len(pages)-1})")
+        return pages[index]
+    if match:
+        m = match.lower()
+        hits = []
+        for p in pages:
+            try:
+                if m in (p.url or "").lower() or m in (p.title() or "").lower():
+                    hits.append(p)
             except Exception:
                 continue
-    # fall back to the first page if the host wasn't matched
-    for ctx in browser.contexts:
-        if ctx.pages:
-            return ctx.pages[0]
-    return None
+        if not hits:
+            raise RuntimeError(f"no page matches --tab {match!r}")
+        if len(hits) > 1:
+            raise RuntimeError(f"--tab {match!r} matches {len(hits)} pages — use --tab-index")
+        return hits[0]
+    forge = [p for p in pages if "forgeofempires" in (getattr(p, "url", "") or "")]
+    if len(forge) == 1:
+        return forge[0]
+    if len(forge) > 1:
+        raise RuntimeError(
+            f"{len(forge)} Forge tabs open — pick one with --tab-index (see --list) "
+            "or narrow with --tab")
+    raise RuntimeError("no Forge tab found — is the game open in this Chrome?")
 
 
 def connect_and_run(endpoint: str, x: float, y: float, *, key: str | None = None,
-                    count: int = 1, interval: float = 0.15,
+                    count: int = 1, interval: float = 0.15, index=None, match=None,
                     connect=None) -> int:  # pragma: no cover - needs a live browser
-    """Connect to Chrome at ``endpoint`` over CDP, find the Forge page, and run the click
-    loop on it. ``connect`` is injectable; by default uses Playwright ``connect_over_cdp``.
-    Returns the number of clicks performed."""
+    """Connect to Chrome at ``endpoint`` over CDP, pick the target Forge tab (``index`` /
+    ``match``, else the sole Forge tab), bring it to the front so a canvas game accepts
+    input, and run the click loop on it. Returns the number of clicks performed."""
     def _go(browser) -> int:
-        page = _find_game_page(browser)
-        if page is None:
-            raise RuntimeError("no page found in the connected browser")
+        page = _select_page(browser, index=index, match=match)
+        try:
+            page.bring_to_front()          # a backgrounded canvas game may ignore input
+        except Exception:
+            pass
+        title = ""
+        try:
+            title = page.title()
+        except Exception:
+            pass
+        print(f"Target tab: {page.url}  {title!r}", flush=True)
         logger.info("cdp_action_target", extra={"url": page.url, "x": x, "y": y,
                                                  "key": key, "count": count})
         return run_click_loop(CdpClicker(page), x, y, key=key, count=count, interval=interval)
@@ -174,8 +220,14 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wiring
         prog="bap-forge-click",
         description="CDP-targeted click on the Forge tab (does not move your mouse).")
     ap.add_argument("--cdp", default=DEFAULT_CDP_ENDPOINT, help="Chrome CDP endpoint")
+    ap.add_argument("--list", action="store_true",
+                    help="list open tabs (index, url, title) and exit")
     ap.add_argument("--probe", action="store_true",
                     help="scan mode: print the viewport coordinate of each click you make")
+    ap.add_argument("--tab", default=None,
+                    help="target the tab whose url/title contains this text")
+    ap.add_argument("--tab-index", type=int, default=None, dest="tab_index",
+                    help="target the tab by index from --list")
     ap.add_argument("--x", type=float, help="viewport X (CSS px) to click")
     ap.add_argument("--y", type=float, help="viewport Y (CSS px) to click")
     ap.add_argument("--key", default=None, help="key to press after each click, e.g. r")
@@ -183,6 +235,23 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--interval", type=float, default=0.15, help="seconds between actions")
     ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     args = ap.parse_args(argv)
+
+    if args.list:
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser = p.chromium.connect_over_cdp(args.cdp)
+                rows = list_pages(browser)
+            if not rows:
+                print("no tabs open."); return 1
+            print("open tabs:")
+            for i, url, title in rows:
+                print(f"  [{i}] {title[:40]!r:42} {url}")
+            print("\nPick one with  --tab-index N  (or --tab <text>).")
+            return 0
+        except Exception as exc:  # noqa: BLE001
+            print(f"Could not connect to Chrome at {args.cdp}: {exc}")
+            return 1
 
     if args.probe:
         try:
@@ -205,12 +274,12 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wiring
             print("no confirmation (non-interactive) — pass --yes to run a loop."); return 1
     try:
         n = connect_and_run(args.cdp, args.x, args.y, key=args.key,
-                            count=args.count, interval=args.interval)
+                            count=args.count, interval=args.interval,
+                            index=args.tab_index, match=args.tab)
         print(f"done — {n} click(s) dispatched.")
         return 0
     except Exception as exc:  # noqa: BLE001
-        print(f"Could not run CDP click on {args.cdp}: {exc}\n"
-              "Start Chrome with --remote-debugging-port and open Forge first.")
+        print(f"Could not run CDP click on {args.cdp}: {exc}")
         return 1
 
 
