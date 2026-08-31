@@ -32,6 +32,7 @@ bap-forge-collect = "bap.forge.collect:main"
 bap-gbg = "bap.forge.gbg_data.__main__:main"
 bap-gbg-live = "bap.forge.gbg_data.live:main"
 bap-forge-click = "bap.forge.action.cdp_click:main"
+bap-forge-autoplay = "bap.forge.action.autoplay:main"
 
 [project.optional-dependencies]
 # Real vision analyzers (OCR + template matching).
