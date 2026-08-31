@@ -4,8 +4,13 @@ _Design only. No implementation. Proposes a read-only way for the product to lea
 **which provinces exist, who owns them, and when they open**, by observing the game's
 own data — not by reading pixels and not by depending on any third-party tool._
 
-Status: **proposed / awaiting build approval.** Sibling of `GBG_MAP_FACTS.md` (why
-the map pixels can't answer these questions) and `M6_AUTONOMOUS_CLICKING_DESIGN.md`.
+Status: **feasibility CONFIRMED — real payload captured.** The go/no-go probe is done: a
+live HAR gave us the actual data over HTTP POST `/game/json`. The concrete schema, the
+field→app mapping, and the CDP mechanism now live in **`GBG_API_SCHEMA.md`**, with sanitized
+sample payloads in `dataset/api_samples/`. Read this note for the rationale/shape; read
+`GBG_API_SCHEMA.md` for the real fields. (Correction: the data is HTTP POST responses, not
+WebSocket frames — same CDP connection, `Network.responseReceived` + `getResponseBody`.)
+Sibling of `GBG_MAP_FACTS.md` and `M6_AUTONOMOUS_CLICKING_DESIGN.md`.
 
 ---
 

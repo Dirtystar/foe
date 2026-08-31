@@ -1,0 +1,97 @@
+{
+  "stateId": "participating",
+  "championship": {
+    "name": "Mistrovství",
+    "startsAt": "02.07.26",
+    "endsAt": "24.09.26",
+    "diamondLeagueTopRankReward": {
+      "playerRewards": [
+        {
+          "type": "consumable",
+          "subType": "fragment",
+          "amount": 3000,
+          "id": "fragment#selection_kit_GBG26E#3000",
+          "name": "3000 částí předmětu Výběrová sada Parního depa",
+          "description": "Získej dostatečné množství částí k sestavení Výběrová sada Parního depa",
+          "iconAssetName": "icon_fragment",
+          "flags": [],
+          "boostValue": 1.0,
+          "assembledReward": {
+            "type": "consumable",
+            "subType": "selection_kit",
+            "amount": 1,
+            "id": "selection_kit_GBG26E",
+            "name": "Výběrová sada Parního depa",
+            "description": "Vyber si mezi vylepšením nebo základní budovou Parního depa",
+            "iconAssetName": "selection_kit_GBG26E",
+            "flags": [
+              "epic"
+            ],
+            "boostValue": 1.0,
+            "__class__": "GenericReward"
+          },
+          "requiredAmount": 7500,
+          "__class__": "FragmentReward"
+        },
+        {
+          "type": "consumable",
+          "subType": "fragment",
+          "amount": 1500,
+          "id": "fragment#selection_kit_GBG26F#1500",
+          "name": "1500 částí předmětu Výběrová sada Kolejové houfnice",
+          "description": "Získej dostatečné množství částí k sestavení Výběrová sada Kolejové houfnice",
+          "iconAssetName": "icon_fragment",
+          "flags": [],
+          "boostValue": 1.0,
+          "assembledReward": {
+            "type": "consumable",
+            "subType": "selection_kit",
+            "amount": 1,
+            "id": "selection_kit_GBG26F",
+            "name": "Výběrová sada Kolejové houfnice",
+            "description": "Vyber si vylepšení, nebo základní budovu Kolejová houfnice",
+            "iconAssetName": "selection_kit_GBG26F",
+            "flags": [
+              "epic"
+            ],
+            "boostValue": 1.0,
+            "__class__": "GenericReward"
+          },
+          "requiredAmount": 500,
+          "__class__": "FragmentReward"
+        },
+        {
+          "type": "resource",
+          "subType": "gbg_gold_coin",
+          "amount": 50000,
+          "id": "resource#gbg_gold_coin#50000",
+          "name": "50 000 Zlaté bitevní mince",
+          "description": "Sbírejte zlaté mince jako odměnu v cechovních bitvách. Tato měna nemá omezenou platnost.",
+          "iconAssetName": "gbg_gold_coin",
+          "flags": [],
+          "boostValue": 1.0,
+          "__class__": "GenericReward"
+        },
+        {
+          "type": "resource",
+          "subType": "gbg_platinum_coin",
+          "amount": 25000,
+          "id": "resource#gbg_platinum_coin#25000",
+          "name": "25 000 Platinové bitevní mince",
+          "description": "Sbírejte platinové mince jako odměnu v cechovních bitvách. Tato měna nemá omezenou platnost.",
+          "iconAssetName": "gbg_platinum_coin",
+          "flags": [],
+          "boostValue": 1.0,
+          "__class__": "GenericReward"
+        }
+      ],
+      "guildReward": {
+        "guildPower": 546000,
+        "__class__": "GuildBattlegroundLeaderboardGuildReward"
+      },
+      "__class__": "GuildBattlegroundLeaderboardReward"
+    },
+    "__class__": "BattlegroundChampionship"
+  },
+  "__class__": "GuildBattlegroundState"
+}
