@@ -100,24 +100,61 @@ def connect_and_run(endpoint: str, x: float, y: float, *, key: str | None = None
         return _go(p.chromium.connect_over_cdp(endpoint))
 
 
+_PROBE_JS = (
+    "() => { if (window.__bapProbe) return; window.__bapProbe = 1;"
+    " document.addEventListener('click',"
+    " e => console.log('BAPCLICK ' + Math.round(e.clientX) + ' ' + Math.round(e.clientY)),"
+    " true); }")
+
+
 def probe_coordinate(endpoint: str, *, connect=None) -> int:  # pragma: no cover - live glue
-    """Scan the fixed coordinate: attach a click listener to the Forge page and print the
-    **viewport (CSS) coordinate** of each real click you make, so you can read off the
-    action button's fixed (x, y) and hardcode it. Read-only measurement — it does not click."""
+    """Scan the fixed coordinate: on every Forge page, log the **viewport (CSS) coordinate**
+    of each real click you make (via console, robust to page reloads), so you can read off
+    the action button's fixed (x, y) and hardcode it. Read-only — it does not click."""
+    def _on_console(msg) -> None:
+        try:
+            text = msg.text if hasattr(msg, "text") else str(msg)
+            if text.startswith("BAPCLICK "):
+                _, x, y = text.split()
+                print(f"  → click at   --x {x} --y {y}", flush=True)
+        except Exception:
+            pass
+
+    def _arm(page) -> None:
+        try:
+            page.on("console", _on_console)
+            page.evaluate(_PROBE_JS)
+        except Exception:
+            pass  # a page that won't take the listener is skipped, not fatal
+
     def _go(browser) -> int:
-        page = _find_game_page(browser)
-        if page is None:
-            raise RuntimeError("no Forge page found")
-        page.expose_function(
-            "__bapReportClick",
-            lambda x, y: print(f"  viewport click at  --x {round(x)} --y {round(y)}", flush=True))
-        page.evaluate("() => document.addEventListener('click',"
-                      " e => window.__bapReportClick(e.clientX, e.clientY), true)")
+        armed = False
+        for ctx in browser.contexts:
+            for page in ctx.pages:
+                if "forgeofempires" in (getattr(page, "url", "") or ""):
+                    _arm(page); armed = True
+            try:
+                ctx.on("page", _arm)          # cover tabs opened later
+            except Exception:
+                pass
+        if not armed:  # fall back to arming every page if host match found nothing
+            for ctx in browser.contexts:
+                for page in ctx.pages:
+                    _arm(page)
         print("Click the action button in the game to read its coordinate (Ctrl-C to stop).",
               flush=True)
         try:
             while True:
-                page.wait_for_timeout(1000)
+                # survive a page/target closing or reloading — just keep waiting
+                pages = [p for c in browser.contexts for p in c.pages]
+                waited = False
+                for p in pages:
+                    try:
+                        p.wait_for_timeout(1000); waited = True; break
+                    except Exception:
+                        continue
+                if not waited:
+                    time.sleep(1)
         except KeyboardInterrupt:
             return 0
 
