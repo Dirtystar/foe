@@ -25,6 +25,7 @@ def test_console_scripts_declared(project):
         "bap", "bap-run", "bap-gui", "bap-forge-label", "bap-forge-review",
         "bap-forge-collect", "bap-gbg", "bap-gbg-live", "bap-forge-click",
         "bap-forge-autoplay", "bap-forge-farm", "bap-forge-calibrate",
+        "bap-forge-verify",
     }
 
 
@@ -43,6 +44,7 @@ def test_console_scripts_declared(project):
         ("bap-forge-autoplay", "bap.forge.action.autoplay:main"),
         ("bap-forge-farm", "bap.forge.action.round_robin:main"),
         ("bap-forge-calibrate", "bap.forge.action.calibrate:main"),
+        ("bap-forge-verify", "bap.forge.action.navigate:main"),
     ],
 )
 def test_console_script_targets_resolve(project, name, target):

@@ -35,6 +35,7 @@ bap-forge-click = "bap.forge.action.cdp_click:main"
 bap-forge-autoplay = "bap.forge.action.autoplay:main"
 bap-forge-farm = "bap.forge.action.round_robin:main"
 bap-forge-calibrate = "bap.forge.action.calibrate:main"
+bap-forge-verify = "bap.forge.action.navigate:main"
 
 [project.optional-dependencies]
 # Real vision analyzers (OCR + template matching).
