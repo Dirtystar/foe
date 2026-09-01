@@ -35,22 +35,25 @@ bap-forge-autoplay --tab cz6 --x 1145 --y 788 --max-attrition 50
 # fights cz6 until attrition hits 50, then stops. --max-clicks caps it hard.
 ```
 
-## Attrition source — local counting from a baseline (robust)
+## Attrition is NOT the fight count (corrected)
 
-Live `attrition` rides on `getBattleground`, which the game sends mainly when GBG is
-*opened* — not while you sit on the fight screen — so a live-only gate can stall with
-`attrition_unknown`. Since **attrition rises exactly +1 per successful fight** (confirmed
-from FoE's own docs), the loop instead tracks it two ways and gates on the **higher**:
-
-- a **local count** from `--attrition-now <your current attrition>` (`start + fights`), and
-- the **live reading** when it does arrive (corrects/《overrides if it jumps faster).
-
-So `--attrition-now 70 --max-attrition 80` fights exactly 10 times and stops — no dependence
-on when the game sends data. With neither a baseline nor live data, it fail-safe stops.
+An earlier version estimated attrition as `start + fights` (+1 per fight, from a misleading
+doc). **That is wrong** — corrected by the operator, who plays: fighting a province marked
+X% gives an **X% chance** of +1 attrition per fight, so a limit of 50 can mean *hundreds* of
+fights. **The only correct gate is the real `attrition_level` read live from the game.** The
+loop reads it before every fight; if live attrition is unavailable it **fail-safe stops**
+(never estimates, never fights blind). The `--live` listener is therefore essential, not
+optional, and `--max-clicks` is a hard pojistka for a 0%-ish province that never accrues.
 
 ```
-bap-forge-autoplay --tab cz6 --x 1145 --y 788 --attrition-now 70 --max-attrition 80
+bap-forge-autoplay --tab cz6 --x 1145 --y 788 --max-attrition 50   # stops at REAL attrition 50
+bap-forge-autoplay ... --debug     # print which /game/json methods + attrition changes arrive
 ```
+
+**Open dependency:** attrition must update *during fighting*. `getBattleground` (its known
+carrier) fires mainly on GBG open. Whether a battle response also carries it is being
+confirmed with a live `--debug` run / a fighting HAR; until then run with a conservative
+`--max-clicks` and watch the printed `attrition → N`.
 
 ## Honest caveats
 

@@ -1,15 +1,20 @@
-"""Gated autoplay — fight (click + repeat key) until the player's attrition reaches a limit.
+"""Gated autoplay — fight (click + repeat key) until the player's **real** attrition reaches
+a limit.
 
-This joins the two halves: the **brain** (live `/game/json` reader → the player's
-`attrition_level`) and the **hand** (CDP click on the fight button). The safety gate is the
-project invariant made concrete: **before every fight, read the current attrition; if it has
-reached the limit, STOP.** A province runs out of fights on its own; attrition is the ceiling.
+This joins the **brain** (live `/game/json` reader → the player's `attrition_level`) and the
+**hand** (CDP click on the fight button). The gate is the project invariant made concrete:
+**before every fight, read the current attrition; if it has reached the limit, STOP.**
+
+Important domain fact (from the operator, who plays): **attrition is not the fight count.**
+Fighting a province marked X% gives an X% *chance* of +1 attrition per fight — so a limit of
+50 can mean hundreds of fights. The only correct gate is the **real** `attrition_level` read
+live from the game; we never estimate it from the click count. If live attrition is not
+available, the loop fail-safe stops rather than fight blind.
 
 Layers, separated for testability:
 
-- :func:`run_autoplay_loop` — pure loop. Given a clicker and a ``get_attrition()`` callable,
-  it fights while attrition is below the limit, with a hard ``max_clicks`` cap and an
-  ``attrition-unknown → stop`` fail-safe. Fully unit-tested, no browser.
+- :func:`run_autoplay_loop` — pure loop over a ``get_attrition()`` callable (the live value).
+  Fully unit-tested, no browser.
 - :func:`run_autoplay` / :func:`main` — live glue: one CDP connection carrying both the
   `/game/json` reader (attrition source) and the clicker, on the chosen tab. ``no-cover``.
 
@@ -35,44 +40,30 @@ class AutoplayResult:
     reason: str          # "attrition_limit" | "attrition_unknown" | "max_clicks" | "stopped"
 
 
-def _effective_attrition(live, start_attrition, fights):
-    """The attrition we gate on: the live reading and the locally-counted value
-    (``start + fights``, since attrition rises +1 per fight), whichever is higher — so a
-    missing live feed still gates, and a faster-than-expected live value wins. ``None`` only
-    when we have neither."""
-    counted = None if start_attrition is None else start_attrition + fights
-    if live is None:
-        return counted
-    if counted is None:
-        return live
-    return max(live, counted)
-
-
 def run_autoplay_loop(clicker, get_attrition, x: float, y: float, *,
-                      max_attrition: int, start_attrition: int | None = None,
-                      max_clicks: int = 500, key: str | None = "r",
+                      max_attrition: int, max_clicks: int = 1000, key: str | None = "r",
                       interval: float = 0.15, sleep=time.sleep,
                       should_stop=None) -> AutoplayResult:
-    """Fight at (x, y) while attrition stays below ``max_attrition``.
+    """Fight at (x, y) while the **live** attrition stays below ``max_attrition``.
 
-    Attrition is tracked two ways and the **higher** gates (see :func:`_effective_attrition`):
-    a live reading from ``get_attrition()`` (may be ``None`` if the game hasn't sent state),
-    and a local count from ``start_attrition`` (+1 per fight). Before each fight:
-    - effective ``>= max_attrition`` → STOP (never fights at/over the limit → hard ceiling);
-    - effective ``None`` (no baseline *and* no live data) → STOP — fail-safe, never blind.
-    ``max_clicks`` is a hard pojistka. ``sleep`` must pump live events in the real run."""
+    Before each fight the current attrition is read via ``get_attrition()`` (the real value
+    from the game):
+    - ``>= max_attrition`` → STOP (never fights at/over the limit);
+    - ``None`` (no live reading) → STOP — fail-safe, never fight blind.
+    ``max_clicks`` is a hard pojistka. ``sleep`` must pump live events in the real run so the
+    reading refreshes between fights."""
     fights = 0
     reason = "max_clicks"
-    effective = _effective_attrition(None, start_attrition, 0)
+    att = None
     for _ in range(max(0, max_clicks)):
         if should_stop is not None and should_stop():
             reason = "stopped"
             break
-        effective = _effective_attrition(get_attrition(), start_attrition, fights)
-        if effective is None:
+        att = get_attrition()
+        if att is None:
             reason = "attrition_unknown"
             break
-        if effective >= max_attrition:
+        if att >= max_attrition:
             reason = "attrition_limit"
             break
         clicker.click_xy(x, y)
@@ -81,18 +72,16 @@ def run_autoplay_loop(clicker, get_attrition, x: float, y: float, *,
             sleep(interval)
             clicker.press(key)
         sleep(interval)
-    return AutoplayResult(fights=fights, final_attrition=effective, reason=reason)
+    return AutoplayResult(fights=fights, final_attrition=att, reason=reason)
 
 
 def run_autoplay(endpoint: str, x: float, y: float, *, max_attrition: int,
-                 start_attrition: int | None = None, max_clicks: int = 500,
-                 key: str | None = "r", interval: float = 0.15, live_correct: bool = False,
-                 index=None, match=None, connect=None,
-                 startup_timeout_s: float = 8.0) -> AutoplayResult:  # pragma: no cover - live
-    """Connect over CDP, pick the tab, and run the gated loop. The gate uses local counting
-    from ``start_attrition`` (reliable, +1/fight). ``live_correct`` additionally watches
-    `/game/json` to correct the count from real data — off by default because reading
-    response bodies inside sync event callbacks is fragile (teardown noise)."""
+                 max_clicks: int = 1000, key: str | None = "r", interval: float = 0.15,
+                 index=None, match=None, debug: bool = False, connect=None,
+                 startup_timeout_s: float = 12.0) -> AutoplayResult:  # pragma: no cover - live
+    """Connect over CDP, wire the `/game/json` reader + clicker on the chosen tab, wait for the
+    first real attrition reading, then run the gated loop. The live listener is essential —
+    attrition can only come from the game. Read+act on one connection."""
     def _go(browser) -> AutoplayResult:
         page = _select_page(browser, index=index, match=match)
         try:
@@ -101,50 +90,65 @@ def run_autoplay(endpoint: str, x: float, y: float, *, max_attrition: int,
             pass
 
         reader = LiveGbgReader()
-        _resp = None
-        if live_correct:
-            handler = make_response_handler(reader)
+        feed = make_response_handler(reader)
+        last = {"att": None, "methods": set()}
 
-            def _resp(resp):  # best-effort; swallow even BaseException (CancelledError on teardown)
-                try:
-                    if "/game/json" in (getattr(resp, "url", "") or ""):
-                        handler(resp)
-                except BaseException:
-                    pass
-            page.on("response", _resp)
+        def _resp(resp):   # best-effort; swallow BaseException (CancelledError on teardown)
+            try:
+                url = getattr(resp, "url", "") or ""
+                if "/game/json" not in url:
+                    return
+                if debug:
+                    try:
+                        import json as _j
+                        for r in _j.loads(resp.text()):
+                            m = f"{r.get('requestClass')}.{r.get('requestMethod')}"
+                            if m not in last["methods"]:
+                                last["methods"].add(m)
+                                print(f"    [debug] saw {m}", flush=True)
+                    except BaseException:
+                        pass
+                feed(resp)
+                a = reader.snapshot.player.attrition_level if reader.snapshot else None
+                if a is not None and a != last["att"]:
+                    last["att"] = a
+                    print(f"    attrition → {a}", flush=True)
+            except BaseException:
+                pass
+        page.on("response", _resp)
 
         def _wait(ms):
             page.wait_for_timeout(ms * 1000)
 
         def _attrition():
-            if not live_correct:
-                return None
             bg = reader.snapshot
             return bg.player.attrition_level if bg and bg.player else None
 
         print(f"Target tab: {page.url}", flush=True)
-        if start_attrition is None and live_correct:
-            print("No --attrition-now; waiting briefly for live state (open GBG to trigger)…",
+        print("Waiting for the game to send attrition… (open/refresh GBG to trigger it)",
+              flush=True)
+        deadline = time.time() + startup_timeout_s
+        while _attrition() is None and time.time() < deadline:
+            page.wait_for_timeout(500)
+        if _attrition() is None:
+            print("No live attrition arrived — refusing to fight blind. Open the GBG map so "
+                  "the game sends state, then re-run. (Use --debug to see what it sends.)",
                   flush=True)
-            deadline = time.time() + startup_timeout_s
-            while _attrition() is None and time.time() < deadline:
-                page.wait_for_timeout(500)
-        if start_attrition is None and _attrition() is None:
-            print("No attrition baseline. Re-run with --attrition-now N (your current "
-                  "attrition) so it can count locally.", flush=True)
+            try:
+                page.remove_listener("response", _resp)
+            except Exception:
+                pass
             return AutoplayResult(0, None, "attrition_unknown")
-        eff0 = _effective_attrition(_attrition(), start_attrition, 0)
-        print(f"Starting attrition {eff0}, limit {max_attrition}. Fighting…", flush=True)
+        print(f"Attrition now {_attrition()}, limit {max_attrition}. Fighting…", flush=True)
         try:
             return run_autoplay_loop(CdpClicker(page), _attrition, x, y,
-                                     max_attrition=max_attrition, start_attrition=start_attrition,
-                                     max_clicks=max_clicks, key=key, interval=interval, sleep=_wait)
+                                     max_attrition=max_attrition, max_clicks=max_clicks,
+                                     key=key, interval=interval, sleep=_wait)
         finally:
-            if _resp is not None:
-                try:
-                    page.remove_listener("response", _resp)   # quiet teardown
-                except Exception:
-                    pass
+            try:
+                page.remove_listener("response", _resp)
+            except Exception:
+                pass
 
     if connect is not None:
         return _go(connect(endpoint))
@@ -160,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wiring
 
     ap = argparse.ArgumentParser(
         prog="bap-forge-autoplay",
-        description="Fight on a Forge tab until attrition reaches a limit (CDP, gated).")
+        description="Fight on a Forge tab until the real attrition reaches a limit (CDP, gated).")
     ap.add_argument("--cdp", default=DEFAULT_CDP_ENDPOINT, help="Chrome CDP endpoint")
     ap.add_argument("--tab", default=None, help="target tab: url/title contains this text")
     ap.add_argument("--tab-index", type=int, default=None, dest="tab_index",
@@ -168,15 +172,13 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--x", type=float, required=True, help="fight-button viewport X (CSS px)")
     ap.add_argument("--y", type=float, required=True, help="fight-button viewport Y (CSS px)")
     ap.add_argument("--max-attrition", type=int, required=True, dest="max_attrition",
-                    help="stop when the player's attrition reaches this")
-    ap.add_argument("--attrition-now", type=int, default=None, dest="attrition_now",
-                    help="your current attrition (baseline for local counting; recommended)")
-    ap.add_argument("--max-clicks", type=int, default=500, dest="max_clicks",
-                    help="hard safety cap on fights (default 500)")
+                    help="stop when the real attrition reaches this")
+    ap.add_argument("--max-clicks", type=int, default=1000, dest="max_clicks",
+                    help="hard safety cap on fights (default 1000)")
     ap.add_argument("--key", default="r", help="repeat key pressed after each click (default r)")
     ap.add_argument("--interval", type=float, default=0.15, help="seconds between actions")
-    ap.add_argument("--live-correct", action="store_true", dest="live_correct",
-                    help="also read /game/json to correct the count (experimental)")
+    ap.add_argument("--debug", action="store_true",
+                    help="print the /game/json methods and attrition changes seen")
     ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     args = ap.parse_args(argv)
 
@@ -191,9 +193,8 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wiring
             print("no confirmation (non-interactive) — pass --yes."); return 1
     try:
         r = run_autoplay(args.cdp, args.x, args.y, max_attrition=args.max_attrition,
-                         start_attrition=args.attrition_now, max_clicks=args.max_clicks,
-                         key=args.key, interval=args.interval, live_correct=args.live_correct,
-                         index=args.tab_index, match=args.tab)
+                         max_clicks=args.max_clicks, key=args.key, interval=args.interval,
+                         index=args.tab_index, match=args.tab, debug=args.debug)
         print(f"stopped — {r.fights} fight(s), attrition {r.final_attrition}, reason: {r.reason}")
         return 0
     except Exception as exc:  # noqa: BLE001
