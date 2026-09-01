@@ -86,47 +86,65 @@ def run_autoplay_loop(clicker, get_attrition, x: float, y: float, *,
 
 def run_autoplay(endpoint: str, x: float, y: float, *, max_attrition: int,
                  start_attrition: int | None = None, max_clicks: int = 500,
-                 key: str | None = "r", interval: float = 0.15,
+                 key: str | None = "r", interval: float = 0.15, live_correct: bool = False,
                  index=None, match=None, connect=None,
                  startup_timeout_s: float = 8.0) -> AutoplayResult:  # pragma: no cover - live
-    """Connect over CDP, wire the `/game/json` reader + clicker on the chosen tab, and run the
-    gated loop. If ``start_attrition`` is given, the loop counts locally from it and starts
-    immediately (live data only corrects); otherwise it briefly waits for a live baseline."""
+    """Connect over CDP, pick the tab, and run the gated loop. The gate uses local counting
+    from ``start_attrition`` (reliable, +1/fight). ``live_correct`` additionally watches
+    `/game/json` to correct the count from real data — off by default because reading
+    response bodies inside sync event callbacks is fragile (teardown noise)."""
     def _go(browser) -> AutoplayResult:
         page = _select_page(browser, index=index, match=match)
         try:
             page.bring_to_front()
         except Exception:
             pass
-        reader = LiveGbgReader()
-        handler = make_response_handler(reader)
-        page.on("response", lambda resp: handler(resp)
-                if "/game/json" in getattr(resp, "url", "") else None)
 
-        def _wait(ms):  # pump Playwright events (so live responses arrive) while pacing
+        reader = LiveGbgReader()
+        _resp = None
+        if live_correct:
+            handler = make_response_handler(reader)
+
+            def _resp(resp):  # best-effort; swallow even BaseException (CancelledError on teardown)
+                try:
+                    if "/game/json" in (getattr(resp, "url", "") or ""):
+                        handler(resp)
+                except BaseException:
+                    pass
+            page.on("response", _resp)
+
+        def _wait(ms):
             page.wait_for_timeout(ms * 1000)
 
         def _attrition():
+            if not live_correct:
+                return None
             bg = reader.snapshot
             return bg.player.attrition_level if bg and bg.player else None
 
         print(f"Target tab: {page.url}", flush=True)
-        if start_attrition is None:
-            # no baseline given — briefly hope the game sends state (open GBG to trigger it)
-            print("No --attrition-now given; waiting briefly for the game to send state…",
+        if start_attrition is None and live_correct:
+            print("No --attrition-now; waiting briefly for live state (open GBG to trigger)…",
                   flush=True)
             deadline = time.time() + startup_timeout_s
             while _attrition() is None and time.time() < deadline:
                 page.wait_for_timeout(500)
-            if _attrition() is None:
-                print("No attrition data arrived. Re-run with --attrition-now N "
-                      "(your current attrition) so it can count locally.", flush=True)
-                return AutoplayResult(0, None, "attrition_unknown")
+        if start_attrition is None and _attrition() is None:
+            print("No attrition baseline. Re-run with --attrition-now N (your current "
+                  "attrition) so it can count locally.", flush=True)
+            return AutoplayResult(0, None, "attrition_unknown")
         eff0 = _effective_attrition(_attrition(), start_attrition, 0)
         print(f"Starting attrition {eff0}, limit {max_attrition}. Fighting…", flush=True)
-        return run_autoplay_loop(CdpClicker(page), _attrition, x, y,
-                                 max_attrition=max_attrition, start_attrition=start_attrition,
-                                 max_clicks=max_clicks, key=key, interval=interval, sleep=_wait)
+        try:
+            return run_autoplay_loop(CdpClicker(page), _attrition, x, y,
+                                     max_attrition=max_attrition, start_attrition=start_attrition,
+                                     max_clicks=max_clicks, key=key, interval=interval, sleep=_wait)
+        finally:
+            if _resp is not None:
+                try:
+                    page.remove_listener("response", _resp)   # quiet teardown
+                except Exception:
+                    pass
 
     if connect is not None:
         return _go(connect(endpoint))
@@ -157,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wiring
                     help="hard safety cap on fights (default 500)")
     ap.add_argument("--key", default="r", help="repeat key pressed after each click (default r)")
     ap.add_argument("--interval", type=float, default=0.15, help="seconds between actions")
+    ap.add_argument("--live-correct", action="store_true", dest="live_correct",
+                    help="also read /game/json to correct the count (experimental)")
     ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     args = ap.parse_args(argv)
 
@@ -172,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wiring
     try:
         r = run_autoplay(args.cdp, args.x, args.y, max_attrition=args.max_attrition,
                          start_attrition=args.attrition_now, max_clicks=args.max_clicks,
-                         key=args.key, interval=args.interval,
+                         key=args.key, interval=args.interval, live_correct=args.live_correct,
                          index=args.tab_index, match=args.tab)
         print(f"stopped — {r.fights} fight(s), attrition {r.final_attrition}, reason: {r.reason}")
         return 0

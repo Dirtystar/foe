@@ -79,7 +79,9 @@ def make_response_handler(reader: LiveGbgReader, on_update=None):
             if not _looks_like_game_json(getattr(resp, "url", "")):
                 return
             body = resp.text()
-        except Exception:
+        except BaseException:
+            # includes asyncio.CancelledError (a BaseException) raised when the
+            # connection tears down mid-read — best-effort telemetry, swallow it.
             return
         if reader.feed(body) and on_update is not None:
             on_update(reader)
