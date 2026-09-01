@@ -51,11 +51,13 @@ def _fetch_map_layout(page, *, debug=False):  # pragma: no cover - live glue
 
 
 DEFAULT_STORE = "gbg_calibration.json"
+# Re-armable click probe: remove any previous handler and add a fresh one, so re-running it
+# each loop re-attaches the listener if the game re-rendered the DOM and dropped it.
 _PROBE_JS = (
-    "() => { if (window.__bapCal) return; window.__bapCal = 1;"
-    " document.addEventListener('click',"
-    " e => console.log('BAPCLICK ' + Math.round(e.clientX) + ' ' + Math.round(e.clientY)),"
-    " true); }")
+    "() => { if (window.__bapClick) document.removeEventListener('click', window.__bapClick, true);"
+    " window.__bapClick = e => console.log('BAPCLICK ' + Math.round(e.clientX) + ' '"
+    " + Math.round(e.clientY));"
+    " document.addEventListener('click', window.__bapClick, true); }")
 
 
 def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_STORE,
@@ -146,6 +148,10 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
         seen = 0
         while not collector.done and time.time() < deadline:
             page.wait_for_timeout(300)
+            try:
+                page.evaluate(_PROBE_JS)     # re-arm in case the game dropped our listener
+            except Exception:
+                pass
             if len(collector.samples) != seen:
                 seen = len(collector.samples)
                 s = collector.samples[-1]
