@@ -1,0 +1,27 @@
+{
+  "_comment": "Per-world autoplay config for `bap-forge-farm --config worlds.json`. One entry per world tab. This is the shape the future GUI will read/write.",
+  "worlds": [
+    {
+      "name": "cz6",
+      "tab": "cz6",
+      "x": 1145,
+      "y": 788,
+      "max_attrition": 50,
+      "key": "r"
+    },
+    {
+      "name": "cz8",
+      "tab": "cz8",
+      "x": 1145,
+      "y": 788,
+      "max_attrition": 80
+    },
+    {
+      "name": "cz2",
+      "tab": "cz2",
+      "x": 1145,
+      "y": 788,
+      "max_attrition": 99999
+    }
+  ]
+}
