@@ -125,9 +125,19 @@ def run_round_robin(worlds, fight_once, get_attrition, *, burst: int = 25,
     return status
 
 
+def _loads_lenient(text: str):
+    """json.loads, but tolerant of a common hand-edit slip: trailing commas before a
+    closing } or ]. (A GUI will remove the need to hand-edit; until then, be forgiving.)"""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        import re
+        return json.loads(re.sub(r",(\s*[}\]])", r"\1", text))
+
+
 def load_world_plans(path) -> list:
     """Read `{"worlds": [{name, x, y, max_attrition?, tab?, tab_index?, key?}, …]}`."""
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = _loads_lenient(Path(path).read_text(encoding="utf-8"))
     out = []
     for w in data.get("worlds", []):
         out.append(WorldPlan(

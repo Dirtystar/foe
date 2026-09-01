@@ -106,6 +106,19 @@ def test_load_world_plans(tmp_path):
     assert worlds[1].max_attrition == UNLIMITED and worlds[1].key == "r"
 
 
+def test_load_world_plans_tolerates_trailing_commas(tmp_path):
+    # a common hand-edit slip — trailing commas before } and ]
+    cfg = tmp_path / "worlds.json"
+    cfg.write_text(
+        '{"worlds": [\n'
+        '  {"name": "cz7", "tab": "cz7", "x": 1145, "y": 788, "max_attrition": 10,},\n'
+        '  {"name": "cz5", "tab": "cz5", "x": 1145, "y": 788, "max_attrition": 10,},\n'
+        ']}\n')
+    worlds = load_world_plans(cfg)
+    assert [w.name for w in worlds] == ["cz7", "cz5"]
+    assert worlds[0].max_attrition == 10
+
+
 def test_load_world_plans_empty_is_error(tmp_path):
     cfg = tmp_path / "empty.json"
     cfg.write_text(json.dumps({"worlds": []}))
