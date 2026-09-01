@@ -88,15 +88,18 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
                 import json as _j
                 pid = parse_province_id_from_game_json(_j.loads(req.post_data or "[]"))
                 if pid is not None:
+                    print(f"  [debug] province event: {pid}  (last_click={collector._last_click})",
+                          flush=True)
                     collector.on_province(pid)
-            except BaseException:
-                pass
+            except BaseException as exc:
+                print(f"  [debug] request parse error: {exc}", flush=True)
 
         def _on_console(msg):
             try:
                 t = msg.text if hasattr(msg, "text") else str(msg)
                 if t.startswith("BAPCLICK "):
                     _, x, y = t.split()
+                    print(f"  [debug] click ({x},{y})", flush=True)
                     collector.on_click(int(x), int(y))
             except BaseException:
                 pass
