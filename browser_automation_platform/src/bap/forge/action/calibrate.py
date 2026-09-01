@@ -15,12 +15,30 @@ from __future__ import annotations
 
 import time
 
+import json
+
 from bap.forge.gbg_data.calibration import (
     CalibrationCollector,
     load_calibration,
     save_calibration,
     solve_transform,
 )
+from bap.forge.gbg_data.map_layout import parse_map_data
+
+
+def _fetch_map_layout(page):  # pragma: no cover - live glue
+    """Get the map/data asset even if it's served from cache: read its URL from the page's
+    performance resource list, then fetch its body in the page context."""
+    try:
+        urls = page.evaluate(
+            "() => performance.getEntriesByType('resource').map(e => e.name)"
+            ".filter(n => n.includes('/map/data'))")
+        if not urls:
+            return None
+        body = page.evaluate("(u) => fetch(u).then(r => r.text())", urls[0])
+        return parse_map_data(json.loads(body))
+    except Exception:
+        return None
 
 
 DEFAULT_STORE = "gbg_calibration.json"
@@ -83,15 +101,21 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
             pass
 
         print(f"Calibrating world {world} on {page.url}", flush=True)
-        print("Open the GBG map so the layout loads…", flush=True)
-        deadline = time.time() + 30
-        while reader.map_layout is None and time.time() < deadline:
+        print("Make sure you're on the GBG map, then wait…", flush=True)
+        # Fetch the map/data asset directly (works even from browser cache); fall back to
+        # passively waiting for it on the wire.
+        layout = _fetch_map_layout(page)
+        deadline = time.time() + 20
+        while layout is None and reader.map_layout is None and time.time() < deadline:
             page.wait_for_timeout(500)
-        if reader.map_layout is None:
-            print("No map layout seen — reload the GBG map, then re-run.", flush=True)
+            layout = _fetch_map_layout(page)
+        layout = layout or reader.map_layout
+        if layout is None:
+            print("Couldn't read the map layout — open the GBG map (reload it) and re-run.",
+                  flush=True)
             return None
         map_id = reader.snapshot.map_id if reader.snapshot else None
-        print(f"Map loaded ({len(reader.map_layout.flags)} provinces, id={map_id}).", flush=True)
+        print(f"Map loaded ({len(layout.flags)} provinces, id={map_id}).", flush=True)
         print("\nNow OPEN two different provinces (click the province, then Attack). "
               "Click the FIRST province's flag first.", flush=True)
 
@@ -110,7 +134,7 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
 
         a, b = collector.samples[0], collector.samples[1]
         try:
-            transform = solve_transform(reader.map_layout, a, b)
+            transform = solve_transform(layout, a, b)
         except ValueError as exc:
             print(f"Could not solve: {exc}. Pick provinces further apart and retry.", flush=True)
             return None
