@@ -22,6 +22,7 @@ import logging
 from datetime import datetime, timezone
 
 from bap.forge.gbg_data.advisor import TargetSuggestion, rank_targets
+from bap.forge.gbg_data.map_layout import parse_map_data
 from bap.forge.gbg_data.model import Battleground, PlayerState
 from bap.forge.gbg_data.parser import parse, parse_player_from_game_json
 
@@ -40,11 +41,17 @@ class LiveGbgReader:
     def __init__(self) -> None:
         self._bg: Battleground | None = None
         self._player: PlayerState | None = None
+        self._layout = None                    # MapLayout, captured from the map/data asset
         self._updates = 0
 
     @property
     def snapshot(self) -> Battleground | None:
         return self._bg
+
+    @property
+    def map_layout(self):
+        """The map's province-flag layout, once the map/data asset has been seen."""
+        return self._layout
 
     @property
     def update_count(self) -> int:
@@ -78,6 +85,10 @@ class LiveGbgReader:
         if player is not None and player.attrition_level is not None:
             self._player = player
             updated = True
+        layout = parse_map_data(obj)           # the static map/data asset (province flags)
+        if layout is not None:
+            self._layout = layout
+            updated = True
         if updated:
             self._updates += 1
         return updated
@@ -89,13 +100,14 @@ class LiveGbgReader:
 
 
 def _looks_like_game_json(url: str) -> bool:
-    return _GAME_JSON in url
+    # /game/json = live state; /map/data = the static province-flag layout asset
+    return _GAME_JSON in url or "/map/data" in url
 
 
 def make_response_handler(reader: LiveGbgReader, on_update=None):
-    """Build the ``response`` event handler: filter to ``/game/json``, read the body, feed
-    the reader, and call ``on_update(reader)`` on a real snapshot update. Never raises — a
-    body it can't read is skipped. Extracted so it can be tested without a browser."""
+    """Build the ``response`` event handler: filter to the game's data URLs, read the body,
+    feed the reader, and call ``on_update(reader)`` on a real update. Never raises — a body
+    it can't read is skipped. Extracted so it can be tested without a browser."""
     def _handle(resp) -> None:
         try:
             if not _looks_like_game_json(getattr(resp, "url", "")):

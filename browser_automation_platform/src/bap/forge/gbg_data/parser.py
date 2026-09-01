@@ -189,5 +189,40 @@ def parse(obj, *, observed_at: str | None = None) -> Battleground | None:
     return None
 
 
+def _find_key(obj, key):
+    """Depth-first search for the first value of ``key`` in nested dicts/lists."""
+    if isinstance(obj, dict):
+        if key in obj:
+            return obj[key]
+        for v in obj.values():
+            found = _find_key(v, key)
+            if found is not None:
+                return found
+    elif isinstance(obj, list):
+        for v in obj:
+            found = _find_key(v, key)
+            if found is not None:
+                return found
+    return None
+
+
+def parse_province_id_from_game_json(batch):
+    """The `provinceId` referenced by a `/game/json` **request** batch — e.g. opening a
+    province fires `ArmyUnitManagementService.getArmyInfo` with a `BattlegroundArmyContext`
+    carrying `provinceId`. Used to learn *which* province a click opened (for calibration).
+    Returns the id, or None."""
+    if not isinstance(batch, list):
+        return None
+    for r in batch:
+        if not isinstance(r, dict):
+            continue
+        pid = _as_int(_find_key(r.get("requestData"), "provinceId"))
+        if pid is not None:
+            return pid
+    # also accept a bare object carrying provinceId anywhere
+    return _as_int(_find_key(batch, "provinceId"))
+
+
 __all__ = ["parse", "parse_battleground", "parse_game_json",
-           "parse_player_participant", "parse_player_from_game_json"]
+           "parse_player_participant", "parse_player_from_game_json",
+           "parse_province_id_from_game_json"]
