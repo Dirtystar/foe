@@ -111,3 +111,16 @@ def test_collector_province_without_click_waits():
     c.on_click(10, 20)                   # click after the id — pairs on the next id
     c.on_province(5)
     assert c.done and c.samples[0] == CalibrationSample(5, (10.0, 20.0))
+
+
+def test_collector_dedupes_repeated_province_ids():
+    # one province fires provinceId several times (preview → info → battle); the follow-up
+    # Attack click must NOT become a second sample of the same province
+    c = CalibrationCollector(need=2)
+    c.on_click(1244, 288); c.on_province(20)          # flag click → province 20
+    c.on_click(1143, 798); c.on_province(20)          # Attack click + repeat id → ignored
+    assert len(c.samples) == 1 and not c.done
+    c.on_click(900, 1400); c.on_province(35)          # a genuinely different province
+    assert c.done
+    assert [s.province_id for s in c.samples] == [20, 35]
+    assert c.samples[0].screen == (1244.0, 288.0)     # the flag click, not Attack

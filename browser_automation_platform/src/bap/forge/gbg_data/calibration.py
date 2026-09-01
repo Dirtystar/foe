@@ -49,18 +49,23 @@ class CalibrationCollector:
         self.need = need
         self.samples: list = []
         self._click = None
-        self._pid = None
+        self._captured: set = set()
 
     def on_click(self, x, y) -> None:
         if self._click is None:
             self._click = (float(x), float(y))
 
     def on_province(self, province_id) -> None:
-        self._pid = int(province_id)
-        if self._click is not None:
-            self.samples.append(CalibrationSample(self._pid, self._click))
+        pid = int(province_id)
+        if pid in self._captured:
+            # a province fires provinceId several times (preview → info → battle); keep only
+            # the first sample per province, and drop a stray follow-up click (e.g. Attack).
             self._click = None
-            self._pid = None
+            return
+        if self._click is not None:
+            self.samples.append(CalibrationSample(pid, self._click))
+            self._captured.add(pid)
+            self._click = None
 
     def reset_current(self) -> None:
         self._click = None
