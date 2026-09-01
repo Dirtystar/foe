@@ -23,6 +23,7 @@ vision for that row._
 | B2 | Pick the right tab + bring to front | ✅ | 90 | `--list/--tab/--tab-index` |
 | B3 | **Auto-open a chosen province on the map** | ❌ | 5 | the "where" problem — needs map hitmaps or vision |
 | B4 | Self-heal (reload/restart window on error) | ❌ | 0 | required for all-day unattended |
+| B5 | **Background play (no focus stealing)** | ⏳ | 30 | anti-throttle Chrome flags + `--no-raise`; needs a live confirm that hidden-tab clicks land |
 | **C. Orchestration** | | | **65%** | multi-world rotation landed |
 | C1 | Single-world gated fight loop (stop at real attrition) | ✅ | 100 | proven live |
 | C2 | **Multi-world round-robin** | ✅ | 80 | `bap-forge-farm`, config-driven; live glue needs field-testing |

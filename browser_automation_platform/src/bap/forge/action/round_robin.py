@@ -150,7 +150,7 @@ def load_world_plans(path) -> list:
     return out
 
 
-def run_round_robin_live(endpoint, worlds, *, burst=25, interval=0.15,
+def run_round_robin_live(endpoint, worlds, *, burst=25, interval=0.15, raise_tab=True,
                          startup_timeout_s=12.0, connect=None):  # pragma: no cover - live
     """Rotate the fight loop across the configured world tabs on one CDP connection. Each
     world gets its own `/game/json` reader (attrition source) and is brought to front when
@@ -195,10 +195,11 @@ def run_round_robin_live(endpoint, worlds, *, burst=25, interval=0.15,
 
         def _fight_once(w):
             page = pages[w.name]
-            try:
-                page.bring_to_front()
-            except Exception:
-                pass
+            if raise_tab:
+                try:
+                    page.bring_to_front()   # needed unless Chrome runs anti-throttle flags
+                except Exception:
+                    pass
             clickers[w.name].click_xy(w.x, w.y)
             if w.key:
                 page.wait_for_timeout(int(interval * 1000))
@@ -235,6 +236,9 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--cdp", default=DEFAULT_CDP_ENDPOINT, help="Chrome CDP endpoint")
     ap.add_argument("--burst", type=int, default=25, help="fights per world before rotating")
     ap.add_argument("--interval", type=float, default=0.15, help="seconds between actions")
+    ap.add_argument("--no-raise", action="store_true", dest="no_raise",
+                    help="don't pull tabs to the front (background play; needs Chrome started "
+                         "with the anti-throttle flags — see docs)")
     ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     args = ap.parse_args(argv)
 
@@ -255,7 +259,8 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
         except EOFError:
             print("no confirmation (non-interactive) — pass --yes."); return 1
     try:
-        status = run_round_robin_live(args.cdp, worlds, burst=args.burst, interval=args.interval)
+        status = run_round_robin_live(args.cdp, worlds, burst=args.burst,
+                                      interval=args.interval, raise_tab=not args.no_raise)
         print("\n=== Summary ===")
         for w in worlds:
             st = status[w.name]

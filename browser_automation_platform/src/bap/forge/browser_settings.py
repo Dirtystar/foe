@@ -103,7 +103,13 @@ def windows_launch_command(settings: BrowserSettings, *, profile_dir: str | None
     port = urlparse(settings.cdp_endpoint).port or 9222
     chrome = settings.chrome_path or r"C:\Program Files\Google\Chrome\Application\chrome.exe"
     profile = profile_dir or r"%LOCALAPPDATA%\BAP\chrome-profile"
-    return f'"{chrome}" --remote-debugging-port={port} --user-data-dir="{profile}"'
+    # Anti-throttle flags keep backgrounded/hidden tabs running at full speed so the app can
+    # click them without raising them to the front — the key to unattended background play.
+    anti_throttle = ("--disable-background-timer-throttling "
+                     "--disable-backgrounding-occluded-windows "
+                     "--disable-renderer-backgrounding")
+    return (f'"{chrome}" --remote-debugging-port={port} --user-data-dir="{profile}" '
+            f'{anti_throttle}')
 
 
 __all__ = [
