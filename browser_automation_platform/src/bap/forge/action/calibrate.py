@@ -135,8 +135,9 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
             return None
         map_id = reader.snapshot.map_id if reader.snapshot else None
         print(f"Map loaded ({len(layout.flags)} provinces, id={map_id}).", flush=True)
-        print("\nNow OPEN two different provinces (click the province, then Attack). "
-              "Click the FIRST province's flag first.", flush=True)
+        print("\nNow OPEN two DIFFERENT provinces, far apart on the map. For each: click the "
+              "province, let its battle preview open, then close it (no need to fight).",
+              flush=True)
 
         deadline = time.time() + timeout_s
         seen = 0

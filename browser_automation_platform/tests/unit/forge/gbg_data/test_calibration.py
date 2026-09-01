@@ -92,12 +92,11 @@ def test_load_missing_calibration_is_none(tmp_path):
 
 # --- collector: pair the flag click with the reported provinceId -------------
 
-def test_collector_pairs_first_click_with_province():
+def test_collector_pairs_flag_click_with_province():
     c = CalibrationCollector(need=2)
-    # province A: click the flag (kept), then Attack (ignored), then the game reports 19
-    c.on_click(500, 400); c.on_click(1145, 788); c.on_province(19)
+    # the flag that opens a province is the LAST click before its provinceId request
+    c.on_click(999, 999); c.on_click(500, 400); c.on_province(19)
     assert not c.done and c.samples[-1] == CalibrationSample(19, (500.0, 400.0))
-    # province B
     c.on_click(900, 300); c.on_province(57)
     assert c.done
     assert [s.province_id for s in c.samples] == [19, 57]
