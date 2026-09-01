@@ -26,18 +26,27 @@ from bap.forge.gbg_data.calibration import (
 from bap.forge.gbg_data.map_layout import parse_map_data
 
 
-def _fetch_map_layout(page):  # pragma: no cover - live glue
+def _fetch_map_layout(page, *, debug=False):  # pragma: no cover - live glue
     """Get the map/data asset even if it's served from cache: read its URL from the page's
     performance resource list, then fetch its body in the page context."""
     try:
         urls = page.evaluate(
             "() => performance.getEntriesByType('resource').map(e => e.name)"
             ".filter(n => n.includes('/map/data'))")
+        if debug:
+            print(f"  [debug] map/data URLs in performance: {urls}", flush=True)
         if not urls:
             return None
-        body = page.evaluate("(u) => fetch(u).then(r => r.text())", urls[0])
+        body = page.evaluate("(u) => fetch(u).then(r => r.text()).catch(e => 'ERR:'+e)",
+                             urls[0])
+        if isinstance(body, str) and body.startswith("ERR:"):
+            if debug:
+                print(f"  [debug] fetch failed: {body[:120]}", flush=True)
+            return None
         return parse_map_data(json.loads(body))
-    except Exception:
+    except Exception as exc:
+        if debug:
+            print(f"  [debug] fetch/parse error: {exc}", flush=True)
         return None
 
 
@@ -101,17 +110,27 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
             pass
 
         print(f"Calibrating world {world} on {page.url}", flush=True)
-        print("Make sure you're on the GBG map, then wait…", flush=True)
-        # Fetch the map/data asset directly (works even from browser cache); fall back to
-        # passively waiting for it on the wire.
-        layout = _fetch_map_layout(page)
-        deadline = time.time() + 20
-        while layout is None and reader.map_layout is None and time.time() < deadline:
-            page.wait_for_timeout(500)
-            layout = _fetch_map_layout(page)
-        layout = layout or reader.map_layout
+        print("Make sure you're on the GBG map…", flush=True)
+        # 1) quick try: fetch the asset in-page (works if still in performance + CORS ok)
+        layout = _fetch_map_layout(page, debug=True)
         if layout is None:
-            print("Couldn't read the map layout — open the GBG map (reload it) and re-run.",
+            # 2) robust: disable HTTP cache so the asset re-fetches over the wire (read via
+            #    CDP, no CORS), then ask the user to reopen the GBG map.
+            try:
+                cdp = page.context.new_cdp_session(page)
+                cdp.send("Network.enable")
+                cdp.send("Network.setCacheDisabled", {"cacheDisabled": True})
+            except Exception as exc:
+                print(f"  [debug] could not disable cache: {exc}", flush=True)
+            print("Now REOPEN the GBG map (go to your city and back into GBG) so it reloads…",
+                  flush=True)
+            deadline = time.time() + 90
+            while layout is None and reader.map_layout is None and time.time() < deadline:
+                page.wait_for_timeout(1000)
+                layout = _fetch_map_layout(page)
+            layout = layout or reader.map_layout
+        if layout is None:
+            print("Couldn't read the map layout. Tell Radek what the [debug] lines said.",
                   flush=True)
             return None
         map_id = reader.snapshot.map_id if reader.snapshot else None
