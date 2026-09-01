@@ -21,7 +21,7 @@ vision for that row._
 | **B. Action (hand)** | | | **55%** | click + background play work; navigation missing |
 | B1 | CDP targeted click + key (no mouse hijack) | ✅ | 90 | proven live on cz6 |
 | B2 | Pick the right tab + bring to front | ✅ | 90 | `--list/--tab/--tab-index` |
-| B3 | **Auto-open a chosen province on the map** | ❌ | 5 | the "where" problem — needs map hitmaps or vision |
+| B3 | **Auto-open a chosen province on the map** | ⏳ | 40 | **feasibility confirmed**: `map/data` flags + 2-pt calibration transform + %-allowlist all built & tested; live navigation next |
 | B4 | Self-heal (reload/restart window on error) | ❌ | 0 | required for all-day unattended |
 | B5 | **Background play (no focus stealing)** | ✅ | 85 | **CONFIRMED live** — anti-throttle flags + `--no-raise` fought hidden tabs without stealing focus |
 | **C. Orchestration** | | | **65%** | multi-world rotation landed |

@@ -1,0 +1,504 @@
+{
+ "size": {
+  "width": 2500,
+  "height": 1960
+ },
+ "bgTextures": [
+  {
+   "asset": "volcano_archipelago_bg_0",
+   "x": 0,
+   "y": 0,
+   "width": 2048,
+   "height": 1960
+  },
+  {
+   "asset": "volcano_archipelago_bg_1",
+   "x": 2048,
+   "y": 0,
+   "width": 452,
+   "height": 1960
+  }
+ ],
+ "provinces": [
+  {
+   "id": 0,
+   "asset": "volcano_archipelago_prov_0",
+   "flag": {
+    "x": 1249,
+    "y": 816
+   }
+  },
+  {
+   "id": 1,
+   "asset": "volcano_archipelago_prov_1",
+   "flag": {
+    "x": 1327,
+    "y": 996
+   }
+  },
+  {
+   "id": 2,
+   "asset": "volcano_archipelago_prov_2",
+   "flag": {
+    "x": 1064,
+    "y": 1011
+   }
+  },
+  {
+   "id": 3,
+   "asset": "volcano_archipelago_prov_3",
+   "flag": {
+    "x": 1064,
+    "y": 838
+   }
+  },
+  {
+   "id": 4,
+   "asset": "volcano_archipelago_prov_4",
+   "flag": {
+    "x": 1269,
+    "y": 629
+   }
+  },
+  {
+   "id": 5,
+   "asset": "volcano_archipelago_prov_5",
+   "flag": {
+    "x": 1482,
+    "y": 752
+   }
+  },
+  {
+   "id": 6,
+   "asset": "volcano_archipelago_prov_6",
+   "flag": {
+    "x": 1541,
+    "y": 984
+   }
+  },
+  {
+   "id": 7,
+   "asset": "volcano_archipelago_prov_7",
+   "flag": {
+    "x": 1375,
+    "y": 1197
+   }
+  },
+  {
+   "id": 8,
+   "asset": "volcano_archipelago_prov_8",
+   "flag": {
+    "x": 1052,
+    "y": 1217
+   }
+  },
+  {
+   "id": 9,
+   "asset": "volcano_archipelago_prov_9",
+   "flag": {
+    "x": 878,
+    "y": 1063
+   }
+  },
+  {
+   "id": 10,
+   "asset": "volcano_archipelago_prov_10",
+   "flag": {
+    "x": 791,
+    "y": 794
+   }
+  },
+  {
+   "id": 11,
+   "asset": "volcano_archipelago_prov_11",
+   "flag": {
+    "x": 974,
+    "y": 658
+   }
+  },
+  {
+   "id": 12,
+   "asset": "volcano_archipelago_prov_12",
+   "flag": {
+    "x": 1218,
+    "y": 479
+   }
+  },
+  {
+   "id": 13,
+   "asset": "volcano_archipelago_prov_13",
+   "flag": {
+    "x": 1407,
+    "y": 523
+   }
+  },
+  {
+   "id": 14,
+   "asset": "volcano_archipelago_prov_14",
+   "flag": {
+    "x": 1592,
+    "y": 574
+   }
+  },
+  {
+   "id": 15,
+   "asset": "volcano_archipelago_prov_15",
+   "flag": {
+    "x": 1693,
+    "y": 710
+   }
+  },
+  {
+   "id": 16,
+   "asset": "volcano_archipelago_prov_16",
+   "flag": {
+    "x": 1721,
+    "y": 889
+   }
+  },
+  {
+   "id": 17,
+   "asset": "volcano_archipelago_prov_17",
+   "flag": {
+    "x": 1800,
+    "y": 1241
+   }
+  },
+  {
+   "id": 18,
+   "asset": "volcano_archipelago_prov_18",
+   "flag": {
+    "x": 1710,
+    "y": 1364
+   }
+  },
+  {
+   "id": 19,
+   "asset": "volcano_archipelago_prov_19",
+   "flag": {
+    "x": 1528,
+    "y": 1401
+   }
+  },
+  {
+   "id": 20,
+   "asset": "volcano_archipelago_prov_20",
+   "flag": {
+    "x": 1132,
+    "y": 1382
+   }
+  },
+  {
+   "id": 21,
+   "asset": "volcano_archipelago_prov_21",
+   "flag": {
+    "x": 851,
+    "y": 1343
+   }
+  },
+  {
+   "id": 22,
+   "asset": "volcano_archipelago_prov_22",
+   "flag": {
+    "x": 656,
+    "y": 1220
+   }
+  },
+  {
+   "id": 23,
+   "asset": "volcano_archipelago_prov_23",
+   "flag": {
+    "x": 569,
+    "y": 1050
+   }
+  },
+  {
+   "id": 24,
+   "asset": "volcano_archipelago_prov_24",
+   "flag": {
+    "x": 592,
+    "y": 824
+   }
+  },
+  {
+   "id": 25,
+   "asset": "volcano_archipelago_prov_25",
+   "flag": {
+    "x": 628,
+    "y": 636
+   }
+  },
+  {
+   "id": 26,
+   "asset": "volcano_archipelago_prov_26",
+   "flag": {
+    "x": 788,
+    "y": 520
+   }
+  },
+  {
+   "id": 27,
+   "asset": "volcano_archipelago_prov_27",
+   "flag": {
+    "x": 1025,
+    "y": 484
+   }
+  },
+  {
+   "id": 28,
+   "asset": "volcano_archipelago_prov_28",
+   "flag": {
+    "x": 1176,
+    "y": 310
+   }
+  },
+  {
+   "id": 29,
+   "asset": "volcano_archipelago_prov_29",
+   "flag": {
+    "x": 1337,
+    "y": 316
+   }
+  },
+  {
+   "id": 30,
+   "asset": "volcano_archipelago_prov_30",
+   "flag": {
+    "x": 1473,
+    "y": 354
+   }
+  },
+  {
+   "id": 31,
+   "asset": "volcano_archipelago_prov_31",
+   "flag": {
+    "x": 1591,
+    "y": 391
+   }
+  },
+  {
+   "id": 32,
+   "asset": "volcano_archipelago_prov_32",
+   "flag": {
+    "x": 1723,
+    "y": 398
+   }
+  },
+  {
+   "id": 33,
+   "asset": "volcano_archipelago_prov_33",
+   "flag": {
+    "x": 1839,
+    "y": 477
+   }
+  },
+  {
+   "id": 34,
+   "asset": "volcano_archipelago_prov_34",
+   "flag": {
+    "x": 1962,
+    "y": 590
+   }
+  },
+  {
+   "id": 35,
+   "asset": "volcano_archipelago_prov_35",
+   "flag": {
+    "x": 2047,
+    "y": 688
+   }
+  },
+  {
+   "id": 36,
+   "asset": "volcano_archipelago_prov_36",
+   "flag": {
+    "x": 1970,
+    "y": 842
+   }
+  },
+  {
+   "id": 37,
+   "asset": "volcano_archipelago_prov_37",
+   "flag": {
+    "x": 2022,
+    "y": 979
+   }
+  },
+  {
+   "id": 38,
+   "asset": "volcano_archipelago_prov_38",
+   "flag": {
+    "x": 2088,
+    "y": 1176
+   }
+  },
+  {
+   "id": 39,
+   "asset": "volcano_archipelago_prov_39",
+   "flag": {
+    "x": 2138,
+    "y": 1361
+   }
+  },
+  {
+   "id": 40,
+   "asset": "volcano_archipelago_prov_40",
+   "flag": {
+    "x": 2113,
+    "y": 1504
+   }
+  },
+  {
+   "id": 41,
+   "asset": "volcano_archipelago_prov_41",
+   "flag": {
+    "x": 1951,
+    "y": 1590
+   }
+  },
+  {
+   "id": 42,
+   "asset": "volcano_archipelago_prov_42",
+   "flag": {
+    "x": 1735,
+    "y": 1605
+   }
+  },
+  {
+   "id": 43,
+   "asset": "volcano_archipelago_prov_43",
+   "flag": {
+    "x": 1416,
+    "y": 1454
+   }
+  },
+  {
+   "id": 44,
+   "asset": "volcano_archipelago_prov_44",
+   "flag": {
+    "x": 1240,
+    "y": 1521
+   }
+  },
+  {
+   "id": 45,
+   "asset": "volcano_archipelago_prov_45",
+   "flag": {
+    "x": 1015,
+    "y": 1601
+   }
+  },
+  {
+   "id": 46,
+   "asset": "volcano_archipelago_prov_46",
+   "flag": {
+    "x": 808,
+    "y": 1586
+   }
+  },
+  {
+   "id": 47,
+   "asset": "volcano_archipelago_prov_47",
+   "flag": {
+    "x": 686,
+    "y": 1532
+   }
+  },
+  {
+   "id": 48,
+   "asset": "volcano_archipelago_prov_48",
+   "flag": {
+    "x": 455,
+    "y": 1410
+   }
+  },
+  {
+   "id": 49,
+   "asset": "volcano_archipelago_prov_49",
+   "flag": {
+    "x": 304,
+    "y": 1318
+   }
+  },
+  {
+   "id": 50,
+   "asset": "volcano_archipelago_prov_50",
+   "flag": {
+    "x": 257,
+    "y": 1182
+   }
+  },
+  {
+   "id": 51,
+   "asset": "volcano_archipelago_prov_51",
+   "flag": {
+    "x": 267,
+    "y": 1011
+   }
+  },
+  {
+   "id": 52,
+   "asset": "volcano_archipelago_prov_52",
+   "flag": {
+    "x": 429,
+    "y": 851
+   }
+  },
+  {
+   "id": 53,
+   "asset": "volcano_archipelago_prov_53",
+   "flag": {
+    "x": 300,
+    "y": 710
+   }
+  },
+  {
+   "id": 54,
+   "asset": "volcano_archipelago_prov_54",
+   "flag": {
+    "x": 387,
+    "y": 616
+   }
+  },
+  {
+   "id": 55,
+   "asset": "volcano_archipelago_prov_55",
+   "flag": {
+    "x": 398,
+    "y": 465
+   }
+  },
+  {
+   "id": 56,
+   "asset": "volcano_archipelago_prov_56",
+   "flag": {
+    "x": 507,
+    "y": 361
+   }
+  },
+  {
+   "id": 57,
+   "asset": "volcano_archipelago_prov_57",
+   "flag": {
+    "x": 723,
+    "y": 311
+   }
+  },
+  {
+   "id": 58,
+   "asset": "volcano_archipelago_prov_58",
+   "flag": {
+    "x": 878,
+    "y": 252
+   }
+  },
+  {
+   "id": 59,
+   "asset": "volcano_archipelago_prov_59",
+   "flag": {
+    "x": 1042,
+    "y": 302
+   }
+  }
+ ]
+}

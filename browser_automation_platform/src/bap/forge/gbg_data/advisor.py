@@ -64,17 +64,22 @@ def is_attack_candidate(bg: Battleground, p: Province, now: int) -> bool:
 
 
 def rank_targets(bg: Battleground, *, now: int | None = None,
-                 include_locked: bool = False) -> list[TargetSuggestion]:
+                 include_locked: bool = False, allowed_pcts=None) -> list[TargetSuggestion]:
     """Return attack candidates, best first. Ordering: **lowest attrition chance wins**,
     open (unlocked) before locked, then soonest-to-unlock, then province id for stability.
 
     By default locked provinces are excluded; pass ``include_locked=True`` to keep them
-    (flagged), e.g. to plan ahead for when they open.
+    (flagged), e.g. to plan ahead for when they open. ``allowed_pcts`` (e.g. ``{20, 40}``)
+    restricts to provinces whose ``gain_attrition_chance`` is in that set — the per-world
+    "only attack these %" allowlist; ``None`` means all.
     """
     ref = _now_from(bg, now)
+    allow = set(allowed_pcts) if allowed_pcts is not None else None
     out: list[TargetSuggestion] = []
     for p in bg.provinces:
         if not is_attack_candidate(bg, p, ref):
+            continue
+        if allow is not None and p.gain_attrition_chance not in allow:
             continue
         locked = p.is_locked(ref)
         if locked and not include_locked:
