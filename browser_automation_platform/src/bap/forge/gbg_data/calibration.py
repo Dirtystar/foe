@@ -37,6 +37,40 @@ def solve_transform(layout: MapLayout, a: CalibrationSample,
     return MapTransform.from_two_points(fa, tuple(a.screen), fb, tuple(b.screen))
 
 
+class CalibrationCollector:
+    """Pairs the user's flag clicks with the province the game reports, into samples.
+
+    Per province-open, the **first** click (the flag on the map) is the screen point we
+    want; the ``provinceId`` arrives a moment later in a `getArmyPreview` request. So: the
+    first click of a sequence is kept, later clicks (e.g. the Attack button) ignored, and the
+    sample is emitted when the province id lands. Pure + testable."""
+
+    def __init__(self, need: int = 2) -> None:
+        self.need = need
+        self.samples: list = []
+        self._click = None
+        self._pid = None
+
+    def on_click(self, x, y) -> None:
+        if self._click is None:
+            self._click = (float(x), float(y))
+
+    def on_province(self, province_id) -> None:
+        self._pid = int(province_id)
+        if self._click is not None:
+            self.samples.append(CalibrationSample(self._pid, self._click))
+            self._click = None
+            self._pid = None
+
+    def reset_current(self) -> None:
+        self._click = None
+        self._pid = None
+
+    @property
+    def done(self) -> bool:
+        return len(self.samples) >= self.need
+
+
 def _key(world: str, map_id: str | None) -> str:
     return f"{world}::{map_id or '?'}"
 
@@ -73,4 +107,5 @@ def load_calibration(path, world: str, map_id: str | None) -> MapTransform | Non
         return None
 
 
-__all__ = ["CalibrationSample", "solve_transform", "save_calibration", "load_calibration"]
+__all__ = ["CalibrationSample", "CalibrationCollector", "solve_transform",
+           "save_calibration", "load_calibration"]

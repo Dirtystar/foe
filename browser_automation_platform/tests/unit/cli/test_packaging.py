@@ -24,7 +24,7 @@ def test_console_scripts_declared(project):
     assert set(scripts) == {
         "bap", "bap-run", "bap-gui", "bap-forge-label", "bap-forge-review",
         "bap-forge-collect", "bap-gbg", "bap-gbg-live", "bap-forge-click",
-        "bap-forge-autoplay", "bap-forge-farm",
+        "bap-forge-autoplay", "bap-forge-farm", "bap-forge-calibrate",
     }
 
 
@@ -42,6 +42,7 @@ def test_console_scripts_declared(project):
         ("bap-forge-click", "bap.forge.action.cdp_click:main"),
         ("bap-forge-autoplay", "bap.forge.action.autoplay:main"),
         ("bap-forge-farm", "bap.forge.action.round_robin:main"),
+        ("bap-forge-calibrate", "bap.forge.action.calibrate:main"),
     ],
 )
 def test_console_script_targets_resolve(project, name, target):

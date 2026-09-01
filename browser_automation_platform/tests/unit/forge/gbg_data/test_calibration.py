@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from bap.forge.gbg_data.calibration import (
+    CalibrationCollector,
     CalibrationSample,
     load_calibration,
     save_calibration,
@@ -87,3 +88,26 @@ def test_save_and_load_calibration_roundtrip(tmp_path):
 
 def test_load_missing_calibration_is_none(tmp_path):
     assert load_calibration(tmp_path / "none.json", "cz6", "m") is None
+
+
+# --- collector: pair the flag click with the reported provinceId -------------
+
+def test_collector_pairs_first_click_with_province():
+    c = CalibrationCollector(need=2)
+    # province A: click the flag (kept), then Attack (ignored), then the game reports 19
+    c.on_click(500, 400); c.on_click(1145, 788); c.on_province(19)
+    assert not c.done and c.samples[-1] == CalibrationSample(19, (500.0, 400.0))
+    # province B
+    c.on_click(900, 300); c.on_province(57)
+    assert c.done
+    assert [s.province_id for s in c.samples] == [19, 57]
+    assert c.samples[1].screen == (900.0, 300.0)
+
+
+def test_collector_province_without_click_waits():
+    c = CalibrationCollector(need=1)
+    c.on_province(5)                     # no click yet → nothing captured
+    assert not c.done and c.samples == []
+    c.on_click(10, 20)                   # click after the id — pairs on the next id
+    c.on_province(5)
+    assert c.done and c.samples[0] == CalibrationSample(5, (10.0, 20.0))
