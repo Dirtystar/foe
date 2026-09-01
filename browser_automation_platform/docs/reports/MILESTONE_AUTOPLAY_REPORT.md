@@ -35,6 +35,23 @@ bap-forge-autoplay --tab cz6 --x 1145 --y 788 --max-attrition 50
 # fights cz6 until attrition hits 50, then stops. --max-clicks caps it hard.
 ```
 
+## Attrition source — local counting from a baseline (robust)
+
+Live `attrition` rides on `getBattleground`, which the game sends mainly when GBG is
+*opened* — not while you sit on the fight screen — so a live-only gate can stall with
+`attrition_unknown`. Since **attrition rises exactly +1 per successful fight** (confirmed
+from FoE's own docs), the loop instead tracks it two ways and gates on the **higher**:
+
+- a **local count** from `--attrition-now <your current attrition>` (`start + fights`), and
+- the **live reading** when it does arrive (corrects/《overrides if it jumps faster).
+
+So `--attrition-now 70 --max-attrition 80` fights exactly 10 times and stops — no dependence
+on when the game sends data. With neither a baseline nor live data, it fail-safe stops.
+
+```
+bap-forge-autoplay --tab cz6 --x 1145 --y 788 --attrition-now 70 --max-attrition 80
+```
+
 ## Honest caveats
 
 - **Data lag:** attrition is read from the latest `/game/json`; if the fight response lags,

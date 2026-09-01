@@ -47,6 +47,32 @@ def test_attrition_unknown_is_failsafe_stop():
     assert c.clicks == []                     # never fight blind
 
 
+def test_local_counting_from_baseline_no_live_data():
+    # the real-world case: no live feed, but the operator gives their current attrition
+    c = _Clicker()
+    r = run_autoplay_loop(c, lambda: None, 1, 2, max_attrition=80, start_attrition=70,
+                          sleep=lambda s: None)
+    assert r.reason == "attrition_limit"
+    assert r.fights == 10                      # 70 + 10 fights = 80 → stop
+    assert r.final_attrition == 80
+
+
+def test_live_reading_overrides_when_higher():
+    # attrition jumped (per-province gain) beyond the local count → live wins, stop early
+    c = _Clicker()
+    r = run_autoplay_loop(c, lambda: 85, 1, 2, max_attrition=80, start_attrition=70,
+                          sleep=lambda s: None)
+    assert r.fights == 0 and r.reason == "attrition_limit"
+
+
+def test_baseline_and_live_take_the_higher():
+    c = _Clicker()
+    # live stuck at 78 (stale); local count still provides the ceiling at 80
+    r = run_autoplay_loop(c, lambda: 78, 1, 2, max_attrition=80, start_attrition=70,
+                          sleep=lambda s: None)
+    assert r.fights == 10 and r.reason == "attrition_limit"
+
+
 def test_max_clicks_hard_cap():
     c = _Clicker()
     r = run_autoplay_loop(c, lambda: 0, 1, 2, max_attrition=999, max_clicks=5,
