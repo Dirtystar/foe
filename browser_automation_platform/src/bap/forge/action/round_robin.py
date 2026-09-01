@@ -159,7 +159,7 @@ def run_round_robin_live(endpoint, worlds, *, burst=25, interval=0.15, raise_tab
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
 
     def _go(browser):
-        pages, readers, clickers = {}, {}, {}
+        pages, readers, clickers, handlers = {}, {}, {}, {}
         for w in worlds:
             page = _select_page(browser, index=w.tab_index, match=(w.tab or w.name))
             reader = LiveGbgReader()
@@ -173,7 +173,9 @@ def run_round_robin_live(endpoint, worlds, *, burst=25, interval=0.15, raise_tab
                     except BaseException:
                         pass
                 return _resp
-            page.on("response", _mk(feed))
+            handler = _mk(feed)
+            page.on("response", handler)
+            handlers[w.name] = handler
             pages[w.name] = page
             readers[w.name] = reader
             clickers[w.name] = CdpClicker(page)
@@ -214,8 +216,15 @@ def run_round_robin_live(endpoint, worlds, *, burst=25, interval=0.15, raise_tab
             elif kind == "skip":
                 print(f"  {w.name}: no attrition data yet — open its GBG map. Skipping.", flush=True)
 
-        return run_round_robin(worlds, _fight_once, _attrition, burst=burst,
-                               on_event=_on_event)
+        try:
+            return run_round_robin(worlds, _fight_once, _attrition, burst=burst,
+                                   on_event=_on_event)
+        finally:
+            for w in worlds:   # detach listeners for a quiet teardown
+                try:
+                    pages[w.name].remove_listener("response", handlers[w.name])
+                except Exception:
+                    pass
 
     if connect is not None:
         return _go(connect(endpoint))

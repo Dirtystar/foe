@@ -18,12 +18,12 @@ vision for that row._
 | A1 | Read GBG data (provinces, owners, %, unlock, siege) | ✅ | 95 | `gbg_data` parser, real fixtures |
 | A2 | Live attrition, updates **per battle** | ✅ | 100 | `getPlayerParticipant`, proven live (4→14) |
 | A3 | Rank/target provinces by attrition % | ✅ | 80 | advisor ranks; not yet filtered by a per-world allowlist |
-| **B. Action (hand)** | | | **45%** | click works; navigation missing |
+| **B. Action (hand)** | | | **55%** | click + background play work; navigation missing |
 | B1 | CDP targeted click + key (no mouse hijack) | ✅ | 90 | proven live on cz6 |
 | B2 | Pick the right tab + bring to front | ✅ | 90 | `--list/--tab/--tab-index` |
 | B3 | **Auto-open a chosen province on the map** | ❌ | 5 | the "where" problem — needs map hitmaps or vision |
 | B4 | Self-heal (reload/restart window on error) | ❌ | 0 | required for all-day unattended |
-| B5 | **Background play (no focus stealing)** | ⏳ | 30 | anti-throttle Chrome flags + `--no-raise`; needs a live confirm that hidden-tab clicks land |
+| B5 | **Background play (no focus stealing)** | ✅ | 85 | **CONFIRMED live** — anti-throttle flags + `--no-raise` fought hidden tabs without stealing focus |
 | **C. Orchestration** | | | **65%** | multi-world rotation landed |
 | C1 | Single-world gated fight loop (stop at real attrition) | ✅ | 100 | proven live |
 | C2 | **Multi-world round-robin** | ✅ | 80 | `bap-forge-farm`, config-driven; live glue needs field-testing |
