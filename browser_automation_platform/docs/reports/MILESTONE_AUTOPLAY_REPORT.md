@@ -50,10 +50,12 @@ bap-forge-autoplay --tab cz6 --x 1145 --y 788 --max-attrition 50   # stops at RE
 bap-forge-autoplay ... --debug     # print which /game/json methods + attrition changes arrive
 ```
 
-**Open dependency:** attrition must update *during fighting*. `getBattleground` (its known
-carrier) fires mainly on GBG open. Whether a battle response also carries it is being
-confirmed with a live `--debug` run / a fighting HAR; until then run with a conservative
-`--max-clicks` and watch the printed `attrition → N`.
+**Resolved — attrition updates every battle.** A fighting HAR confirmed the battle response
+(`BattlefieldService.startByBattleType`) bundles a `GuildBattlegroundService.getPlayerParticipant`
+object carrying `attrition.level`, which **climbs live as you fight** (observed `1,1,1,2,…,4`
+across a session — the probabilistic +1, exactly as the mechanic works). The reader now parses
+`getPlayerParticipant` too and exposes `attrition_level`, so the gate reads the **real** value
+before every fight. Fixture: `dataset/api_samples/getPlayerParticipant.sample.json`.
 
 ## Honest caveats
 

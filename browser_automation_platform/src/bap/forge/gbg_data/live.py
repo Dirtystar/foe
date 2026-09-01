@@ -22,8 +22,8 @@ import logging
 from datetime import datetime, timezone
 
 from bap.forge.gbg_data.advisor import TargetSuggestion, rank_targets
-from bap.forge.gbg_data.model import Battleground
-from bap.forge.gbg_data.parser import parse
+from bap.forge.gbg_data.model import Battleground, PlayerState
+from bap.forge.gbg_data.parser import parse, parse_player_from_game_json
 
 logger = logging.getLogger("bap.forge.gbg_data.live")
 
@@ -31,10 +31,15 @@ _GAME_JSON = "/game/json"
 
 
 class LiveGbgReader:
-    """Holds the latest battleground snapshot, updated by feeding response bodies."""
+    """Holds the latest battleground snapshot plus the freshest player attrition.
+
+    Attrition updates two ways: a full ``getBattleground`` (on GBG open) and a partial
+    ``getPlayerParticipant`` (bundled in every battle response, so it climbs live while you
+    fight). ``attrition_level`` returns whichever is newest."""
 
     def __init__(self) -> None:
         self._bg: Battleground | None = None
+        self._player: PlayerState | None = None
         self._updates = 0
 
     @property
@@ -45,20 +50,37 @@ class LiveGbgReader:
     def update_count(self) -> int:
         return self._updates
 
+    @property
+    def attrition_level(self) -> int | None:
+        if self._player is not None and self._player.attrition_level is not None:
+            return self._player.attrition_level
+        if self._bg is not None and self._bg.player is not None:
+            return self._bg.player.attrition_level
+        return None
+
     def feed(self, body) -> bool:
-        """Parse a ``/game/json`` response body and, if it carries a battleground, replace
-        the snapshot. Returns True when the snapshot was updated. Never raises."""
+        """Parse a ``/game/json`` response body. A full battleground replaces the snapshot;
+        a bare ``getPlayerParticipant`` (during battles) updates just the attrition. Returns
+        True when anything was updated. Never raises."""
         try:
             obj = json.loads(body) if isinstance(body, (str, bytes, bytearray)) else body
         except Exception:
             return False
         observed = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+        updated = False
         bg = parse(obj, observed_at=observed)
-        if bg is None:
-            return False
-        self._bg = bg
-        self._updates += 1
-        return True
+        if bg is not None:
+            self._bg = bg
+            if bg.player is not None:
+                self._player = bg.player
+            updated = True
+        player = parse_player_from_game_json(obj)
+        if player is not None and player.attrition_level is not None:
+            self._player = player
+            updated = True
+        if updated:
+            self._updates += 1
+        return updated
 
     def targets(self, **kw) -> list[TargetSuggestion]:
         if self._bg is None:

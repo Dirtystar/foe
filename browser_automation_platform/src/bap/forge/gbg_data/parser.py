@@ -92,6 +92,27 @@ def parse_player(d: dict) -> PlayerState:
     )
 
 
+def parse_player_participant(response_data) -> PlayerState | None:
+    """Parse a `GuildBattlegroundService.getPlayerParticipant` responseData — the player's
+    attrition as it updates **during fighting** (bundled in the battle response). Returns
+    None if it doesn't carry attrition."""
+    if not isinstance(response_data, dict) or "attrition" not in response_data:
+        return None
+    return parse_player(response_data)
+
+
+def parse_player_from_game_json(batch) -> PlayerState | None:
+    """Find a `getPlayerParticipant` (live attrition during battles) in a `/game/json`
+    batch. Returns None if absent."""
+    if not isinstance(batch, list):
+        return None
+    for r in batch:
+        if (isinstance(r, dict) and r.get("requestClass") == _BG_CLASS
+                and r.get("requestMethod") == "getPlayerParticipant"):
+            return parse_player_participant(r.get("responseData"))
+    return None
+
+
 def parse_battleground(response_data, *, server_time: int | None = None,
                        observed_at: str | None = None) -> Battleground | None:
     """Parse a getBattleground ``responseData`` dict into a :class:`Battleground`.
@@ -168,4 +189,5 @@ def parse(obj, *, observed_at: str | None = None) -> Battleground | None:
     return None
 
 
-__all__ = ["parse", "parse_battleground", "parse_game_json"]
+__all__ = ["parse", "parse_battleground", "parse_game_json",
+           "parse_player_participant", "parse_player_from_game_json"]

@@ -109,7 +109,7 @@ def run_autoplay(endpoint: str, x: float, y: float, *, max_attrition: int,
                     except BaseException:
                         pass
                 feed(resp)
-                a = reader.snapshot.player.attrition_level if reader.snapshot else None
+                a = reader.attrition_level
                 if a is not None and a != last["att"]:
                     last["att"] = a
                     print(f"    attrition → {a}", flush=True)
@@ -121,8 +121,7 @@ def run_autoplay(endpoint: str, x: float, y: float, *, max_attrition: int,
             page.wait_for_timeout(ms * 1000)
 
         def _attrition():
-            bg = reader.snapshot
-            return bg.player.attrition_level if bg and bg.player else None
+            return reader.attrition_level      # updates live from each battle response
 
         print(f"Target tab: {page.url}", flush=True)
         print("Waiting for the game to send attrition… (open/refresh GBG to trigger it)",
