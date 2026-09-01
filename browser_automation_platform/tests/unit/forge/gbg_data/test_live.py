@@ -89,6 +89,45 @@ def test_handler_survives_body_read_error():
     assert r.snapshot is None
 
 
+def _battle_body(level):
+    """A /game/json battle response carrying getPlayerParticipant (live attrition)."""
+    return json.dumps([
+        {"requestClass": "TimeService", "requestMethod": "updateTime",
+         "responseData": {"time": 1}},
+        {"requestClass": "GuildBattlegroundService", "requestMethod": "getPlayerParticipant",
+         "responseData": {"activeTrial": 30,
+                          "attrition": {"level": level, "negotiationMultiplier": 3}}},
+    ])
+
+
+def test_attrition_updates_live_from_battle_response():
+    r = LiveGbgReader()
+    assert r.attrition_level is None
+    assert r.feed(_battle_body(1)) is True
+    assert r.attrition_level == 1               # from getPlayerParticipant, no full battleground
+    assert r.snapshot is None                   # a battle response has no map
+    assert r.feed(_battle_body(2)) is True
+    assert r.attrition_level == 2               # climbs live as you fight
+
+
+def test_battleground_sets_attrition_then_battles_refine_it(bg_body):
+    r = LiveGbgReader()
+    r.feed(bg_body)                             # full battleground → baseline attrition + map
+    assert r.snapshot is not None
+    base = r.attrition_level
+    assert base is not None
+    r.feed(_battle_body(base + 5))              # a later battle updates just attrition
+    assert r.attrition_level == base + 5
+    assert r.snapshot is not None               # map snapshot retained
+
+
+def test_battle_without_attrition_is_ignored():
+    r = LiveGbgReader()
+    body = json.dumps([{"requestClass": "BattlefieldService",
+                        "requestMethod": "getArmyPreview", "responseData": {"foo": 1}}])
+    assert r.feed(body) is False and r.attrition_level is None
+
+
 def test_render_before_and_after(bg_body):
     r = LiveGbgReader()
     assert "waiting for GBG data" in render(r)
