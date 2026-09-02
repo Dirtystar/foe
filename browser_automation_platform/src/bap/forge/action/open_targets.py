@@ -167,7 +167,8 @@ _JS_OVERLAY = """
 
 
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
-             debug=False, overlay=False, utok=(1157, 800), connect=None):  # pragma: no cover - live
+             debug=False, overlay=False, attack=False, utok=(1157, 800),
+             connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
@@ -269,6 +270,55 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                           for t in targets), flush=True)
         _escape_to_map(page)
         clicker = CdpClicker(page)
+
+        if attack:
+            ux, uy = utok
+            print(f"\n[attack] reaching the battle screen (Útok at ({ux},{uy})). Backs out with "
+                  "Escape — nothing is actually fought.", flush=True)
+            reached = None
+            for t in targets:
+                f = flags.get(t.province_id)
+                if f is None:
+                    continue
+                x, y = nav.screen_for(f)
+                if not (90 <= x <= vw - 90 and 90 <= y <= vh - 90):
+                    print(f"  {_name(names, t.province_id)}: off-screen, skipping", flush=True)
+                    continue
+                _hover_click(page, x, y)                    # open the province window
+                page.wait_for_timeout(900)
+                latest["pid"] = None
+                latest["methods"] = []
+                _hover_click(page, ux, uy)                  # Útok
+                deadline = time.time() + 3.0
+                while time.time() < deadline and latest["pid"] is None:
+                    page.wait_for_timeout(150)
+                if latest["pid"] is not None:
+                    print(f"  ✅ {_name(names, t.province_id)} (id={t.province_id}): reached battle "
+                          f"screen — getArmyPreview provinceId={latest['pid']}", flush=True)
+                    try:
+                        page.screenshot(path="gbg_battle.png")
+                    except Exception:
+                        pass
+                    reached = t.province_id
+                    _escape_to_map(page)                    # back out, commit nothing
+                    break
+                print(f"  ⏭ {_name(names, t.province_id)} (id={t.province_id}): no army preview "
+                      f"(guild-ignore dialog or locked) — methods={latest['methods'] or '(none)'}",
+                      flush=True)
+                _escape_to_map(page)                        # cancel dialog / close window
+            if reached is not None:
+                print(f"\n[attack] Full chain works end-to-end on province {reached}: map → open "
+                      "→ Útok → battle screen. SEND gbg_battle.png. Ready for the fight loop! 🎯",
+                      flush=True)
+            else:
+                print("\n[attack] No target reached the battle screen (all guild-ignored/locked "
+                      "or off-screen). Re-run when normal attackable sectors are open.", flush=True)
+            try:
+                page.remove_listener("response", _on_response)
+                page.remove_listener("request", _on_request)
+            except Exception:
+                pass
+            return reached
 
         if overlay:
             pts = []
@@ -457,12 +507,15 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="click the first on-screen target and dump requests + new DOM windows")
     ap.add_argument("--overlay", action="store_true",
                     help="draw dots at predicted click points and screenshot (no clicking)")
+    ap.add_argument("--attack", action="store_true",
+                    help="open each target and click Útok to reach the battle screen (backs out)")
     ap.add_argument("--ux", type=int, default=1157, help="Útok button CSS x (canvas window)")
     ap.add_argument("--uy", type=int, default=800, help="Útok button CSS y (canvas window)")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
-                     debug=args.debug, overlay=args.overlay, utok=(args.ux, args.uy))
+                     debug=args.debug, overlay=args.overlay, attack=args.attack,
+                     utok=(args.ux, args.uy))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
