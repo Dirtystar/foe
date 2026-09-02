@@ -84,12 +84,34 @@ def run_verify(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_STORE
             pids = [flags[0][0], flags[len(flags) // 2][0], flags[-1][0]][:n]
         print(f"Verifying calibration by opening {len(pids)} provinces: {pids}", flush=True)
 
+        try:
+            vw = int(page.evaluate("() => window.innerWidth"))
+            vh = int(page.evaluate("() => window.innerHeight"))
+        except Exception:
+            vw, vh = 1920, 1080
+
+        def _back_to_map():
+            # close any open panel/preview and return to the GBG map
+            for _ in range(2):
+                try:
+                    page.keyboard.press("Escape")
+                except Exception:
+                    pass
+                page.wait_for_timeout(300)
+
         clicker = CdpClicker(page)
-        ok = 0
+        _back_to_map()
+        ok = tested = 0
         for pid in pids:
             pt = province_screen_point(layout, transform, pid)
             if pt is None:
                 continue
+            if not (0 <= pt[0] <= vw and 0 <= pt[1] <= vh):
+                print(f"  ⤳ province {pid}: computed ({pt[0]:.0f},{pt[1]:.0f}) is OFF-SCREEN "
+                      f"(viewport {vw}x{vh}) — zoom the map out so the whole map fits.",
+                      flush=True)
+                continue
+            tested += 1
             latest["pid"] = None
             clicker.click_xy(*pt)
             got = None
@@ -104,7 +126,7 @@ def run_verify(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_STORE
                   f"game opened {got}", flush=True)
             if got == pid:
                 ok += 1
-            page.wait_for_timeout(500)
+            _back_to_map()             # return to the map before the next province
 
         print(f"\n{ok}/{len(pids)} correct. "
               + ("Calibration is good — navigation works!" if ok == len(pids)
