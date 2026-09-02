@@ -1,0 +1,177 @@
+"""End-to-end B3: place attackable provinces on screen via the marker-solved transform.
+
+One pass:
+  1. read the map flags and FoE Helper's id→name map,
+  2. solve the map→screen transform from marker arrows (no human clicks),
+  3. take the **native** attackable targets from getBattleground (the real fight list —
+     FoE Helper's "Next up" box is future unlocks, not this),
+  4. open each target: transform → pan on-screen → click → confirm the reported provinceId,
+     self-correcting the offset from every province actually hit.
+
+`bap-forge-open --world cz2` proves navigation on real fight targets before the fight loop is
+built on it. Live glue is ``no-cover``; the transform/parse pieces are unit-tested.
+"""
+
+from __future__ import annotations
+
+import time
+
+from bap.forge.action.locate import clear_marker, locate_province
+from bap.forge.action.navigate import _escape_to_map, _r, _viewport, open_province
+from bap.forge.action.solve import _JS_MARKER_IDS
+from bap.forge.gbg_data.calibration import CalibrationSample, residual, save_calibration, solve_uniform
+from bap.forge.gbg_data.navigator import MapNavigator
+
+_JS_NAMES = ("() => { const m = {}; document.querySelectorAll('tr[data-id]').forEach(tr => {"
+             " const b = tr.querySelector('.prov-name b');"
+             " if (b) m[tr.getAttribute('data-id')] = b.textContent.trim(); }); return m; }")
+
+
+def _name(names, pid):
+    return names.get(str(pid)) or f"#{pid}"
+
+
+def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
+             connect=None):  # pragma: no cover - live
+    from bap.forge.action.calibrate import _fetch_map_layout
+    from bap.forge.action.cdp_click import CdpClicker, _select_page
+    from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
+    from bap.forge.gbg_data.parser import parse_province_id_from_game_json
+
+    def _go(browser):
+        page = _select_page(browser, index=tab_index, match=(tab or world))
+        try:
+            page.bring_to_front()
+        except Exception:
+            pass
+        reader = LiveGbgReader()
+        feed = make_response_handler(reader)
+        latest = {"pid": None}
+
+        def _on_response(resp):
+            try:
+                if "/game/json" in (resp.url or "") or "/map/data" in (resp.url or ""):
+                    feed(resp)
+            except BaseException:
+                pass
+
+        def _on_request(req):
+            try:
+                if "/game/json" not in (req.url or ""):
+                    return
+                import json as _j
+                pid = parse_province_id_from_game_json(_j.loads(req.post_data or "[]"))
+                if pid is not None:
+                    latest["pid"] = pid
+            except BaseException:
+                pass
+
+        page.on("response", _on_response)
+        page.on("request", _on_request)
+
+        # --- flags + names -----------------------------------------------------
+        layout = _fetch_map_layout(page)
+        deadline = time.time() + 10
+        while layout is None and time.time() < deadline:
+            page.wait_for_timeout(1000)
+            layout = _fetch_map_layout(page)
+        layout = layout or reader.map_layout
+        if layout is None:
+            print("Couldn't read the map layout — open the GBG map and re-run.", flush=True)
+            return None
+        flags = layout.flags
+        names = page.evaluate(_JS_NAMES) or {}
+        vw, vh = _viewport(page)
+        print(f"Map {layout.map_id}: {len(flags)} provinces. Viewport {vw}x{vh}.", flush=True)
+
+        # --- solve transform from marker arrows --------------------------------
+        ids = [int(i) for i in (page.evaluate(_JS_MARKER_IDS) or []) if int(i) in flags]
+        ids = list(dict.fromkeys(ids))
+        samples = []
+        for pid in ids:
+            xy = locate_province(page, pid)
+            clear_marker(page)
+            if xy is not None:
+                samples.append(CalibrationSample(pid, xy))
+                print(f"  marker {_name(names, pid)} (id={pid}): screen ({_r(xy[0])},{_r(xy[1])})",
+                      flush=True)
+        if len(samples) < 2:
+            print("Need ≥2 marker points to solve the transform. Open the GBG map with the FoE "
+                  "Helper box visible.", flush=True)
+            return None
+        transform = solve_uniform(layout, samples)
+        save_calibration(store, world, layout.map_id, transform)
+        print(f"Transform: scale={transform.scale_x:.4f} offset=({transform.off_x:.0f},"
+              f"{transform.off_y:.0f})  residual={residual(layout, transform, samples):.1f}px",
+              flush=True)
+        nav = MapNavigator(scale=transform.scale_x, off_x=transform.off_x, off_y=transform.off_y)
+
+        # --- native attackable targets ----------------------------------------
+        deadline = time.time() + 12
+        while reader.snapshot is None and time.time() < deadline:
+            page.wait_for_timeout(1000)
+        targets = reader.targets(include_locked=False) if reader.snapshot else []
+        if not targets:
+            print("\nNo attackable provinces right now (getBattleground reports none open). The "
+                  "transform is solved & saved — re-run when sectors are open to fight.", flush=True)
+            return 0
+        targets = targets[:n]
+        print(f"\nAttackable now ({len(targets)}): "
+              + ", ".join(f"{_name(names, t.province_id)}[{t.gain_attrition_chance}%]"
+                          for t in targets), flush=True)
+        print("Opening each via the transform (pan + click + confirm)…", flush=True)
+
+        _escape_to_map(page)
+        clicker = CdpClicker(page)
+        ok = 0
+        for t in targets:
+            pid = t.province_id
+            scr = open_province(page, clicker, nav, latest, flags, pid, vw, vh)
+            mark = "✅" if scr else "❌"
+            where = f"opened at ({_r(scr[0])},{_r(scr[1])})" if scr else "could not confirm"
+            print(f"  {mark} {_name(names, pid)} (id={pid}, {t.gain_attrition_chance}%): {where}",
+                  flush=True)
+            if scr:
+                ok += 1
+        print(f"\n{ok}/{len(targets)} attackable provinces opened correctly. "
+              + ("B3 solved end-to-end — ready for the fight loop! 🎯" if ok == len(targets)
+                 else "Some misses — send the log."), flush=True)
+        try:
+            page.remove_listener("response", _on_response)
+            page.remove_listener("request", _on_request)
+        except Exception:
+            pass
+        return ok
+
+    if connect is not None:
+        return _go(connect(endpoint))
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        return _go(p.chromium.connect_over_cdp(endpoint))
+
+
+def main(argv=None) -> int:  # pragma: no cover - CLI wiring
+    import argparse
+
+    from bap.forge.browser_settings import DEFAULT_CDP_ENDPOINT
+
+    ap = argparse.ArgumentParser(
+        prog="bap-forge-open",
+        description="Open attackable GBG provinces via the marker-solved transform.")
+    ap.add_argument("--world", required=True, help="world name/label (e.g. cz2)")
+    ap.add_argument("--cdp", default=DEFAULT_CDP_ENDPOINT, help="Chrome CDP endpoint")
+    ap.add_argument("--tab", default=None, help="tab: url/title contains this (default: world)")
+    ap.add_argument("--tab-index", type=int, default=None, dest="tab_index")
+    ap.add_argument("-n", type=int, default=5, help="how many attackable provinces to open")
+    args = ap.parse_args(argv)
+    try:
+        r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n)
+        return 0 if r is not None else 1
+    except Exception as exc:  # noqa: BLE001
+        print(f"Open failed on {args.cdp}: {exc}")
+        return 1
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import sys
+    sys.exit(main())
