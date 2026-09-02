@@ -303,6 +303,14 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     if fight:
                         abx, aby = autobattle
                         before = reader.attrition_level
+                        page.evaluate(_JS_GRID)             # grid to read the real button coord
+                        page.evaluate(_JS_OVERLAY, [{"x": abx, "y": aby, "color": "#00e5ff",
+                                                     "label": f"AutoBitva? ({abx},{aby})"}])
+                        page.wait_for_timeout(150)
+                        try:
+                            page.screenshot(path="gbg_armygrid.png")
+                        except Exception:
+                            pass
                         print(f"  [fight] clicking Automatická bitva at ({abx},{aby}) — REAL "
                               f"battle. attrition before={before}", flush=True)
                         _hover_click(page, abx, aby)
@@ -312,8 +320,9 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                         except Exception:
                             pass
                         after = reader.attrition_level
-                        print(f"  [fight] done. attrition {before} → {after}. SEND gbg_fought.png "
-                              "(win screen? did it fight?).", flush=True)
+                        print(f"  [fight] done. attrition {before} → {after}. SEND gbg_armygrid.png "
+                              "(cyan dot vs the real Automatická bitva button — read the grid) and "
+                              "gbg_fought.png.", flush=True)
                         _escape_to_map(page)
                     else:
                         _escape_to_map(page)                # back out, commit nothing
