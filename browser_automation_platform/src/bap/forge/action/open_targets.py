@@ -167,7 +167,7 @@ _JS_OVERLAY = """
 
 
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
-             debug=False, overlay=False, connect=None):  # pragma: no cover - live
+             debug=False, overlay=False, utok=(1157, 800), connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
@@ -334,15 +334,30 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     print("[overlay] SEND gbg_province.png and gbg_attack.png (did the battle/army "
                           "screen open?).", flush=True)
                 else:
-                    page.evaluate(_JS_GRID)                 # labeled CSS grid to read Útok's coord
-                    page.wait_for_timeout(200)
+                    ux, uy = utok
+                    page.evaluate(_JS_GRID)                 # labeled CSS grid, in case we miss
+                    page.evaluate(_JS_OVERLAY, [{"x": ux, "y": uy, "color": "#00e5ff",
+                                                 "label": f"Útok? ({ux},{uy})"}])
+                    page.wait_for_timeout(150)
                     try:
                         page.screenshot(path="gbg_grid.png")
                     except Exception:
                         pass
-                    print("[overlay] Útok is canvas-drawn. Drew a CSS grid → gbg_grid.png. SEND "
-                          "gbg_grid.png; I'll read the Útok button's exact coordinate off it.",
+                    print(f"[overlay] Útok is canvas-drawn. Clicking estimate ({ux},{uy})…",
                           flush=True)
+                    latest["pid"] = None
+                    latest["methods"] = []
+                    _hover_click(page, ux, uy)
+                    page.wait_for_timeout(1600)
+                    try:
+                        page.screenshot(path="gbg_attack.png")
+                    except Exception:
+                        pass
+                    print(f"    after Útok click: provinceId={latest['pid']} "
+                          f"methods={latest['methods'] or '(none)'}", flush=True)
+                    print("[overlay] SEND gbg_grid.png (cyan dot = where I clicked; if it's off "
+                          "the Útok button, read the grid number under the real button) and "
+                          "gbg_attack.png (did the army/battle screen open?).", flush=True)
             return 0
 
         if debug:
@@ -442,10 +457,12 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="click the first on-screen target and dump requests + new DOM windows")
     ap.add_argument("--overlay", action="store_true",
                     help="draw dots at predicted click points and screenshot (no clicking)")
+    ap.add_argument("--ux", type=int, default=1157, help="Útok button CSS x (canvas window)")
+    ap.add_argument("--uy", type=int, default=800, help="Útok button CSS y (canvas window)")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
-                     debug=args.debug, overlay=args.overlay)
+                     debug=args.debug, overlay=args.overlay, utok=(args.ux, args.uy))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
