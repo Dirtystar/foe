@@ -60,8 +60,32 @@ def _sig(x):
     return f"{x['id']}|{x['cls']}|{x['rect'][0] // 20}|{x['rect'][1] // 20}"
 
 
+# Draw a dot + label at each predicted click point (CSS px == click coords == screenshot px),
+# so a screenshot shows exactly where the tool would click.
+_JS_OVERLAY = """
+(pts) => {
+  let o = document.getElementById('bapOverlay'); if (o) o.remove();
+  o = document.createElement('div'); o.id = 'bapOverlay';
+  for (const p of pts) {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;z-index:99999;left:' + (p.x-9) + 'px;top:' + (p.y-9)
+      + 'px;width:18px;height:18px;border-radius:50%;background:' + p.color
+      + ';border:2px solid #fff;box-shadow:0 0 5px #000;pointer-events:none;';
+    const l = document.createElement('div');
+    l.textContent = p.label;
+    l.style.cssText = 'position:fixed;z-index:99999;left:' + (p.x+11) + 'px;top:' + (p.y-10)
+      + 'px;color:#fff;background:rgba(0,0,0,.7);padding:1px 4px;font:13px sans-serif;'
+      + 'white-space:nowrap;pointer-events:none;';
+    o.appendChild(d); o.appendChild(l);
+  }
+  document.body.appendChild(o);
+  return true;
+}
+"""
+
+
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
-             debug=False, connect=None):  # pragma: no cover - live
+             debug=False, overlay=False, connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
@@ -155,6 +179,30 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                           for t in targets), flush=True)
         _escape_to_map(page)
         clicker = CdpClicker(page)
+
+        if overlay:
+            pts = []
+            for s in samples:                                 # green = known-correct markers
+                x, y = s.screen
+                pts.append({"x": x, "y": y, "color": "#22cc44",
+                            "label": f"{_name(names, s.province_id)}(marker)"})
+            for t in targets:                                 # red = predicted attackable targets
+                f = flags.get(t.province_id)
+                if f is None:
+                    continue
+                x, y = nav.screen_for(f)
+                pts.append({"x": x, "y": y, "color": "#ee2222",
+                            "label": f"{_name(names, t.province_id)} {t.gain_attrition_chance}%"})
+            page.evaluate(_JS_OVERLAY, pts)
+            page.wait_for_timeout(400)
+            shot = "gbg_overlay.png"
+            try:
+                page.screenshot(path=shot)
+                print(f"\n[overlay] green=markers (should sit on their sectors), red=predicted "
+                      f"attackable targets. Screenshot → {shot} (SEND me this image).", flush=True)
+            except Exception as exc:
+                print(f"[overlay] screenshot failed: {exc}", flush=True)
+            return 0
 
         if debug:
             # is the transform still valid right now? re-read a marker and compare to prediction.
@@ -251,10 +299,12 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("-n", type=int, default=5, help="how many attackable provinces to open")
     ap.add_argument("--debug", action="store_true",
                     help="click the first on-screen target and dump requests + new DOM windows")
+    ap.add_argument("--overlay", action="store_true",
+                    help="draw dots at predicted click points and screenshot (no clicking)")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
-                     debug=args.debug)
+                     debug=args.debug, overlay=args.overlay)
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
