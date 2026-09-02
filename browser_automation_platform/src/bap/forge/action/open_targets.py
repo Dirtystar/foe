@@ -195,13 +195,35 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                             "label": f"{_name(names, t.province_id)} {t.gain_attrition_chance}%"})
             page.evaluate(_JS_OVERLAY, pts)
             page.wait_for_timeout(400)
-            shot = "gbg_overlay.png"
             try:
-                page.screenshot(path=shot)
-                print(f"\n[overlay] green=markers (should sit on their sectors), red=predicted "
-                      f"attackable targets. Screenshot → {shot} (SEND me this image).", flush=True)
+                page.screenshot(path="gbg_overlay.png")
+                print("\n[overlay] dots drawn → gbg_overlay.png (green=markers, red=targets).",
+                      flush=True)
             except Exception as exc:
                 print(f"[overlay] screenshot failed: {exc}", flush=True)
+
+            # click test: click the first on-screen target, and a spot a bit BELOW it (into the
+            # sector body, off the banner), screenshotting each so we see which opens the window.
+            on = [(t, nav.screen_for(flags[t.province_id])) for t in targets
+                  if t.province_id in flags]
+            on = [(t, xy) for t, xy in on
+                  if 80 <= xy[0] <= vw - 80 and 80 <= xy[1] <= vh - 80]
+            if on:
+                t, (x, y) = on[0]
+                for dy, shot in ((0, "gbg_click_at.png"), (45, "gbg_click_below.png")):
+                    latest["pid"] = None
+                    latest["methods"] = []
+                    clicker.click_xy(x, y + dy)
+                    page.wait_for_timeout(1400)
+                    try:
+                        page.screenshot(path=shot)
+                    except Exception:
+                        pass
+                    print(f"[overlay] clicked {_name(names, t.province_id)} at "
+                          f"({_r(x)},{_r(y + dy)}) → provinceId={latest['pid']} "
+                          f"methods={latest['methods'] or '(none)'} shot={shot}", flush=True)
+            print("[overlay] SEND me gbg_overlay.png, gbg_click_at.png and gbg_click_below.png.",
+                  flush=True)
             return 0
 
         if debug:
