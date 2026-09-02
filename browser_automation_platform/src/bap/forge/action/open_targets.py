@@ -246,23 +246,33 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             if on:
                 t, (x, y) = min(on, key=lambda p: (p[1][0] - vw / 2) ** 2 + (p[1][1] - vh / 2) ** 2)
                 nm = _name(names, t.province_id)
-                print(f"[overlay] probing click on {nm} at ({_r(x)},{_r(y)}):", flush=True)
-                # 1) what's actually under the click point?
+                print(f"[overlay] hover-trajectory + click on {nm} at ({_r(x)},{_r(y)}):",
+                      flush=True)
                 latest["pid"] = None
                 latest["methods"] = []
-                info = page.evaluate(_JS_PROBE_CLICK, [x, y])
-                print(f"    topElement under point: {info.get('topElement')}", flush=True)
-                print(f"    canvas element:         {info.get('canvas')}", flush=True)
-                print(f"    dispatched events on:   {info.get('dispatchedOn')}", flush=True)
-                page.wait_for_timeout(1300)
-                print(f"    after JS-dispatch: provinceId={latest['pid']} "
-                      f"methods={latest['methods'] or '(none)'}", flush=True)
                 try:
-                    page.screenshot(path="gbg_jsclick.png")
+                    page.mouse.move(20, 20)
+                    page.wait_for_timeout(120)
+                    page.mouse.move(x, y, steps=25)        # real trajectory of mousemove events
+                    page.wait_for_timeout(450)
+                    try:
+                        page.screenshot(path="gbg_hover.png")   # did the province highlight?
+                    except Exception:
+                        pass
+                    page.mouse.down()
+                    page.wait_for_timeout(90)
+                    page.mouse.up()
+                except Exception as exc:
+                    print(f"    move/click error: {exc}", flush=True)
+                page.wait_for_timeout(1300)
+                try:
+                    page.screenshot(path="gbg_hoverclick.png")
                 except Exception:
                     pass
-                print("[overlay] SEND me gbg_overlay.png and gbg_jsclick.png — and say whether "
-                      "gbg_jsclick.png shows an open province window.", flush=True)
+                print(f"    after hover+click: provinceId={latest['pid']} "
+                      f"methods={latest['methods'] or '(none)'}", flush=True)
+                print("[overlay] SEND me gbg_hover.png (province highlighted under cursor?) and "
+                      "gbg_hoverclick.png (province window open?).", flush=True)
             return 0
 
         if debug:
