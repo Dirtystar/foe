@@ -141,12 +141,23 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
             return None
         map_id = reader.snapshot.map_id if reader.snapshot else None
         print(f"Map loaded ({len(layout.flags)} provinces, id={map_id}).", flush=True)
+        try:
+            vw = int(page.evaluate("() => window.innerWidth"))
+            vh = int(page.evaluate("() => window.innerHeight"))
+            print(f"Viewport: {vw}x{vh}.", flush=True)
+            if vw > 2600 or vh > 1600:
+                print("⚠ Viewport looks very large — your BROWSER is probably zoomed out "
+                      "(Ctrl+scroll). Press Ctrl+0 to reset browser zoom to 100%, then zoom the "
+                      "MAP with the in-game wheel/buttons only. Re-run after fixing.", flush=True)
+        except Exception:
+            pass
         need = collector.need
-        print(f"\n>>> FIRST zoom the GBG map ALL THE WAY OUT so the whole map fits on screen, "
-              "then DON'T scroll/zoom again. <<<", flush=True)
-        print(f"Now OPEN {need} DIFFERENT provinces, SPREAD ACROSS the map (corners + middle). "
-              "For each: click the province, let its preview open, press Escape back to the map.",
+        print("\n>>> Browser zoom must be 100% (Ctrl+0). Use the DEFAULT GBG map view — don't "
+              "browser-zoom. Then DON'T scroll/zoom the map again during or after this. <<<",
               flush=True)
+        print(f"Now OPEN {need} DIFFERENT provinces, SPREAD across what you can see (corners + "
+              "middle). For each: click the province, let its preview open, press Escape back "
+              "to the map.", flush=True)
 
         deadline = time.time() + timeout_s
         seen = 0
