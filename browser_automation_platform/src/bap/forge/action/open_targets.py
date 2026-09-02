@@ -366,10 +366,10 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                 print("[overlay] window buttons found in DOM:", flush=True)
                 print(_json.dumps(btns, indent=2, ensure_ascii=False)[:2000] or "  (none — canvas)",
                       flush=True)
-                attack = next((b for b in btns if b["text"].strip().lower() == "útok"), None)
-                if attack:
-                    ax = attack["rect"][0] + attack["rect"][2] // 2
-                    ay = attack["rect"][1] + attack["rect"][3] // 2
+                attack_btn = next((b for b in btns if b["text"].strip().lower() == "útok"), None)
+                if attack_btn:
+                    ax = attack_btn["rect"][0] + attack_btn["rect"][2] // 2
+                    ay = attack_btn["rect"][1] + attack_btn["rect"][3] // 2
                     print(f"[overlay] clicking Útok at ({ax},{ay})…", flush=True)
                     latest["pid"] = None
                     latest["methods"] = []
