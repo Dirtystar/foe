@@ -32,6 +32,39 @@ def _name(names, pid):
     return names.get(str(pid)) or f"#{pid}"
 
 
+def _hover_click(page, x, y):  # pragma: no cover - live
+    """Click (x, y) the way the FoE canvas needs it: a real mousemove trajectory to set the
+    engine's hovered-target state, then press-hold-release. Plain CDP clicks do NOT register."""
+    page.mouse.move(20, 20)
+    page.wait_for_timeout(80)
+    page.mouse.move(x, y, steps=25)
+    page.wait_for_timeout(320)
+    page.mouse.down()
+    page.wait_for_timeout(80)
+    page.mouse.up()
+
+
+# Find the province window's action buttons (Útok/Vyjednávání) once it is open.
+_JS_FIND_BUTTONS = """
+() => {
+  const out = [];
+  for (const el of document.querySelectorAll('body *')) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 18 || r.height < 10 || r.width > 400) continue;
+    const txt = (el.textContent || '').replace(/\\s+/g,' ').trim();
+    const cls = el.getAttribute('class') || '';
+    if ((/^(útok|vyjednávání|budova|provincie)$/i.test(txt))
+        || /attack|negotiat|province-window|btn-attack/i.test(cls)) {
+      out.push({tag: el.tagName, cls: cls.slice(0,44), text: txt.slice(0,26),
+                rect: [Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)]});
+    }
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+"""
+
+
 # Visible "window / dialog / button" candidates — used to diff before/after a click, since
 # FoE windows are pre-created DOM and merely shown/hidden (so they are not "new" nodes).
 _JS_VISIBLE = """
@@ -246,33 +279,41 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             if on:
                 t, (x, y) = min(on, key=lambda p: (p[1][0] - vw / 2) ** 2 + (p[1][1] - vh / 2) ** 2)
                 nm = _name(names, t.province_id)
-                print(f"[overlay] hover-trajectory + click on {nm} at ({_r(x)},{_r(y)}):",
-                      flush=True)
+                print(f"[overlay] opening {nm} at ({_r(x)},{_r(y)}) via hover-click…", flush=True)
                 latest["pid"] = None
                 latest["methods"] = []
+                _hover_click(page, x, y)                    # opens the province window (works!)
+                page.wait_for_timeout(1000)
                 try:
-                    page.mouse.move(20, 20)
-                    page.wait_for_timeout(120)
-                    page.mouse.move(x, y, steps=25)        # real trajectory of mousemove events
-                    page.wait_for_timeout(450)
-                    try:
-                        page.screenshot(path="gbg_hover.png")   # did the province highlight?
-                    except Exception:
-                        pass
-                    page.mouse.down()
-                    page.wait_for_timeout(90)
-                    page.mouse.up()
-                except Exception as exc:
-                    print(f"    move/click error: {exc}", flush=True)
-                page.wait_for_timeout(1300)
-                try:
-                    page.screenshot(path="gbg_hoverclick.png")
+                    page.screenshot(path="gbg_province.png")
                 except Exception:
                     pass
-                print(f"    after hover+click: provinceId={latest['pid']} "
-                      f"methods={latest['methods'] or '(none)'}", flush=True)
-                print("[overlay] SEND me gbg_hover.png (province highlighted under cursor?) and "
-                      "gbg_hoverclick.png (province window open?).", flush=True)
+                # find the Útok button in the now-open window
+                import json as _json
+                btns = page.evaluate(_JS_FIND_BUTTONS) or []
+                print("[overlay] window buttons found in DOM:", flush=True)
+                print(_json.dumps(btns, indent=2, ensure_ascii=False)[:2000] or "  (none — canvas)",
+                      flush=True)
+                attack = next((b for b in btns if b["text"].strip().lower() == "útok"), None)
+                if attack:
+                    ax = attack["rect"][0] + attack["rect"][2] // 2
+                    ay = attack["rect"][1] + attack["rect"][3] // 2
+                    print(f"[overlay] clicking Útok at ({ax},{ay})…", flush=True)
+                    latest["pid"] = None
+                    latest["methods"] = []
+                    _hover_click(page, ax, ay)
+                    page.wait_for_timeout(1600)
+                    try:
+                        page.screenshot(path="gbg_attack.png")
+                    except Exception:
+                        pass
+                    print(f"    after Útok: provinceId={latest['pid']} "
+                          f"methods={latest['methods'] or '(none)'}", flush=True)
+                    print("[overlay] SEND gbg_province.png and gbg_attack.png (did the battle/army "
+                          "screen open?).", flush=True)
+                else:
+                    print("[overlay] Útok not in DOM → the window is canvas-drawn. SEND "
+                          "gbg_province.png; I'll locate Útok on the canvas.", flush=True)
             return 0
 
         if debug:
