@@ -20,6 +20,7 @@ from bap.forge.action.locate import clear_marker, locate_province
 from bap.forge.action.navigate import _escape_to_map, _r, _viewport, open_province
 from bap.forge.action.solve import _JS_MARKER_IDS
 from bap.forge.gbg_data.calibration import CalibrationSample, residual, save_calibration, solve_uniform
+from bap.forge.gbg_data.map_layout import MapTransform
 from bap.forge.gbg_data.navigator import MapNavigator
 
 _JS_NAMES = ("() => { const m = {}; document.querySelectorAll('tr[data-id]').forEach(tr => {"
@@ -153,11 +154,19 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                 samples.append(CalibrationSample(pid, xy))
                 print(f"  marker {_name(names, pid)} (id={pid}): screen ({_r(xy[0])},{_r(xy[1])})",
                       flush=True)
-        if len(samples) < 2:
-            print("Need ≥2 marker points to solve the transform. Open the GBG map with the FoE "
-                  "Helper box visible.", flush=True)
+        if len(samples) >= 2:
+            transform = solve_uniform(layout, samples)
+        elif len(samples) == 1:
+            # scale has been exactly 1.0 every run (map at 1:1 zoom); one marker fixes the offset
+            s = samples[0]
+            fx, fy = flags[s.province_id]
+            transform = MapTransform(1.0, 1.0, s.screen[0] - fx, s.screen[1] - fy)
+            print("Only 1 markable province — assuming scale=1.0 (observed every run); offset "
+                  "from that one marker.", flush=True)
+        else:
+            print("No markable provinces found. Open the GBG map with the FoE Helper box "
+                  "visible.", flush=True)
             return None
-        transform = solve_uniform(layout, samples)
         save_calibration(store, world, layout.map_id, transform)
         print(f"Transform: scale={transform.scale_x:.4f} offset=({transform.off_x:.0f},"
               f"{transform.off_y:.0f})  residual={residual(layout, transform, samples):.1f}px",
