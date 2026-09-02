@@ -31,8 +31,26 @@ def _name(names, pid):
     return names.get(str(pid)) or f"#{pid}"
 
 
+_JS_TAG = "() => { document.querySelectorAll('body *').forEach(e => e.setAttribute('data-bapseen','1')); return true; }"
+_JS_NEW_WINDOW = """
+() => {
+  const out = [];
+  for (const el of document.querySelectorAll('body *:not([data-bapseen])')) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 80 || r.height < 30) continue;
+    out.push({tag: el.tagName, id: (el.id||'').slice(0,40),
+              cls: (el.getAttribute('class')||'').slice(0,50),
+              text: (el.textContent||'').replace(/\\s+/g,' ').trim().slice(0,70),
+              rect: [Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)]});
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+"""
+
+
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
-             connect=None):  # pragma: no cover - live
+             debug=False, connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
@@ -46,7 +64,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             pass
         reader = LiveGbgReader()
         feed = make_response_handler(reader)
-        latest = {"pid": None}
+        latest = {"pid": None, "methods": []}
 
         def _on_response(resp):
             try:
@@ -60,7 +78,12 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                 if "/game/json" not in (req.url or ""):
                     return
                 import json as _j
-                pid = parse_province_id_from_game_json(_j.loads(req.post_data or "[]"))
+                batch = _j.loads(req.post_data or "[]")
+                for r in batch if isinstance(batch, list) else []:
+                    if isinstance(r, dict):
+                        latest["methods"].append(
+                            f"{r.get('requestClass')}.{r.get('requestMethod')}")
+                pid = parse_province_id_from_game_json(batch)
                 if pid is not None:
                     latest["pid"] = pid
             except BaseException:
@@ -119,10 +142,43 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         print(f"\nAttackable now ({len(targets)}): "
               + ", ".join(f"{_name(names, t.province_id)}[{t.gain_attrition_chance}%]"
                           for t in targets), flush=True)
-        print("Opening each via the transform (pan + click + confirm)…", flush=True)
-
         _escape_to_map(page)
         clicker = CdpClicker(page)
+
+        if debug:
+            print("\n[debug] predicted screen positions:", flush=True)
+            on_screen = []
+            for t in targets:
+                f = flags.get(t.province_id)
+                if f is None:
+                    continue
+                sx, sy = nav.screen_for(f)
+                ok_pos = 80 <= sx <= vw - 80 and 80 <= sy <= vh - 80
+                print(f"  {_name(names, t.province_id)} id={t.province_id}: flag=({_r(f[0])},"
+                      f"{_r(f[1])}) → screen ({_r(sx)},{_r(sy)}) {'ON' if ok_pos else 'OFF'}-screen",
+                      flush=True)
+                if ok_pos:
+                    on_screen.append((t, (sx, sy)))
+            if not on_screen:
+                print("[debug] none predicted on-screen — pan logic needed; stop here.", flush=True)
+                return 0
+            t, scr = on_screen[0]
+            print(f"\n[debug] clicking {_name(names, t.province_id)} at ({_r(scr[0])},{_r(scr[1])}) "
+                  "and watching what happens…", flush=True)
+            page.evaluate(_JS_TAG)
+            latest["pid"] = None
+            latest["methods"] = []
+            clicker.click_xy(scr[0], scr[1])
+            page.wait_for_timeout(1800)
+            print(f"[debug] provinceId seen: {latest['pid']}", flush=True)
+            print(f"[debug] /game/json methods fired: {latest['methods'] or '(none)'}", flush=True)
+            import json as _json
+            wins = page.evaluate(_JS_NEW_WINDOW)
+            print("[debug] new DOM windows/panels after click:", flush=True)
+            print(_json.dumps(wins, indent=2, ensure_ascii=False)[:3500], flush=True)
+            return 0
+
+        print("Opening each via the transform (pan + click + confirm)…", flush=True)
         ok = 0
         for t in targets:
             pid = t.province_id
@@ -163,9 +219,12 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--tab", default=None, help="tab: url/title contains this (default: world)")
     ap.add_argument("--tab-index", type=int, default=None, dest="tab_index")
     ap.add_argument("-n", type=int, default=5, help="how many attackable provinces to open")
+    ap.add_argument("--debug", action="store_true",
+                    help="click the first on-screen target and dump requests + new DOM windows")
     args = ap.parse_args(argv)
     try:
-        r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n)
+        r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
+                     debug=args.debug)
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
