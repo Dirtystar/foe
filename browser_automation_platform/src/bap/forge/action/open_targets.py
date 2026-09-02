@@ -454,12 +454,12 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             print(f"[debug] /game/json methods fired: {latest['methods'] or '(none)'}", flush=True)
             after = page.evaluate(_JS_VISIBLE) or []
             newvis = [x for x in after if _sig(x) not in before]
-            attack = [x for x in after if x.get("isAttack")]
+            attack_els = [x for x in after if x.get("isAttack")]
             import json as _json
             print("[debug] newly-visible window/dialog candidates after click:", flush=True)
             print(_json.dumps(newvis, indent=2, ensure_ascii=False)[:3000] or "  (none)", flush=True)
             print("[debug] elements with Attack/Útok/Negotiate text (visible):", flush=True)
-            print(_json.dumps(attack, indent=2, ensure_ascii=False)[:1500] or "  (none)", flush=True)
+            print(_json.dumps(attack_els, indent=2, ensure_ascii=False)[:1500] or "  (none)", flush=True)
             return 0
 
         print("Opening each via the transform (pan + click + confirm)…", flush=True)
