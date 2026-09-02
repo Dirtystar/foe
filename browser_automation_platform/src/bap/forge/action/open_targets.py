@@ -168,7 +168,8 @@ _JS_OVERLAY = """
 
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
-             utok=(1157, 800), autobattle=(1144, 800), connect=None):  # pragma: no cover - live
+             click_here=False, utok=(1157, 800), autobattle=(1150, 790),
+             connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
@@ -223,6 +224,27 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
 
         page.on("response", _on_response)
         page.on("request", _on_request)
+
+        if click_here:
+            # click Automatická bitva on the CURRENT screen (you navigate to the attack army
+            # screen manually). Confirms the coordinate and fights that one battle.
+            abx, aby = autobattle
+            before = reader.attrition_level
+            latest["pid"] = None
+            latest["methods"] = []
+            print(f"[click] hover-clicking ({abx},{aby}) on the current screen. attrition "
+                  f"before={before}", flush=True)
+            _hover_click(page, abx, aby)
+            page.wait_for_timeout(4500)
+            try:
+                page.screenshot(path="gbg_clicked.png")
+            except Exception:
+                pass
+            after = reader.attrition_level
+            print(f"[click] done. provinceId={latest['pid']} methods={latest['methods'] or '(none)'}"
+                  f"  attrition {before} → {after}. SEND gbg_clicked.png (did the battle resolve?).",
+                  flush=True)
+            return 0
 
         # --- flags + names -----------------------------------------------------
         layout = _fetch_map_layout(page)
@@ -571,16 +593,18 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="with --attack: actually click Automatická bitva (fights ONE real battle)")
     ap.add_argument("--ux", type=int, default=1157, help="Útok button CSS x (canvas window)")
     ap.add_argument("--uy", type=int, default=800, help="Útok button CSS y (canvas window)")
-    ap.add_argument("--abx", type=int, default=1144, help="Automatická bitva button CSS x")
-    ap.add_argument("--aby", type=int, default=800, help="Automatická bitva button CSS y")
+    ap.add_argument("--abx", type=int, default=1150, help="Automatická bitva button CSS x")
+    ap.add_argument("--aby", type=int, default=790, help="Automatická bitva button CSS y")
     ap.add_argument("--grid", action="store_true",
                     help="just draw a labeled CSS grid on the current screen and screenshot")
+    ap.add_argument("--click", action="store_true",
+                    help="hover-click the Automatická bitva coord on the CURRENT screen (fights)")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
                      debug=args.debug, overlay=args.overlay, attack=args.attack or args.fight,
-                     fight=args.fight, grid_only=args.grid, utok=(args.ux, args.uy),
-                     autobattle=(args.abx, args.aby))
+                     fight=args.fight, grid_only=args.grid, click_here=args.click,
+                     utok=(args.ux, args.uy), autobattle=(args.abx, args.aby))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
