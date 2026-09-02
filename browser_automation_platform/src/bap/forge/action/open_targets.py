@@ -211,28 +211,45 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             except Exception as exc:
                 print(f"[overlay] screenshot failed: {exc}", flush=True)
 
-            # click test: click the first on-screen target, and a spot a bit BELOW it (into the
-            # sector body, off the banner), screenshotting each so we see which opens the window.
+            # click test: try several click STYLES on the most central on-screen target and
+            # screenshot each, to find which actually opens the province window on the canvas.
             on = [(t, nav.screen_for(flags[t.province_id])) for t in targets
                   if t.province_id in flags]
             on = [(t, xy) for t, xy in on
                   if 80 <= xy[0] <= vw - 80 and 80 <= xy[1] <= vh - 80]
             if on:
-                t, (x, y) = on[0]
-                for dy, shot in ((0, "gbg_click_at.png"), (45, "gbg_click_below.png")):
+                t, (x, y) = min(on, key=lambda p: (p[1][0] - vw / 2) ** 2 + (p[1][1] - vh / 2) ** 2)
+                nm = _name(names, t.province_id)
+                print(f"[overlay] click-styles on {nm} at ({_r(x)},{_r(y)}):", flush=True)
+                shots = []
+                for label in ("simple", "hold150", "double"):
                     latest["pid"] = None
                     latest["methods"] = []
-                    clicker.click_xy(x, y + dy)
-                    page.wait_for_timeout(1400)
+                    try:
+                        if label == "simple":
+                            page.mouse.click(x, y)
+                        elif label == "hold150":
+                            page.mouse.move(x, y)
+                            page.wait_for_timeout(120)
+                            page.mouse.down()
+                            page.wait_for_timeout(150)
+                            page.mouse.up()
+                        else:
+                            page.mouse.dblclick(x, y)
+                    except Exception as exc:
+                        print(f"    {label}: click error {exc}", flush=True)
+                    page.wait_for_timeout(1300)
+                    shot = f"gbg_{label}.png"
                     try:
                         page.screenshot(path=shot)
+                        shots.append(shot)
                     except Exception:
                         pass
-                    print(f"[overlay] clicked {_name(names, t.province_id)} at "
-                          f"({_r(x)},{_r(y + dy)}) → provinceId={latest['pid']} "
-                          f"methods={latest['methods'] or '(none)'} shot={shot}", flush=True)
-            print("[overlay] SEND me gbg_overlay.png, gbg_click_at.png and gbg_click_below.png.",
-                  flush=True)
+                    print(f"    {label}: provinceId={latest['pid']} "
+                          f"methods={latest['methods'] or '(none)'} → {shot}", flush=True)
+                    _escape_to_map(page)                       # close any window before next style
+                print(f"[overlay] SEND me: gbg_overlay.png + {', '.join(shots)} — and say which "
+                      "one opened a province window.", flush=True)
             return 0
 
         if debug:
