@@ -73,6 +73,45 @@ _JS_FOE = """
 }
 """
 
+# Every element carrying a data-id (likely the provinceId) — its tag/class/text/rect.
+_JS_DATAID = """
+() => Array.from(document.querySelectorAll('[data-id]')).slice(0,120).map(el=>{
+  const r = el.getBoundingClientRect();
+  return {tag:el.tagName, dataId:el.getAttribute('data-id'),
+          cls:(el.getAttribute('class')||'').slice(0,45),
+          title:(el.getAttribute('data-original-title')||'').slice(0,40),
+          text:(el.textContent||'').replace(/\\s+/g,' ').trim().slice(0,30),
+          rect:[Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)]};
+})
+"""
+
+# Structure of the GBG side panel that lists provinces.
+_JS_PANEL = """
+() => {
+  const el = document.querySelector('.gbg-tabs') || document.querySelector('#gbgnextup');
+  if (!el) return 'no gbg panel found';
+  const root = el.closest('[class*=gbg]') || el.parentElement || el;
+  return root.outerHTML.replace(/\\s+/g,' ').slice(0, 6000);
+}
+"""
+
+# Top-level keys of the game objects, and any GBG/map singletons hanging off window.
+_JS_GAME = """
+() => {
+  const keys = o => { try { return Object.keys(o).slice(0,80); } catch(e){ return 'err'; } };
+  const out = {};
+  try { out.MainParser = keys(window.MainParser); } catch(e){ out.MainParser='err'; }
+  try { out.foe = keys(window.foe); } catch(e){ out.foe='err'; }
+  out.gbgWindowKeys = Object.keys(window).filter(k=>/gbg|guildbattle|battleground|sector/i.test(k));
+  // does MainParser cache the last getBattleground response (grid coords)?
+  try {
+    const mp = window.MainParser || {};
+    out.mainParserGbgish = Object.keys(mp).filter(k=>/gbg|battle|grid|province|map/i.test(k));
+  } catch(e){ out.mainParserGbgish='err'; }
+  return out;
+}
+"""
+
 
 def run_inspect(endpoint, world, *, tab=None, tab_index=None, connect=None):  # pragma: no cover - live
     from bap.forge.action.cdp_click import _select_page
@@ -108,6 +147,9 @@ def run_inspect(endpoint, world, *, tab=None, tab_index=None, connect=None):  # 
         dom = _ev("DOM province-like elements", _JS_DOM)
         _ev("map/grid GLOBALS", _JS_GLOBALS)
         _ev("FoE known objects", _JS_FOE)
+        _ev("elements with data-id (provinceId?)", _JS_DATAID)
+        _ev("GBG side-panel HTML", _JS_PANEL)
+        _ev("game objects (MainParser/foe keys, GBG singletons)", _JS_GAME)
 
         if dom and dom.get("count"):
             print("→ DOM province elements FOUND. If each has a stable id/data-id and a real "
