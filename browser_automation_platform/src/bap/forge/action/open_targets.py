@@ -167,8 +167,8 @@ _JS_OVERLAY = """
 
 
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
-             debug=False, overlay=False, attack=False, fight=False, utok=(1157, 800),
-             autobattle=(1144, 800), connect=None):  # pragma: no cover - live
+             debug=False, overlay=False, attack=False, fight=False, grid_only=False,
+             utok=(1157, 800), autobattle=(1144, 800), connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
@@ -180,6 +180,20 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             page.bring_to_front()
         except Exception:
             pass
+
+        if grid_only:
+            # Just label the current screen — for reading a canvas button's coordinate.
+            # Manually open the province → Útok → Správa armády first, then run this.
+            page.evaluate(_JS_GRID)
+            page.wait_for_timeout(250)
+            try:
+                page.screenshot(path="gbg_screen_grid.png")
+            except Exception:
+                pass
+            print("Drew a labeled CSS grid on the current screen → gbg_screen_grid.png. SEND it "
+                  "(I'll read the Automatická bitva coordinate off the yellow grid numbers).",
+                  flush=True)
+            return 0
         reader = LiveGbgReader()
         feed = make_response_handler(reader)
         latest = {"pid": None, "methods": []}
@@ -559,11 +573,14 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--uy", type=int, default=800, help="Útok button CSS y (canvas window)")
     ap.add_argument("--abx", type=int, default=1144, help="Automatická bitva button CSS x")
     ap.add_argument("--aby", type=int, default=800, help="Automatická bitva button CSS y")
+    ap.add_argument("--grid", action="store_true",
+                    help="just draw a labeled CSS grid on the current screen and screenshot")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
                      debug=args.debug, overlay=args.overlay, attack=args.attack or args.fight,
-                     fight=args.fight, utok=(args.ux, args.uy), autobattle=(args.abx, args.aby))
+                     fight=args.fight, grid_only=args.grid, utok=(args.ux, args.uy),
+                     autobattle=(args.abx, args.aby))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
