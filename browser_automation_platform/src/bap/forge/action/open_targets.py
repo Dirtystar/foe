@@ -295,22 +295,20 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                 if latest["pid"] is not None:
                     print(f"  ✅ {_name(names, t.province_id)} (id={t.province_id}): reached battle "
                           f"screen — getArmyPreview provinceId={latest['pid']}", flush=True)
+                    reached = t.province_id
+                    abx, aby = autobattle
+                    page.evaluate(_JS_GRID)                 # grid to read the button coords off
+                    page.evaluate(_JS_OVERLAY, [{"x": abx, "y": aby, "color": "#00e5ff",
+                                                 "label": f"AutoBitva? ({abx},{aby})"}])
+                    page.wait_for_timeout(150)
                     try:
                         page.screenshot(path="gbg_battle.png")
                     except Exception:
                         pass
-                    reached = t.province_id
+                    print("  [armygrid] gbg_battle.png has the grid + cyan estimate — SEND it so I "
+                          "can read the real Automatická bitva coordinate.", flush=True)
                     if fight:
-                        abx, aby = autobattle
                         before = reader.attrition_level
-                        page.evaluate(_JS_GRID)             # grid to read the real button coord
-                        page.evaluate(_JS_OVERLAY, [{"x": abx, "y": aby, "color": "#00e5ff",
-                                                     "label": f"AutoBitva? ({abx},{aby})"}])
-                        page.wait_for_timeout(150)
-                        try:
-                            page.screenshot(path="gbg_armygrid.png")
-                        except Exception:
-                            pass
                         print(f"  [fight] clicking Automatická bitva at ({abx},{aby}) — REAL "
                               f"battle. attrition before={before}", flush=True)
                         _hover_click(page, abx, aby)
