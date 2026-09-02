@@ -157,12 +157,16 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
         except Exception:
             pass
         need = collector.need
-        print("\n>>> Browser zoom must be 100% (Ctrl+0). Use the DEFAULT GBG map view — don't "
-              "browser-zoom. Then DON'T scroll/zoom the map again during or after this. <<<",
-              flush=True)
-        print(f"Now OPEN {need} DIFFERENT provinces, SPREAD across what you can see (corners + "
-              "middle). For each: click the province, let its preview open, press Escape back "
-              "to the map.", flush=True)
+        print("\n" + "=" * 70, flush=True)
+        print("CRITICAL — the GBG map re-centres when you open a province, which breaks a\n"
+              "single transform. So LOCK the view: zoom the MAP fully OUT so the WHOLE map is\n"
+              "visible with empty margin around it and it CANNOT scroll.", flush=True)
+        print("  • Zoom with the MOUSE WHEEL while hovering OVER the game map (NOT Ctrl — that\n"
+              "    zooms the browser). Browser zoom must be 100% (Ctrl+0).\n"
+              "  • After it's fully out, do NOT scroll/zoom again.", flush=True)
+        print("=" * 70, flush=True)
+        print(f"Then OPEN {need} DIFFERENT provinces spread across the map. For each: click the\n"
+              "province, let its preview open, press Escape back to the map.", flush=True)
 
         deadline = time.time() + timeout_s
         seen = 0
@@ -193,10 +197,13 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
               f"→ saved to {store}", flush=True)
         print(f"   scale={transform.scale_x:.4f}  offset=({transform.off_x:.1f},"
               f"{transform.off_y:.1f})  worst fit error={err:.0f}px", flush=True)
-        if err > 40:
-            print("   ⚠ fit error is high — clicks may have been imprecise or provinces too "
-                  "clustered. Consider re-running and clicking flag centres, well spread.",
-                  flush=True)
+        if err > 25:
+            print("   ⚠ fit error too high — the map almost certainly SCROLLED between clicks. "
+                  "Zoom the MAP fully OUT (mouse wheel over the map, whole map visible, can't "
+                  "scroll), then re-run. A good calibration is < 25px.", flush=True)
+        else:
+            print("   Looks good (low error). Verify with: python -m bap.forge.action.navigate "
+                  f"--world {world}", flush=True)
         try:
             page.remove_listener("response", _on_response)
             page.remove_listener("request", _on_request)
