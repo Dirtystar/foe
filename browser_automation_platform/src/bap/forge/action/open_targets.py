@@ -44,6 +44,35 @@ def _hover_click(page, x, y):  # pragma: no cover - live
     page.mouse.up()
 
 
+def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
+                    inter_ms, reload_every):  # pragma: no cover - live
+    """Fight the province currently on the army screen: click Automatická bitva each iteration,
+    press R (Reload units) every ``reload_every`` fights, stop at the attrition ``limit``.
+    Returns the number of battles that actually started."""
+    abx, aby = autobattle
+    fought = 0
+    for i in range(repeat):
+        lvl = reader.attrition_level
+        if limit is not None and lvl is not None and lvl >= limit:
+            print(f"  attrition {lvl} ≥ limit {limit} — STOP.", flush=True)
+            break
+        latest["pid"] = None
+        latest["methods"] = []
+        _hover_click(page, abx, aby)                       # the battle
+        page.wait_for_timeout(inter_ms)
+        started = any("startByBattleType" in m for m in latest["methods"])
+        if started:
+            fought += 1
+        reloaded = False
+        if reload_every and (i + 1) % reload_every == 0:
+            clicker.press("r")                             # replenish attacking units
+            page.wait_for_timeout(500)
+            reloaded = True
+        print(f"  fight {i + 1}/{repeat}: started={started} reload={reloaded} "
+              f"attrition={reader.attrition_level}", flush=True)
+    return fought
+
+
 # A labeled CSS-pixel grid so we can read a canvas element's exact click coordinate.
 _JS_GRID = """
 () => {
@@ -229,30 +258,11 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             # Fight the current province over and over. Each iteration clicks Automatická bitva
             # (the actual battle); every `reload_every` fights we press 'r' (Reload) to replenish
             # the attacking units so the army stays strong. Stops at the attrition limit.
-            abx, aby = autobattle
             clicker = CdpClicker(page)
             print(f"[click] fighting × {repeat} (auto-battle each; R-reload every {reload_every}), "
                   f"limit={limit}, {inter_ms}ms apart. Be on the attack army screen.", flush=True)
-            fought = 0
-            for i in range(repeat):
-                lvl = reader.attrition_level
-                if limit is not None and lvl is not None and lvl >= limit:
-                    print(f"[click] attrition {lvl} ≥ limit {limit} — STOP.", flush=True)
-                    break
-                latest["pid"] = None
-                latest["methods"] = []
-                _hover_click(page, abx, aby)               # the battle
-                page.wait_for_timeout(inter_ms)
-                started = any("startByBattleType" in m for m in latest["methods"])
-                if started:
-                    fought += 1
-                reloaded = False
-                if reload_every and (i + 1) % reload_every == 0:
-                    clicker.press("r")                     # replenish attacking units
-                    page.wait_for_timeout(500)
-                    reloaded = True
-                print(f"  fight {i + 1}/{repeat}: started={started} reload={reloaded} "
-                      f"attrition={reader.attrition_level}", flush=True)
+            fought = _run_fight_loop(page, clicker, reader, latest, autobattle, repeat=repeat,
+                                     limit=limit, inter_ms=inter_ms, reload_every=reload_every)
             print(f"[click] {fought}/{repeat} battles started. Attrition now "
                   f"{reader.attrition_level}.", flush=True)
             return 0
@@ -364,31 +374,11 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     print(f"  ✅ {_name(names, t.province_id)} (id={t.province_id}): reached battle "
                           f"screen — getArmyPreview provinceId={latest['pid']}", flush=True)
                     reached = t.province_id
-                    abx, aby = autobattle
-                    page.evaluate(_JS_GRID)                 # grid to read the button coords off
-                    page.evaluate(_JS_OVERLAY, [{"x": abx, "y": aby, "color": "#00e5ff",
-                                                 "label": f"AutoBitva? ({abx},{aby})"}])
-                    page.wait_for_timeout(150)
-                    try:
-                        page.screenshot(path="gbg_battle.png")
-                    except Exception:
-                        pass
-                    print("  [armygrid] gbg_battle.png has the grid + cyan estimate — SEND it so I "
-                          "can read the real Automatická bitva coordinate.", flush=True)
                     if fight:
-                        before = reader.attrition_level
-                        print(f"  [fight] clicking Automatická bitva at ({abx},{aby}) — REAL "
-                              f"battle. attrition before={before}", flush=True)
-                        _hover_click(page, abx, aby)
-                        page.wait_for_timeout(4500)
-                        try:
-                            page.screenshot(path="gbg_fought.png")
-                        except Exception:
-                            pass
-                        after = reader.attrition_level
-                        print(f"  [fight] done. attrition {before} → {after}. SEND gbg_armygrid.png "
-                              "(cyan dot vs the real Automatická bitva button — read the grid) and "
-                              "gbg_fought.png.", flush=True)
+                        print(f"  [fight] farming {_name(names, t.province_id)} to attrition "
+                              f"limit={limit}…", flush=True)
+                        _run_fight_loop(page, clicker, reader, latest, autobattle, repeat=repeat,
+                                        limit=limit, inter_ms=inter_ms, reload_every=reload_every)
                         _escape_to_map(page)
                     else:
                         _escape_to_map(page)                # back out, commit nothing
