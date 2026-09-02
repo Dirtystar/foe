@@ -61,6 +61,32 @@ def _sig(x):
     return f"{x['id']}|{x['cls']}|{x['rect'][0] // 20}|{x['rect'][1] // 20}"
 
 
+# Report the topmost element at (x,y) and dispatch a full pointer+mouse sequence directly on
+# the canvas — bypasses any overlay and any CDP-vs-DOM-listener gap.
+_JS_PROBE_CLICK = """
+([x, y]) => {
+  const desc = e => e ? (e.tagName + '#' + (e.id||'') + '.'
+                         + ((e.getAttribute && e.getAttribute('class')) || '')).slice(0,60) : 'null';
+  const top = document.elementFromPoint(x, y);
+  const canvas = document.querySelector('canvas');
+  const target = canvas || top;
+  const base = {bubbles:true, cancelable:true, clientX:x, clientY:y, screenX:x, screenY:y,
+                view:window, button:0};
+  for (const [type, buttons] of [['pointerdown',1],['mousedown',1],['pointerup',0],
+                                 ['mouseup',0],['click',0]]) {
+    const o = Object.assign({}, base, {buttons});
+    try {
+      const ev = type.startsWith('pointer')
+        ? new PointerEvent(type, Object.assign({pointerId:1, pointerType:'mouse', isPrimary:true}, o))
+        : new MouseEvent(type, o);
+      target.dispatchEvent(ev);
+    } catch (e) {}
+  }
+  return {topElement: desc(top), canvas: desc(canvas), dispatchedOn: desc(target)};
+}
+"""
+
+
 # Draw a dot + label at each predicted click point (CSS px == click coords == screenshot px),
 # so a screenshot shows exactly where the tool would click.
 _JS_OVERLAY = """
@@ -220,36 +246,23 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             if on:
                 t, (x, y) = min(on, key=lambda p: (p[1][0] - vw / 2) ** 2 + (p[1][1] - vh / 2) ** 2)
                 nm = _name(names, t.province_id)
-                print(f"[overlay] click-styles on {nm} at ({_r(x)},{_r(y)}):", flush=True)
-                shots = []
-                for label in ("simple", "hold150", "double"):
-                    latest["pid"] = None
-                    latest["methods"] = []
-                    try:
-                        if label == "simple":
-                            page.mouse.click(x, y)
-                        elif label == "hold150":
-                            page.mouse.move(x, y)
-                            page.wait_for_timeout(120)
-                            page.mouse.down()
-                            page.wait_for_timeout(150)
-                            page.mouse.up()
-                        else:
-                            page.mouse.dblclick(x, y)
-                    except Exception as exc:
-                        print(f"    {label}: click error {exc}", flush=True)
-                    page.wait_for_timeout(1300)
-                    shot = f"gbg_{label}.png"
-                    try:
-                        page.screenshot(path=shot)
-                        shots.append(shot)
-                    except Exception:
-                        pass
-                    print(f"    {label}: provinceId={latest['pid']} "
-                          f"methods={latest['methods'] or '(none)'} → {shot}", flush=True)
-                    _escape_to_map(page)                       # close any window before next style
-                print(f"[overlay] SEND me: gbg_overlay.png + {', '.join(shots)} — and say which "
-                      "one opened a province window.", flush=True)
+                print(f"[overlay] probing click on {nm} at ({_r(x)},{_r(y)}):", flush=True)
+                # 1) what's actually under the click point?
+                latest["pid"] = None
+                latest["methods"] = []
+                info = page.evaluate(_JS_PROBE_CLICK, [x, y])
+                print(f"    topElement under point: {info.get('topElement')}", flush=True)
+                print(f"    canvas element:         {info.get('canvas')}", flush=True)
+                print(f"    dispatched events on:   {info.get('dispatchedOn')}", flush=True)
+                page.wait_for_timeout(1300)
+                print(f"    after JS-dispatch: provinceId={latest['pid']} "
+                      f"methods={latest['methods'] or '(none)'}", flush=True)
+                try:
+                    page.screenshot(path="gbg_jsclick.png")
+                except Exception:
+                    pass
+                print("[overlay] SEND me gbg_overlay.png and gbg_jsclick.png — and say whether "
+                      "gbg_jsclick.png shows an open province window.", flush=True)
             return 0
 
         if debug:
