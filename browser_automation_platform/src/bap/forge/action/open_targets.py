@@ -168,7 +168,7 @@ _JS_OVERLAY = """
 
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
-             click_here=False, repeat=1, limit=None, inter_ms=2500,
+             click_here=False, repeat=1, limit=None, inter_ms=1200, click_every=4,
              utok=(1157, 800), autobattle=(1150, 790), connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
@@ -226,12 +226,13 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         page.on("request", _on_request)
 
         if click_here:
-            # Repeatedly click Automatická bitva on the CURRENT screen (you navigate to the
-            # attack army screen). Same fixed spot each time = fight this province again and
-            # again, until the attrition limit is hit or the run count is exhausted.
+            # Fight the current province over and over: press 'r' (the game's "repeat battle"
+            # shortcut — fast) most iterations, and re-click Automatická bitva every few to
+            # recover from result screens. Stops at the attrition limit.
             abx, aby = autobattle
-            print(f"[click] auto-battle at ({abx},{aby}) × {repeat}, attrition limit={limit}. "
-                  "Be on the attack army screen.", flush=True)
+            clicker = CdpClicker(page)
+            print(f"[click] fighting × {repeat} (R + auto-battle every {click_every}), "
+                  f"limit={limit}, {inter_ms}ms apart. Be on the attack army screen.", flush=True)
             fought = 0
             for i in range(repeat):
                 lvl = reader.attrition_level
@@ -240,21 +241,20 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     break
                 latest["pid"] = None
                 latest["methods"] = []
-                _hover_click(page, abx, aby)
+                if i % click_every == 0:
+                    _hover_click(page, abx, aby)           # (re)start via Automatická bitva
+                    act = "auto"
+                else:
+                    clicker.press("r")                     # repeat last battle — fast
+                    act = "R"
                 page.wait_for_timeout(inter_ms)
                 started = any("startByBattleType" in m for m in latest["methods"])
-                after = reader.attrition_level
-                print(f"  fight {i + 1}/{repeat}: started={started} provinceId={latest['pid']} "
-                      f"attrition={after}", flush=True)
+                print(f"  fight {i + 1}/{repeat} [{act}]: started={started} "
+                      f"attrition={reader.attrition_level}", flush=True)
                 if started:
                     fought += 1
-            try:
-                page.screenshot(path="gbg_clicked.png")
-            except Exception:
-                pass
-            print(f"[click] {fought}/{repeat} battles started. SEND gbg_clicked.png. If later "
-                  "clicks didn't start a battle, the flow returns somewhere other than the army "
-                  "screen between fights — tell me what's on screen.", flush=True)
+            print(f"[click] {fought}/{repeat} battles started. Attrition now "
+                  f"{reader.attrition_level}.", flush=True)
             return 0
 
         # --- flags + names -----------------------------------------------------
@@ -613,15 +613,18 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--repeat", type=int, default=1, help="with --click: fight this many times")
     ap.add_argument("--limit", type=int, default=None,
                     help="with --click: stop when attrition ≥ this")
-    ap.add_argument("--inter", type=int, default=2500, dest="inter",
+    ap.add_argument("--inter", type=int, default=1200, dest="inter",
                     help="with --click: ms to wait between fights")
+    ap.add_argument("--click-every", type=int, default=4, dest="click_every",
+                    help="with --click: re-click Automatická bitva every Nth fight (else press R)")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
                      debug=args.debug, overlay=args.overlay, attack=args.attack or args.fight,
                      fight=args.fight, grid_only=args.grid, click_here=args.click,
                      repeat=args.repeat, limit=args.limit, inter_ms=args.inter,
-                     utok=(args.ux, args.uy), autobattle=(args.abx, args.aby))
+                     click_every=args.click_every, utok=(args.ux, args.uy),
+                     autobattle=(args.abx, args.aby))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
