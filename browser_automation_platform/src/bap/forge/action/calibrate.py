@@ -20,8 +20,9 @@ import json
 from bap.forge.gbg_data.calibration import (
     CalibrationCollector,
     load_calibration,
+    residual,
     save_calibration,
-    solve_transform,
+    solve_uniform,
 )
 from bap.forge.gbg_data.map_layout import parse_map_data
 
@@ -74,7 +75,7 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
             pass
         reader = LiveGbgReader()
         feed = make_response_handler(reader)
-        collector = CalibrationCollector(need=2)
+        collector = CalibrationCollector(need=5)
 
         def _on_response(resp):
             try:
@@ -140,10 +141,11 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
             return None
         map_id = reader.snapshot.map_id if reader.snapshot else None
         print(f"Map loaded ({len(layout.flags)} provinces, id={map_id}).", flush=True)
-        print("\n>>> FIRST zoom the GBG map ALL THE WAY OUT so the whole map fits on screen, "
+        need = collector.need
+        print(f"\n>>> FIRST zoom the GBG map ALL THE WAY OUT so the whole map fits on screen, "
               "then DON'T scroll/zoom again. <<<", flush=True)
-        print("Now OPEN two DIFFERENT provinces, far apart (opposite corners). For each: click "
-              "the province, let its preview open, then press Escape to return to the map.",
+        print(f"Now OPEN {need} DIFFERENT provinces, SPREAD ACROSS the map (corners + middle). "
+              "For each: click the province, let its preview open, press Escape back to the map.",
               flush=True)
 
         deadline = time.time() + timeout_s
@@ -158,21 +160,27 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
                 seen = len(collector.samples)
                 s = collector.samples[-1]
                 print(f"  captured province {s.province_id} at screen {s.screen}"
-                      f"  ({seen}/2) — now open a DIFFERENT province", flush=True)
+                      f"  ({seen}/{need}) — open a DIFFERENT province", flush=True)
         if not collector.done:
-            print("Timed out before two provinces were captured.", flush=True)
+            print(f"Timed out with {len(collector.samples)}/{need} provinces.", flush=True)
             return None
 
-        a, b = collector.samples[0], collector.samples[1]
         try:
-            transform = solve_transform(layout, a, b)
+            transform = solve_uniform(layout, collector.samples)   # uniform-scale least squares
         except ValueError as exc:
-            print(f"Could not solve: {exc}. Pick provinces further apart and retry.", flush=True)
+            print(f"Could not solve: {exc}. Open provinces spread further apart and retry.",
+                  flush=True)
             return None
+        err = residual(layout, transform, collector.samples)
         save_calibration(store, world, map_id, transform)
-        print(f"\n✅ Calibrated {world} (map {map_id}) → saved to {store}", flush=True)
-        print(f"   transform: scale=({transform.scale_x:.4f},{transform.scale_y:.4f}) "
-              f"offset=({transform.off_x:.1f},{transform.off_y:.1f})", flush=True)
+        print(f"\n✅ Calibrated {world} (map {map_id}) from {len(collector.samples)} provinces "
+              f"→ saved to {store}", flush=True)
+        print(f"   scale={transform.scale_x:.4f}  offset=({transform.off_x:.1f},"
+              f"{transform.off_y:.1f})  worst fit error={err:.0f}px", flush=True)
+        if err > 40:
+            print("   ⚠ fit error is high — clicks may have been imprecise or provinces too "
+                  "clustered. Consider re-running and clicking flag centres, well spread.",
+                  flush=True)
         try:
             page.remove_listener("response", _on_response)
             page.remove_listener("request", _on_request)

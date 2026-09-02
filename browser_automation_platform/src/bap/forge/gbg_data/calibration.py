@@ -76,6 +76,46 @@ class CalibrationCollector:
         return len(self.samples) >= self.need
 
 
+def solve_uniform(layout: MapLayout, samples) -> MapTransform:
+    """Least-squares fit of a **uniform-scale** transform (screen = s*map + offset, same s on
+    both axes — the map is a bitmap scaled uniformly) over any number of province clicks.
+    Robust to imprecise clicks and uneven spread; needs ≥ 2 provinces with some spread.
+    Returns a MapTransform whose scale_x == scale_y. Raises if the points are degenerate."""
+    pts = [(layout.flag(s.province_id), tuple(s.screen))
+           for s in samples if layout.flag(s.province_id) is not None]
+    if len(pts) < 2:
+        raise ValueError("need at least two provinces with known flags")
+    mx = [p[0][0] for p in pts]; my = [p[0][1] for p in pts]
+    sx = [p[1][0] for p in pts]; sy = [p[1][1] for p in pts]
+    n = len(pts)
+    mmx = sum(mx) / n; mmy = sum(my) / n
+    msx = sum(sx) / n; msy = sum(sy) / n
+    num = (sum((mx[i] - mmx) * (sx[i] - msx) for i in range(n))
+           + sum((my[i] - mmy) * (sy[i] - msy) for i in range(n)))
+    den = (sum((mx[i] - mmx) ** 2 for i in range(n))
+           + sum((my[i] - mmy) ** 2 for i in range(n)))
+    if den == 0:
+        raise ValueError("calibration provinces are all at the same map point")
+    s = num / den
+    off_x = msx - s * mmx
+    off_y = msy - s * mmy
+    return MapTransform(scale_x=s, scale_y=s, off_x=off_x, off_y=off_y)
+
+
+def residual(layout: MapLayout, transform: MapTransform, samples) -> float:
+    """Max pixel error between a sample's click and where the transform places its flag —
+    a quality check on a calibration (small = good)."""
+    worst = 0.0
+    for smp in samples:
+        f = layout.flag(smp.province_id)
+        if f is None:
+            continue
+        px, py = transform.to_screen(*f)
+        d = ((px - smp.screen[0]) ** 2 + (py - smp.screen[1]) ** 2) ** 0.5
+        worst = max(worst, d)
+    return worst
+
+
 def _key(world: str, map_id: str | None) -> str:
     return f"{world}::{map_id or '?'}"
 
@@ -113,4 +153,4 @@ def load_calibration(path, world: str, map_id: str | None) -> MapTransform | Non
 
 
 __all__ = ["CalibrationSample", "CalibrationCollector", "solve_transform",
-           "save_calibration", "load_calibration"]
+           "solve_uniform", "residual", "save_calibration", "load_calibration"]

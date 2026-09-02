@@ -12,8 +12,10 @@ from bap.forge.gbg_data.calibration import (
     CalibrationCollector,
     CalibrationSample,
     load_calibration,
+    residual,
     save_calibration,
     solve_transform,
+    solve_uniform,
 )
 from bap.forge.gbg_data.live import LiveGbgReader
 from bap.forge.gbg_data.map_layout import MapTransform, parse_map_data
@@ -70,6 +72,36 @@ def test_solve_transform_rejects_unknown_province(layout):
     with pytest.raises(ValueError):
         solve_transform(layout, CalibrationSample(0, (1, 1)),
                         CalibrationSample(9999, (2, 2)))
+
+
+# --- uniform-scale least-squares fit ----------------------------------------
+
+def test_solve_uniform_recovers_transform_from_many_clicks(layout):
+    from bap.forge.gbg_data.map_layout import MapTransform
+    true = MapTransform(0.48, 0.48, 120.0, -30.0)          # uniform scale, like a real map
+    ids = [0, 5, 10, 20, 40, 55]
+    samples = [CalibrationSample(i, true.to_screen(*layout.flag(i))) for i in ids]
+    fit = solve_uniform(layout, samples)
+    assert fit.scale_x == pytest.approx(0.48, abs=1e-6)
+    assert fit.scale_x == fit.scale_y                      # uniform by construction
+    assert residual(layout, fit, samples) < 1e-6           # perfect fit → ~0 error
+
+
+def test_solve_uniform_is_robust_to_a_noisy_click(layout):
+    from bap.forge.gbg_data.map_layout import MapTransform
+    true = MapTransform(0.5, 0.5, 100.0, 60.0)
+    ids = [0, 5, 10, 20, 40, 55]
+    samples = [CalibrationSample(i, true.to_screen(*layout.flag(i))) for i in ids]
+    # one imprecise click (off by ~15px) — least squares still lands close
+    bad = samples[2]
+    samples[2] = CalibrationSample(bad.province_id, (bad.screen[0] + 15, bad.screen[1] - 10))
+    fit = solve_uniform(layout, samples)
+    assert fit.scale_x == pytest.approx(0.5, abs=0.02)
+
+
+def test_solve_uniform_needs_two_points(layout):
+    with pytest.raises(ValueError):
+        solve_uniform(layout, [CalibrationSample(0, (1, 1))])
 
 
 # --- persistence ------------------------------------------------------------
