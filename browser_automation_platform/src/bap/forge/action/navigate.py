@@ -48,9 +48,10 @@ def _pan(page, dx, dy, vw, vh):  # pragma: no cover - live
     page.wait_for_timeout(300)
 
 
-def _click_read_pid(page, clicker, latest, pt, timeout=4.0):  # pragma: no cover - live
+def _click_read_pid(page, clicker, latest, pt, timeout=5.0, debug=False):  # pragma: no cover - live
     """Click ``pt``, wait for the province the game opens, then Escape back to the map."""
     latest["pid"] = None
+    latest["methods"] = []
     clicker.click_xy(pt[0], pt[1])
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -58,20 +59,38 @@ def _click_read_pid(page, clicker, latest, pt, timeout=4.0):  # pragma: no cover
         if latest["pid"] is not None:
             break
     pid = latest["pid"]
+    if debug:
+        seen = ", ".join(latest.get("methods") or []) or "(no /game/json request seen)"
+        print(f"    click {(_r(pt[0]), _r(pt[1]))} → pid={pid}  requests: {seen}", flush=True)
     _escape_to_map(page)
     return pid
 
 
-def _bootstrap(page, clicker, latest, flags, vw, vh):  # pragma: no cover - live
-    """Estimate scale by clicking two spread points and seeing which provinces open."""
-    probes = [(vw * 0.35, vh * 0.5), (vw * 0.65, vh * 0.5),
-              (vw * 0.5, vh * 0.35), (vw * 0.5, vh * 0.65)]
-    anchors = []
+def _bootstrap(page, clicker, latest, flags, vw, vh, debug=True):  # pragma: no cover - live
+    """Estimate scale by clicking spread points and seeing which provinces open. We need two
+    DIFFERENT provinces that are in the map layout; probe a small grid until we have them."""
+    probes = [(vw * 0.5, vh * 0.5),
+              (vw * 0.35, vh * 0.4), (vw * 0.65, vh * 0.4),
+              (vw * 0.35, vh * 0.65), (vw * 0.65, vh * 0.65),
+              (vw * 0.5, vh * 0.3), (vw * 0.5, vh * 0.7),
+              (vw * 0.25, vh * 0.5), (vw * 0.75, vh * 0.5)]
+    anchors = []            # list of (screen_point, flag) for distinct provinces
+    seen_pids = set()
     for p in probes:
-        pid = _click_read_pid(page, clicker, latest, p)
-        if pid is not None and pid in flags:
-            anchors.append((p, flags[pid]))
-            print(f"  anchor: click {(_r(p[0]), _r(p[1]))} → province {pid}", flush=True)
+        pid = _click_read_pid(page, clicker, latest, p, debug=debug)
+        if pid is None:
+            continue
+        if pid not in flags:
+            if debug:
+                print(f"    (province {pid} not in map layout — skipping)", flush=True)
+            continue
+        if pid in seen_pids:
+            if debug:
+                print(f"    (province {pid} already used — need a different one)", flush=True)
+            continue
+        seen_pids.add(pid)
+        anchors.append((p, flags[pid]))
+        print(f"  anchor {len(anchors)}: click {(_r(p[0]), _r(p[1]))} → province {pid}", flush=True)
         if len(anchors) == 2:
             break
     if len(anchors) < 2:
@@ -131,7 +150,7 @@ def run_verify(endpoint, world, *, tab=None, tab_index=None, n=3,
             pass
         reader = LiveGbgReader()
         feed = make_response_handler(reader)
-        latest = {"pid": None}
+        latest = {"pid": None, "methods": []}
 
         def _on_response(resp):
             try:
@@ -145,7 +164,12 @@ def run_verify(endpoint, world, *, tab=None, tab_index=None, n=3,
                 if "/game/json" not in (req.url or ""):
                     return
                 import json as _j
-                pid = parse_province_id_from_game_json(_j.loads(req.post_data or "[]"))
+                batch = _j.loads(req.post_data or "[]")
+                for r in batch if isinstance(batch, list) else []:
+                    if isinstance(r, dict):
+                        latest["methods"].append(
+                            f"{r.get('requestClass')}.{r.get('requestMethod')}")
+                pid = parse_province_id_from_game_json(batch)
                 if pid is not None:
                     latest["pid"] = pid
             except BaseException:
@@ -171,8 +195,13 @@ def run_verify(endpoint, world, *, tab=None, tab_index=None, n=3,
         nav = _bootstrap(page, clicker=CdpClicker(page), latest=latest, flags=flags,
                          vw=vw, vh=vh)
         if nav is None:
-            print("Bootstrap failed — could not open two provinces to estimate scale. Make "
-                  "sure you're on the GBG map with attackable provinces visible.", flush=True)
+            print("Bootstrap failed — could not open two DIFFERENT map provinces to estimate "
+                  "scale.\nLook at the 'requests' shown above for each probe click:\n"
+                  "  • if pid=None and '(no /game/json request seen)' → the click isn't opening a "
+                  "province (wrong tab? overlay open? not on the GBG map?).\n"
+                  "  • if a request shows but no provinceId → tell Radek which method fired.\n"
+                  "Make sure you're on the GBG map with attackable provinces near the centre.",
+                  flush=True)
             return None
         print(f"Bootstrapped: scale={nav.scale:.4f}", flush=True)
 
