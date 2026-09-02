@@ -31,22 +31,33 @@ def _name(names, pid):
     return names.get(str(pid)) or f"#{pid}"
 
 
-_JS_TAG = "() => { document.querySelectorAll('body *').forEach(e => e.setAttribute('data-bapseen','1')); return true; }"
-_JS_NEW_WINDOW = """
+# Visible "window / dialog / button" candidates — used to diff before/after a click, since
+# FoE windows are pre-created DOM and merely shown/hidden (so they are not "new" nodes).
+_JS_VISIBLE = """
 () => {
+  const kw = /window|dialog|province|battle|gbg|sector|attack|action|btn/i;
+  const act = /\\bútok|attack|vyjedn|negoti/i;
   const out = [];
-  for (const el of document.querySelectorAll('body *:not([data-bapseen])')) {
+  for (const el of document.querySelectorAll('body *')) {
     const r = el.getBoundingClientRect();
-    if (r.width < 80 || r.height < 30) continue;
-    out.push({tag: el.tagName, id: (el.id||'').slice(0,40),
-              cls: (el.getAttribute('class')||'').slice(0,50),
-              text: (el.textContent||'').replace(/\\s+/g,' ').trim().slice(0,70),
-              rect: [Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)]});
-    if (out.length >= 20) break;
+    if (r.width < 40 || r.height < 14) continue;
+    const cls = el.getAttribute('class') || '';
+    const id = el.id || '';
+    const txt = (el.textContent || '').replace(/\\s+/g,' ').trim();
+    if (kw.test(cls + ' ' + id) || act.test(txt)) {
+      out.push({id: id.slice(0,34), cls: cls.slice(0,44),
+                text: txt.slice(0,44), isAttack: act.test(txt),
+                rect: [Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)]});
+    }
+    if (out.length >= 80) break;
   }
   return out;
 }
 """
+
+
+def _sig(x):
+    return f"{x['id']}|{x['cls']}|{x['rect'][0] // 20}|{x['rect'][1] // 20}"
 
 
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
@@ -174,7 +185,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             t, scr = on_screen[0]
             print(f"\n[debug] clicking {_name(names, t.province_id)} at ({_r(scr[0])},{_r(scr[1])}) "
                   "and watching what happens…", flush=True)
-            page.evaluate(_JS_TAG)
+            before = {_sig(x) for x in (page.evaluate(_JS_VISIBLE) or [])}
             latest["pid"] = None
             latest["methods"] = []
             clicker.click_xy(scr[0], scr[1])
@@ -187,10 +198,14 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                 print(f"[debug] screenshot failed: {exc}", flush=True)
             print(f"[debug] provinceId seen: {latest['pid']}", flush=True)
             print(f"[debug] /game/json methods fired: {latest['methods'] or '(none)'}", flush=True)
+            after = page.evaluate(_JS_VISIBLE) or []
+            newvis = [x for x in after if _sig(x) not in before]
+            attack = [x for x in after if x.get("isAttack")]
             import json as _json
-            wins = page.evaluate(_JS_NEW_WINDOW)
-            print("[debug] new DOM windows/panels after click:", flush=True)
-            print(_json.dumps(wins, indent=2, ensure_ascii=False)[:3500], flush=True)
+            print("[debug] newly-visible window/dialog candidates after click:", flush=True)
+            print(_json.dumps(newvis, indent=2, ensure_ascii=False)[:3000] or "  (none)", flush=True)
+            print("[debug] elements with Attack/Útok/Negotiate text (visible):", flush=True)
+            print(_json.dumps(attack, indent=2, ensure_ascii=False)[:1500] or "  (none)", flush=True)
             return 0
 
         print("Opening each via the transform (pan + click + confirm)…", flush=True)
