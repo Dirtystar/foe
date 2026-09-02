@@ -89,9 +89,14 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
                 if "/game/json" not in (req.url or ""):
                     return
                 import json as _j
-                pid = parse_province_id_from_game_json(_j.loads(req.post_data or "[]"))
+                batch = _j.loads(req.post_data or "[]")
+                methods = [f"{r.get('requestClass')}.{r.get('requestMethod')}"
+                           for r in batch if isinstance(r, dict)]
+                if methods:
+                    print(f"  [debug] request: {', '.join(methods)}", flush=True)
+                pid = parse_province_id_from_game_json(batch)
                 if pid is not None:
-                    print(f"  [debug] province event: {pid}  (last_click={collector._last_click})",
+                    print(f"  [debug] → provinceId {pid}  (last_click={collector._last_click})",
                           flush=True)
                     collector.on_province(pid)
             except BaseException as exc:
