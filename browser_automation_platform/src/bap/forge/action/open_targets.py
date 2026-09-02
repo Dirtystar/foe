@@ -198,7 +198,8 @@ _JS_OVERLAY = """
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
              click_here=False, repeat=1, limit=None, inter_ms=1200, reload_every=3,
-             utok=(1157, 800), autobattle=(1150, 790), connect=None):  # pragma: no cover - live
+             watch=0, utok=(1157, 800), autobattle=(1150, 790),
+             connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
@@ -225,8 +226,23 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                   flush=True)
             return 0
         reader = LiveGbgReader()
-        feed = make_response_handler(reader)
         latest = {"pid": None, "methods": []}
+
+        def _on_upd(r):
+            if not watch:
+                return
+            bg = r.snapshot
+            if bg is None:
+                return
+            ref = bg.server_time or int(time.time())
+            openatk = [p for p in bg.provinces if p.is_attack_battle_type and not bg.is_mine(p)
+                       and not p.is_locked(ref) and p.gain_attrition_chance is not None]
+            pcts = sorted({p.gain_attrition_chance for p in bg.provinces
+                           if p.gain_attrition_chance is not None})
+            print(f"[watch] {time.strftime('%H:%M:%S')} getBattleground refresh → "
+                  f"{len(openatk)} open-attackable, %s present={pcts}", flush=True)
+
+        feed = make_response_handler(reader, on_update=_on_upd)
 
         def _on_response(resp):
             try:
@@ -253,6 +269,29 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
 
         page.on("response", _on_response)
         page.on("request", _on_request)
+
+        if watch:
+            names = page.evaluate(_JS_NAMES) or {}
+            print(f"[watch] listening {watch}s for getBattleground refreshes. Try interacting "
+                  "with the map / reopening GBG to see if the data updates.", flush=True)
+            deadline = time.time() + watch
+            while time.time() < deadline:
+                page.wait_for_timeout(1000)
+            bg = reader.snapshot
+            if bg is None:
+                print("[watch] never saw a getBattleground — reopen the GBG map.", flush=True)
+                return 0
+            ref = bg.server_time or int(time.time())
+            withpct = [p for p in bg.provinces if p.gain_attrition_chance is not None]
+            print(f"\n[watch] latest snapshot: {len(bg.provinces)} provinces, "
+                  f"{len(withpct)} with a %:", flush=True)
+            for p in sorted(withpct, key=lambda p: p.id):
+                print(f"  {_name(names, p.id)} id={p.id} atk={p.is_attack_battle_type} "
+                      f"mine={bg.is_mine(p)} gain%={p.gain_attrition_chance} "
+                      f"locked={p.is_locked(ref)}", flush=True)
+            sixty = [p for p in bg.provinces if p.gain_attrition_chance == 60]
+            print(f"[watch] 60% provinces in data: {[p.id for p in sixty] or 'NONE'}", flush=True)
+            return 0
 
         if click_here:
             # Fight the current province over and over. Each iteration clicks Automatická bitva
@@ -607,13 +646,15 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="with --click: ms to wait between fights")
     ap.add_argument("--reload-every", type=int, default=3, dest="reload_every",
                     help="with --click: press R (Reload units) every Nth fight; 0 disables")
+    ap.add_argument("--watch", type=int, default=0,
+                    help="listen N seconds for getBattleground refreshes and dump provinces")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
                      debug=args.debug, overlay=args.overlay, attack=args.attack or args.fight,
                      fight=args.fight, grid_only=args.grid, click_here=args.click,
                      repeat=args.repeat, limit=args.limit, inter_ms=args.inter,
-                     reload_every=args.reload_every, utok=(args.ux, args.uy),
+                     reload_every=args.reload_every, watch=args.watch, utok=(args.ux, args.uy),
                      autobattle=(args.abx, args.aby))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
