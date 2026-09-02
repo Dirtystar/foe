@@ -167,8 +167,8 @@ _JS_OVERLAY = """
 
 
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
-             debug=False, overlay=False, attack=False, utok=(1157, 800),
-             connect=None):  # pragma: no cover - live
+             debug=False, overlay=False, attack=False, fight=False, utok=(1157, 800),
+             autobattle=(1144, 800), connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
@@ -300,7 +300,23 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     except Exception:
                         pass
                     reached = t.province_id
-                    _escape_to_map(page)                    # back out, commit nothing
+                    if fight:
+                        abx, aby = autobattle
+                        before = reader.attrition_level
+                        print(f"  [fight] clicking Automatická bitva at ({abx},{aby}) — REAL "
+                              f"battle. attrition before={before}", flush=True)
+                        _hover_click(page, abx, aby)
+                        page.wait_for_timeout(4500)
+                        try:
+                            page.screenshot(path="gbg_fought.png")
+                        except Exception:
+                            pass
+                        after = reader.attrition_level
+                        print(f"  [fight] done. attrition {before} → {after}. SEND gbg_fought.png "
+                              "(win screen? did it fight?).", flush=True)
+                        _escape_to_map(page)
+                    else:
+                        _escape_to_map(page)                # back out, commit nothing
                     break
                 print(f"  ⏭ {_name(names, t.province_id)} (id={t.province_id}): no army preview "
                       f"(guild-ignore dialog or locked) — methods={latest['methods'] or '(none)'}",
@@ -509,13 +525,17 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="draw dots at predicted click points and screenshot (no clicking)")
     ap.add_argument("--attack", action="store_true",
                     help="open each target and click Útok to reach the battle screen (backs out)")
+    ap.add_argument("--fight", action="store_true",
+                    help="with --attack: actually click Automatická bitva (fights ONE real battle)")
     ap.add_argument("--ux", type=int, default=1157, help="Útok button CSS x (canvas window)")
     ap.add_argument("--uy", type=int, default=800, help="Útok button CSS y (canvas window)")
+    ap.add_argument("--abx", type=int, default=1144, help="Automatická bitva button CSS x")
+    ap.add_argument("--aby", type=int, default=800, help="Automatická bitva button CSS y")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
-                     debug=args.debug, overlay=args.overlay, attack=args.attack,
-                     utok=(args.ux, args.uy))
+                     debug=args.debug, overlay=args.overlay, attack=args.attack or args.fight,
+                     fight=args.fight, utok=(args.ux, args.uy), autobattle=(args.abx, args.aby))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
