@@ -272,17 +272,38 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         clicker = CdpClicker(page)
 
         if attack:
+            from bap.forge.action.navigate import _pan as _pan_map
             ux, uy = utok
-            print(f"\n[attack] reaching the battle screen (Útok at ({ux},{uy})). Backs out with "
-                  "Escape — nothing is actually fought.", flush=True)
+            # diagnosis: every attack-type, not-mine province the game currently reports
+            bg = reader.snapshot
+            if bg is not None:
+                ref = bg.server_time or int(time.time())
+                rows = [p for p in bg.provinces
+                        if p.is_attack_battle_type and not bg.is_mine(p)]
+                print(f"\n[attack] getBattleground has {len(rows)} attack-type foreign provinces:",
+                      flush=True)
+                for p in rows:
+                    print(f"    {_name(names, p.id)} id={p.id} gain%={p.gain_attrition_chance} "
+                          f"locked={p.is_locked(ref)} siege={bool(p.conquest_progress)}", flush=True)
+            print(f"\n[attack] reaching the battle screen (Útok at ({ux},{uy})). Pans off-screen "
+                  "targets in. Backs out with Escape — nothing is actually fought.", flush=True)
             reached = None
             for t in targets:
                 f = flags.get(t.province_id)
                 if f is None:
                     continue
                 x, y = nav.screen_for(f)
+                pans = 0
+                while not (90 <= x <= vw - 90 and 90 <= y <= vh - 90) and pans < 4:
+                    dx = max(-vw * 0.55, min(vw * 0.55, vw / 2 - x))
+                    dy = max(-vh * 0.55, min(vh * 0.55, vh / 2 - y))
+                    _pan_map(page, dx, dy, vw, vh)
+                    nav.apply_drag(dx, dy)
+                    pans += 1
+                    x, y = nav.screen_for(f)
                 if not (90 <= x <= vw - 90 and 90 <= y <= vh - 90):
-                    print(f"  {_name(names, t.province_id)}: off-screen, skipping", flush=True)
+                    print(f"  {_name(names, t.province_id)}: still off-screen after panning, "
+                          "skipping", flush=True)
                     continue
                 _hover_click(page, x, y)                    # open the province window
                 page.wait_for_timeout(900)
