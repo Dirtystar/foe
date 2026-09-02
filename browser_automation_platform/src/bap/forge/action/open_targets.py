@@ -44,6 +44,28 @@ def _hover_click(page, x, y):  # pragma: no cover - live
     page.mouse.up()
 
 
+# A labeled CSS-pixel grid so we can read a canvas element's exact click coordinate.
+_JS_GRID = """
+() => {
+  let o = document.getElementById('bapGrid'); if (o) o.remove();
+  o = document.createElement('div'); o.id = 'bapGrid';
+  o.style.cssText = 'position:fixed;inset:0;z-index:99998;pointer-events:none;';
+  const W = window.innerWidth, H = window.innerHeight;
+  const mk = (css, txt) => { const d = document.createElement('div'); d.style.cssText = css;
+                             if (txt != null) d.textContent = txt; o.appendChild(d); };
+  for (let gx = 0; gx < W; gx += 100) {
+    mk('position:fixed;left:' + gx + 'px;top:0;width:1px;height:100%;background:rgba(255,40,40,.4)');
+    mk('position:fixed;left:' + (gx+1) + 'px;top:1px;color:#ff0;background:rgba(0,0,0,.7);font:10px monospace;padding:0 1px', gx);
+  }
+  for (let gy = 0; gy < H; gy += 100) {
+    mk('position:fixed;left:0;top:' + gy + 'px;width:100%;height:1px;background:rgba(255,40,40,.4)');
+    mk('position:fixed;left:1px;top:' + (gy+1) + 'px;color:#ff0;background:rgba(0,0,0,.7);font:10px monospace;padding:0 1px', gy);
+  }
+  document.body.appendChild(o);
+  return true;
+}
+"""
+
 # Find the province window's action buttons (Útok/Vyjednávání) once it is open.
 _JS_FIND_BUTTONS = """
 () => {
@@ -312,8 +334,15 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     print("[overlay] SEND gbg_province.png and gbg_attack.png (did the battle/army "
                           "screen open?).", flush=True)
                 else:
-                    print("[overlay] Útok not in DOM → the window is canvas-drawn. SEND "
-                          "gbg_province.png; I'll locate Útok on the canvas.", flush=True)
+                    page.evaluate(_JS_GRID)                 # labeled CSS grid to read Útok's coord
+                    page.wait_for_timeout(200)
+                    try:
+                        page.screenshot(path="gbg_grid.png")
+                    except Exception:
+                        pass
+                    print("[overlay] Útok is canvas-drawn. Drew a CSS grid → gbg_grid.png. SEND "
+                          "gbg_grid.png; I'll read the Útok button's exact coordinate off it.",
+                          flush=True)
             return 0
 
         if debug:
