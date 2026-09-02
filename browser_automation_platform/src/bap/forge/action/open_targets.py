@@ -146,6 +146,15 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         clicker = CdpClicker(page)
 
         if debug:
+            # is the transform still valid right now? re-read a marker and compare to prediction.
+            chk = samples[0].province_id
+            axy = locate_province(page, chk)
+            clear_marker(page)
+            if axy is not None:
+                px, py = nav.screen_for(flags[chk])
+                print(f"\n[debug] transform check id={chk}: predicted ({_r(px)},{_r(py)}) vs "
+                      f"actual ({_r(axy[0])},{_r(axy[1])}) delta=({_r(axy[0]-px)},{_r(axy[1]-py)})",
+                      flush=True)
             print("\n[debug] predicted screen positions:", flush=True)
             on_screen = []
             for t in targets:
@@ -170,6 +179,12 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             latest["methods"] = []
             clicker.click_xy(scr[0], scr[1])
             page.wait_for_timeout(1800)
+            shot = "gbg_debug_after_click.png"
+            try:
+                page.screenshot(path=shot)
+                print(f"[debug] screenshot saved → {shot} (SEND me this image)", flush=True)
+            except Exception as exc:
+                print(f"[debug] screenshot failed: {exc}", flush=True)
             print(f"[debug] provinceId seen: {latest['pid']}", flush=True)
             print(f"[debug] /game/json methods fired: {latest['methods'] or '(none)'}", flush=True)
             import json as _json
