@@ -877,7 +877,31 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     if args.farm and repeat == 1:
         repeat = 300                                       # per-province fight cap for farming
 
-    _skip = set()                                          # shared across passes (learned non-fightable)
+    import json
+    import os
+    skip_file = "gbg_skip.json"
+
+    def _load_skip():
+        try:
+            return set(json.load(open(skip_file, encoding="utf-8")).get(args.world, []))
+        except Exception:
+            return set()
+
+    def _save_skip(s):
+        try:
+            d = json.load(open(skip_file, encoding="utf-8")) if os.path.exists(skip_file) else {}
+        except Exception:
+            d = {}
+        d[args.world] = sorted(s)
+        try:
+            json.dump(d, open(skip_file, "w", encoding="utf-8"))
+        except Exception:
+            pass
+
+    _skip = _load_skip()                                   # learned non-fightable, persisted per world
+    if _skip:
+        print(f"[skip] loaded {len(_skip)} never-fightable provinces for {args.world}: "
+              f"{sorted(_skip)}", flush=True)
 
     def _once():
         return run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
@@ -901,6 +925,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
             _once()
         except Exception as exc:  # noqa: BLE001
             print(f"[watchdog] pass {i + 1} failed: {exc} — restarting from scratch.", flush=True)
+        _save_skip(_skip)                                  # persist learned non-fightable provinces
         if passes > 1 and i + 1 < passes:
             time.sleep(4)
     return 0
