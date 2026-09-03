@@ -55,6 +55,22 @@ def _hover_click(page, x, y):  # pragma: no cover - live
     page.mouse.up()
 
 
+def _refresh_offset(page, nav, flags, marker_ids):  # pragma: no cover - live
+    """Reset the offset to the map's CURRENT position by re-reading a marker arrow (scale is
+    fixed), so positioning stays exact after panning. Returns True on success."""
+    for mid in marker_ids:
+        fl = flags.get(mid)
+        if fl is None:
+            continue
+        axy = locate_province(page, mid)
+        clear_marker(page)
+        if axy is not None:
+            nav.off_x = axy[0] - nav.scale * fl[0]
+            nav.off_y = axy[1] - nav.scale * fl[1]
+            return True
+    return False
+
+
 def _in_gbg(page):  # pragma: no cover - live
     # TODO: FoE-Helper-dependent signal — replace with a native check when we drop that crutch.
     try:
@@ -517,6 +533,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                 print(f"\n[attack] reaching the battle screen (Útok at ({ux},{uy})). Pans off-screen "
                       "targets in. Backs out with Escape — nothing is actually fought.", flush=True)
             reached = None
+            marker_ids = [s.province_id for s in samples]   # markable provinces = offset anchors
             for t in targets:
                 if farm and not _in_gbg(page):
                     print("[farm] no longer on the GBG map — stopping this pass.", flush=True)
@@ -528,18 +545,20 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                 f = flags.get(t.province_id)
                 if f is None:
                     continue
+                # bring the target on-screen, re-reading a marker arrow after each drag so the
+                # offset stays exact (blind panning drifts on far/opposite-side provinces).
                 x, y = nav.screen_for(f)
-                pans = 0
-                while not (90 <= x <= vw - 90 and 90 <= y <= vh - 90) and pans < 4:
-                    dx = max(-vw * 0.55, min(vw * 0.55, vw / 2 - x))
-                    dy = max(-vh * 0.55, min(vh * 0.55, vh / 2 - y))
+                for _ in range(6):
+                    if _refresh_offset(page, nav, flags, marker_ids):
+                        x, y = nav.screen_for(f)
+                    if 90 <= x <= vw - 90 and 90 <= y <= vh - 90:
+                        break
+                    dx = max(-vw * 0.5, min(vw * 0.5, vw / 2 - x))
+                    dy = max(-vh * 0.5, min(vh * 0.5, vh / 2 - y))
                     _pan_map(page, dx, dy, vw, vh)
-                    nav.apply_drag(dx, dy)
-                    pans += 1
-                    x, y = nav.screen_for(f)
                 if not (90 <= x <= vw - 90 and 90 <= y <= vh - 90):
-                    print(f"  {_name(names, t.province_id)}: still off-screen after panning, "
-                          "skipping", flush=True)
+                    print(f"  {_name(names, t.province_id)}: couldn't bring on-screen, skipping",
+                          flush=True)
                     continue
                 # try the flag, then into the sector body, then above — banners sit at the
                 # sector's top edge, so a small nudge often lands the click on the real sector.
