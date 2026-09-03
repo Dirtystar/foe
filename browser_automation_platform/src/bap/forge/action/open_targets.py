@@ -32,6 +32,17 @@ def _name(names, pid):
     return names.get(str(pid)) or f"#{pid}"
 
 
+# FoE modal windows centre on the viewport, so their canvas buttons sit at a fixed OFFSET from
+# the viewport centre (measured at 2304x1042: Útok (1157,800), Automatická bitva (1150,790)).
+# Deriving from the live centre makes them work at any browser window size.
+_UTOK_OFF = (5, 279)
+_AUTOBATTLE_OFF = (-2, 269)
+
+
+def _centre_button(vw, vh, off):
+    return (round(vw / 2) + off[0], round(vh / 2) + off[1])
+
+
 def _hover_click(page, x, y):  # pragma: no cover - live
     """Click (x, y) the way the FoE canvas needs it: a real mousemove trajectory to set the
     engine's hovered-target state, then press-hold-release. Plain CDP clicks do NOT register."""
@@ -214,7 +225,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
              click_here=False, repeat=1, limit=None, inter_ms=1200, reload_every=3,
              watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1650, 250),
-             farm=False, pcts=None, utok=(1157, 800), autobattle=(1150, 790),
+             farm=False, pcts=None, utok=None, autobattle=None,
              connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
@@ -289,6 +300,14 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
 
         page.on("response", _on_response)
         page.on("request", _on_request)
+
+        # FoE windows centre on the viewport → derive button coords from the live centre so they
+        # work at any browser window size (unless the caller pinned them explicitly).
+        _vw0, _vh0 = _viewport(page)
+        utok_xy = utok or _centre_button(_vw0, _vh0, _UTOK_OFF)
+        autobattle_xy = autobattle or _centre_button(_vw0, _vh0, _AUTOBATTLE_OFF)
+        print(f"[calib] viewport {_vw0}x{_vh0} → Útok {utok_xy}, Auto-battle {autobattle_xy}",
+              flush=True)
 
         if enter_gbg or farm:
             gx, gy = gbg_pos
@@ -384,7 +403,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             clicker = CdpClicker(page)
             print(f"[click] fighting × {repeat} (auto-battle each; R-reload every {reload_every}), "
                   f"limit={limit}, {inter_ms}ms apart. Be on the attack army screen.", flush=True)
-            fought = _run_fight_loop(page, clicker, reader, latest, autobattle, repeat=repeat,
+            fought = _run_fight_loop(page, clicker, reader, latest, autobattle_xy, repeat=repeat,
                                      limit=limit, inter_ms=inter_ms, reload_every=reload_every)
             print(f"[click] {fought}/{repeat} battles started. Attrition now "
                   f"{reader.attrition_level}.", flush=True)
@@ -454,7 +473,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
 
         if attack:
             from bap.forge.action.navigate import _pan as _pan_map
-            ux, uy = utok
+            ux, uy = utok_xy
             # diagnosis: every attack-type, not-mine province the game currently reports
             bg = reader.snapshot
             if bg is not None:
@@ -509,7 +528,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     if fight:
                         print(f"  [fight] farming {_name(names, t.province_id)} to attrition "
                               f"limit={limit}…", flush=True)
-                        status = _run_fight_loop(page, clicker, reader, latest, autobattle,
+                        status = _run_fight_loop(page, clicker, reader, latest, autobattle_xy,
                                                  repeat=repeat, limit=limit, inter_ms=inter_ms,
                                                  reload_every=reload_every)
                         _escape_to_map(page)
@@ -604,7 +623,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     print("[overlay] SEND gbg_province.png and gbg_attack.png (did the battle/army "
                           "screen open?).", flush=True)
                 else:
-                    ux, uy = utok
+                    ux, uy = utok_xy
                     page.evaluate(_JS_GRID)                 # labeled CSS grid, in case we miss
                     page.evaluate(_JS_OVERLAY, [{"x": ux, "y": uy, "color": "#00e5ff",
                                                  "label": f"Útok? ({ux},{uy})"}])
@@ -731,10 +750,10 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="open each target and click Útok to reach the battle screen (backs out)")
     ap.add_argument("--fight", action="store_true",
                     help="with --attack: actually click Automatická bitva (fights ONE real battle)")
-    ap.add_argument("--ux", type=int, default=1157, help="Útok button CSS x (canvas window)")
-    ap.add_argument("--uy", type=int, default=800, help="Útok button CSS y (canvas window)")
-    ap.add_argument("--abx", type=int, default=1150, help="Automatická bitva button CSS x")
-    ap.add_argument("--aby", type=int, default=790, help="Automatická bitva button CSS y")
+    ap.add_argument("--ux", type=int, default=None, help="Útok button CSS x (canvas window)")
+    ap.add_argument("--uy", type=int, default=None, help="Útok button CSS y (canvas window)")
+    ap.add_argument("--abx", type=int, default=None, help="Automatická bitva button CSS x")
+    ap.add_argument("--aby", type=int, default=None, help="Automatická bitva button CSS y")
     ap.add_argument("--grid", action="store_true",
                     help="just draw a labeled CSS grid on the current screen and screenshot")
     ap.add_argument("--click", action="store_true",
@@ -774,7 +793,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                      reload_every=args.reload_every, watch=args.watch,
                      reload_first=args.reload_first, enter_gbg=args.enter_gbg,
                      gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts,
-                     utok=(args.ux, args.uy), autobattle=(args.abx, args.aby))
+                     utok=((args.ux, args.uy) if args.ux and args.uy else None), autobattle=((args.abx, args.aby) if args.abx and args.aby else None))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
