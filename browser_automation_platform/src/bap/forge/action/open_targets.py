@@ -541,14 +541,20 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     print(f"  {_name(names, t.province_id)}: still off-screen after panning, "
                           "skipping", flush=True)
                     continue
-                _hover_click(page, x, y)                    # open the province window
-                page.wait_for_timeout(900)
-                latest["pid"] = None
-                latest["methods"] = []
-                _hover_click(page, ux, uy)                  # Útok
-                deadline = time.time() + 3.0
-                while time.time() < deadline and latest["pid"] is None:
-                    page.wait_for_timeout(150)
+                # try the flag, then into the sector body, then above — banners sit at the
+                # sector's top edge, so a small nudge often lands the click on the real sector.
+                for dy in (0, 40, -30, 75):
+                    _hover_click(page, x, y + dy)           # open the province window
+                    page.wait_for_timeout(900)
+                    latest["pid"] = None
+                    latest["methods"] = []
+                    _hover_click(page, ux, uy)              # Útok
+                    deadline = time.time() + 2.5
+                    while time.time() < deadline and latest["pid"] is None:
+                        page.wait_for_timeout(150)
+                    if latest["pid"] is not None:
+                        break
+                    _escape_to_map(page)                    # close wrong/empty window, retry
                 if latest["pid"] is not None:
                     print(f"  ✅ {_name(names, t.province_id)} (id={t.province_id}): reached battle "
                           f"screen — getArmyPreview provinceId={latest['pid']}", flush=True)
