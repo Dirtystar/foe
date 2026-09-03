@@ -14,6 +14,7 @@ built on it. Live glue is ``no-cover``; the transform/parse pieces are unit-test
 
 from __future__ import annotations
 
+import re
 import time
 
 from bap.forge.action.locate import clear_marker, locate_province
@@ -30,6 +31,12 @@ _JS_NAMES = ("() => { const m = {}; document.querySelectorAll('tr[data-id]').for
 
 def _name(names, pid):
     return names.get(str(pid)) or f"#{pid}"
+
+
+def _ring(name):
+    """Ring number from a province name (A1→1, B4→4, X1→1); unknown → 9 (fight last)."""
+    m = re.search(r"\d", name or "")
+    return int(m.group()) if m else 9
 
 
 # FoE modal windows centre on the viewport, so their canvas buttons sit at a fixed OFFSET from
@@ -509,6 +516,11 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                   "saved — re-run when sectors are open.", flush=True)
             return 0
         targets = [t for t in targets if t.province_id not in skip]  # learned non-fightable
+        # order: lowest weakening % first (20→40→60), then centre rings first (…1 before …4)
+        targets.sort(key=lambda t: (
+            t.gain_attrition_chance if t.gain_attrition_chance is not None else 999,
+            _ring(names.get(str(t.province_id), "")),
+            t.province_id))
         targets = targets[:(n if not farm else len(targets))]
         print(f"\nAttackable now ({len(targets)}, allowed %={pcts or 'all'}, skip={sorted(skip)}): "
               + ", ".join(f"{_name(names, t.province_id)}[{t.gain_attrition_chance}%]"
