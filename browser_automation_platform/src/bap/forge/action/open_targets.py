@@ -14,8 +14,33 @@ built on it. Live glue is ``no-cover``; the transform/parse pieces are unit-test
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import time
+
+_SKIP_FILE = "gbg_skip.json"
+
+
+def _skip_load(round_key):
+    """Load the never-fightable provinceIds learned for THIS round (keyed by world+endsAt, so
+    it resets automatically when a new round with a different map starts)."""
+    try:
+        return set(json.load(open(_SKIP_FILE, encoding="utf-8")).get(round_key, []))
+    except Exception:
+        return set()
+
+
+def _skip_save(round_key, s):
+    try:
+        d = json.load(open(_SKIP_FILE, encoding="utf-8")) if os.path.exists(_SKIP_FILE) else {}
+    except Exception:
+        d = {}
+    d[round_key] = sorted(s)
+    try:
+        json.dump(d, open(_SKIP_FILE, "w", encoding="utf-8"))
+    except Exception:
+        pass
 
 from bap.forge.action.locate import clear_marker, locate_province
 from bap.forge.action.navigate import _escape_to_map, _r, _viewport, open_province
@@ -533,6 +558,9 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             print(f"\nNo attackable provinces right now (allowed %={pcts or 'all'}). Transform "
                   "saved — re-run when sectors are open.", flush=True)
             return 0
+        # skip-list is keyed by the ROUND (world + endsAt) so it resets when the map changes
+        round_key = f"{world}::{reader.snapshot.ends_at if reader.snapshot else '?'}"
+        skip |= _skip_load(round_key)
         targets = [t for t in targets if t.province_id not in skip]  # learned non-fightable
         # order: lowest weakening % first (20→40→60), then centre rings first (…1 before …4)
         targets.sort(key=lambda t: (
@@ -629,6 +657,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     break
                 if _in_gbg(page):
                     skip.add(t.province_id)                  # remember: never reaches a fight
+                    _skip_save(round_key, skip)              # persist for THIS round only
                 print(f"  ⏭ {_name(names, t.province_id)} (id={t.province_id}): no army preview "
                       f"(guild HQ / ignore / not adjacent) — skipping henceforth", flush=True)
                 _escape_to_map(page)                        # cancel dialog / close window
@@ -877,31 +906,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     if args.farm and repeat == 1:
         repeat = 300                                       # per-province fight cap for farming
 
-    import json
-    import os
-    skip_file = "gbg_skip.json"
-
-    def _load_skip():
-        try:
-            return set(json.load(open(skip_file, encoding="utf-8")).get(args.world, []))
-        except Exception:
-            return set()
-
-    def _save_skip(s):
-        try:
-            d = json.load(open(skip_file, encoding="utf-8")) if os.path.exists(skip_file) else {}
-        except Exception:
-            d = {}
-        d[args.world] = sorted(s)
-        try:
-            json.dump(d, open(skip_file, "w", encoding="utf-8"))
-        except Exception:
-            pass
-
-    _skip = _load_skip()                                   # learned non-fightable, persisted per world
-    if _skip:
-        print(f"[skip] loaded {len(_skip)} never-fightable provinces for {args.world}: "
-              f"{sorted(_skip)}", flush=True)
+    _skip = set()      # in-memory this session; run_open persists per ROUND (world+endsAt) to disk
 
     def _once():
         return run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
@@ -925,7 +930,6 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
             _once()
         except Exception as exc:  # noqa: BLE001
             print(f"[watchdog] pass {i + 1} failed: {exc} — restarting from scratch.", flush=True)
-        _save_skip(_skip)                                  # persist learned non-fightable provinces
         if passes > 1 and i + 1 < passes:
             time.sleep(4)
     return 0
