@@ -898,7 +898,34 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--passes", type=int, default=1,
                     help="with --farm: run this many self-healing passes (each re-enters GBG "
                          "from scratch — the watchdog; use a big number to run all day)")
+    ap.add_argument("--worlds", default=None,
+                    help="round-robin config JSON (per-world tab/limit/pcts); cycles all worlds")
+    ap.add_argument("--cycles", type=int, default=1000,
+                    help="with --worlds: how many full round-robin cycles (default: all day)")
     args = ap.parse_args(argv)
+
+    if args.worlds:                                        # round-robin across worlds
+        cfg = json.load(open(args.worlds, encoding="utf-8"))
+        gbg = cfg.get("gbg", {"x": 1650, "y": 250})
+        worlds = cfg.get("worlds", [])
+        print(f"[round-robin] {len(worlds)} worlds × {args.cycles} cycles: "
+              f"{[w['world'] for w in worlds]}", flush=True)
+        for c in range(args.cycles):
+            print(f"\n########## cycle {c + 1}/{args.cycles} ##########", flush=True)
+            for w in worlds:
+                wp = w.get("pcts")
+                print(f"\n#### world {w['world']} (limit {w.get('limit')}, %={wp or 'all'}) ####",
+                      flush=True)
+                try:
+                    run_open(args.cdp, w["world"], tab=w.get("tab", w["world"]),
+                             farm=True, attack=True, fight=True, repeat=300,
+                             limit=w.get("limit"), pcts=(set(wp) if wp else None),
+                             inter_ms=args.inter, reload_every=args.reload_every,
+                             gbg_pos=(w.get("gbg_x", gbg["x"]), w.get("gbg_y", gbg["y"])))
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[round-robin] {w['world']} failed: {exc} — next world.", flush=True)
+                time.sleep(3)
+        return 0
     pcts = None
     if args.pcts:
         pcts = {int(x) for x in args.pcts.replace(" ", "").split(",") if x}
