@@ -855,7 +855,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap = argparse.ArgumentParser(
         prog="bap-forge-open",
         description="Open attackable GBG provinces via the marker-solved transform.")
-    ap.add_argument("--world", required=True, help="world name/label (e.g. cz2)")
+    ap.add_argument("--world", default=None, help="world name/label (e.g. cz2); omit with --worlds")
     ap.add_argument("--cdp", default=DEFAULT_CDP_ENDPOINT, help="Chrome CDP endpoint")
     ap.add_argument("--tab", default=None, help="tab: url/title contains this (default: world)")
     ap.add_argument("--tab-index", type=int, default=None, dest="tab_index")
