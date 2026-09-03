@@ -114,38 +114,56 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15):  # pragma: no co
 
 
 def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
-                    inter_ms, reload_every, stall_stop=6):  # pragma: no cover - live
+                    inter_ms, reload_every, stall_stop=12):  # pragma: no cover - live
     """Fight the province currently on the army screen: click Automatická bitva each iteration,
     press R (Reload units) every ``reload_every`` fights, stop at the attrition ``limit`` or
     after ``stall_stop`` consecutive non-starting clicks (province conquered / screen changed).
     Returns "limit" if the attrition limit was reached, else "done"."""
     abx, aby = autobattle
+    # Set hover once (the canvas needs a real mousemove), then rapid down/up at the same point —
+    # like the manual F10 cadence (click + R every N), instead of a full trajectory per fight.
+    try:
+        page.mouse.move(20, 20)
+        page.wait_for_timeout(60)
+        page.mouse.move(abx, aby, steps=15)
+        page.wait_for_timeout(150)
+    except Exception:
+        pass
+    latest["methods"] = []
     misses = 0
+    started_total = 0
     for i in range(repeat):
-        if not _in_gbg(page):                              # left GBG (reload / went to city)?
-            print("  left the GBG map — stopping fight loop.", flush=True)
-            return "left"
-        lvl = reader.attrition_level
-        if limit is not None and lvl is not None and lvl >= limit:
-            print(f"  attrition {lvl} ≥ limit {limit} — STOP.", flush=True)
-            return "limit"
-        latest["pid"] = None
-        latest["methods"] = []
-        _hover_click(page, abx, aby)                       # the battle
-        page.wait_for_timeout(inter_ms)
-        started = any("startByBattleType" in m for m in latest["methods"])
-        misses = 0 if started else misses + 1
-        reloaded = False
+        if i % 8 == 0:                                     # periodic safety checks (kept cheap)
+            if not _in_gbg(page):
+                print("  left the GBG map — stopping fight loop.", flush=True)
+                return "left"
+            lvl = reader.attrition_level
+            if limit is not None and lvl is not None and lvl >= limit:
+                print(f"  attrition {lvl} ≥ limit {limit} — STOP.", flush=True)
+                return "limit"
+        seen = len(latest["methods"])
+        try:
+            page.mouse.down()                              # click at the hovered auto-battle button
+            page.mouse.up()
+        except Exception:
+            pass
         if reload_every and (i + 1) % reload_every == 0:
-            clicker.press("r")                             # replenish attacking units
-            page.wait_for_timeout(500)
-            reloaded = True
-        print(f"  fight {i + 1}/{repeat}: started={started} reload={reloaded} "
-              f"attrition={reader.attrition_level}", flush=True)
+            try:
+                clicker.press("r")                         # replenish attacking units
+            except Exception:
+                pass
+        page.wait_for_timeout(inter_ms)
+        if any("startByBattleType" in m for m in latest["methods"][seen:]):
+            started_total += 1
+            misses = 0
+        else:
+            misses += 1
         if misses >= stall_stop:
-            print(f"  {misses} clicks without a battle — province done / screen changed.",
-                  flush=True)
+            print(f"  {misses} clicks without a battle — province done / screen changed "
+                  f"(~{started_total} fought, attrition {reader.attrition_level}).", flush=True)
             break
+    else:
+        print(f"  ~{started_total} fought, attrition {reader.attrition_level}.", flush=True)
     return "done"
 
 
@@ -273,7 +291,7 @@ _JS_OVERLAY = """
 
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
-             click_here=False, repeat=1, limit=None, inter_ms=1200, reload_every=3,
+             click_here=False, repeat=1, limit=None, inter_ms=150, reload_every=5,
              watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1650, 250),
              farm=False, pcts=None, skip=None, utok=None, autobattle=None,
              connect=None):  # pragma: no cover - live
@@ -832,9 +850,9 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--repeat", type=int, default=1, help="with --click: fight this many times")
     ap.add_argument("--limit", type=int, default=None,
                     help="with --click: stop when attrition ≥ this")
-    ap.add_argument("--inter", type=int, default=1200, dest="inter",
+    ap.add_argument("--inter", type=int, default=150, dest="inter",
                     help="with --click: ms to wait between fights")
-    ap.add_argument("--reload-every", type=int, default=3, dest="reload_every",
+    ap.add_argument("--reload-every", type=int, default=5, dest="reload_every",
                     help="with --click: press R (Reload units) every Nth fight; 0 disables")
     ap.add_argument("--watch", type=int, default=0,
                     help="listen N seconds for getBattleground refreshes and dump provinces")
