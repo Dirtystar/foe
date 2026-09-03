@@ -1,5 +1,5 @@
 {
-  "gbg": { "x": 1650, "y": 250 },
+  "gbg": { "x": 1390, "y": 250 },
   "worlds": [
     { "world": "cz1", "tab": "cz1", "limit": 150, "pcts": [20, 40, 60] },
     { "world": "cz2", "tab": "cz2", "limit": 150, "pcts": [20, 40, 60] },

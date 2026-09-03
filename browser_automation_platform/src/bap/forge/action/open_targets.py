@@ -323,7 +323,7 @@ _JS_OVERLAY = """
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
              click_here=False, repeat=1, limit=None, inter_ms=150, reload_every=5,
-             watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1650, 250),
+             watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1390, 250),
              farm=False, pcts=None, skip=None, find_gbg=False, utok=None, autobattle=None,
              connect=None):  # pragma: no cover - live
     skip = skip if skip is not None else set()             # provinceIds that never reach a fight
@@ -928,7 +928,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="reload the tab to force a fresh getBattleground, then dump targets")
     ap.add_argument("--enter", action="store_true", dest="enter_gbg",
                     help="click the city GBG entrance to open GBG + get fresh getBattleground")
-    ap.add_argument("--gbg-x", type=int, default=1650, dest="gbg_x", help="GBG entrance CSS x")
+    ap.add_argument("--gbg-x", type=int, default=1390, dest="gbg_x", help="GBG entrance CSS x")
     ap.add_argument("--gbg-y", type=int, default=250, dest="gbg_y", help="GBG entrance CSS y")
     ap.add_argument("--find-gbg", action="store_true", dest="find_gbg",
                     help="in the CITY: list DOM elements that could open GBG (viewport-independent)")
