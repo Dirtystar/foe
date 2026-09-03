@@ -55,14 +55,36 @@ def _hover_click(page, x, y):  # pragma: no cover - live
     page.mouse.up()
 
 
-def _enter_gbg(page, reader, gbg_pos, *, timeout=30):  # pragma: no cover - live
-    """From the city, click the GBG entrance to open the map and trigger a fresh
-    getBattleground. Returns the fresh Battleground snapshot (or None)."""
-    _hover_click(page, gbg_pos[0], gbg_pos[1])
-    deadline = time.time() + timeout
-    while reader.snapshot is None and time.time() < deadline:
-        page.wait_for_timeout(1000)
-    page.wait_for_timeout(1500)
+def _in_gbg(page):  # pragma: no cover - live
+    # TODO: FoE-Helper-dependent signal — replace with a native check when we drop that crutch.
+    try:
+        return bool(page.evaluate("() => !!document.querySelector('.gbg-tabs')"))
+    except Exception:
+        return False
+
+
+def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15):  # pragma: no cover - live
+    """Self-healing: guarantee we're on the GBG map with a fresh getBattleground. getBattleground
+    only fires on GBG entry, so if we're already in GBG with no captured snapshot we reload to
+    the city first, then click the entrance. Retries; returns the fresh snapshot or None."""
+    for attempt in range(1, tries + 1):
+        if reader.snapshot is not None:
+            page.wait_for_timeout(800)
+            return reader.snapshot
+        if _in_gbg(page):
+            print(f"[enter] in GBG but no fresh data — reloading to the city to re-enter "
+                  f"(try {attempt})…", flush=True)
+            try:
+                page.reload()
+            except Exception:
+                pass
+            page.wait_for_timeout(3500)
+        _hover_click(page, gbg_pos[0], gbg_pos[1])          # click the city GBG entrance
+        print(f"[enter] clicked GBG entrance ({gbg_pos[0]},{gbg_pos[1]}); waiting for "
+              f"getBattleground (try {attempt}/{tries})…", flush=True)
+        deadline = time.time() + per_wait
+        while reader.snapshot is None and time.time() < deadline:
+            page.wait_for_timeout(1000)
     return reader.snapshot
 
 
