@@ -97,6 +97,9 @@ def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
     abx, aby = autobattle
     misses = 0
     for i in range(repeat):
+        if not _in_gbg(page):                              # left GBG (reload / went to city)?
+            print("  left the GBG map — stopping fight loop.", flush=True)
+            return "left"
         lvl = reader.attrition_level
         if limit is not None and lvl is not None and lvl >= limit:
             print(f"  attrition {lvl} ≥ limit {limit} — STOP.", flush=True)
@@ -515,6 +518,9 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                       "targets in. Backs out with Escape — nothing is actually fought.", flush=True)
             reached = None
             for t in targets:
+                if farm and not _in_gbg(page):
+                    print("[farm] no longer on the GBG map — stopping this pass.", flush=True)
+                    break
                 lvl = reader.attrition_level
                 if limit is not None and lvl is not None and lvl >= limit:
                     print(f"[farm] attrition {lvl} ≥ limit {limit} — world done.", flush=True)
@@ -555,8 +561,8 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                                                  reload_every=reload_every)
                         _escape_to_map(page)
                         if farm:
-                            if status == "limit":
-                                break                       # world's attrition limit hit
+                            if status in ("limit", "left"):
+                                break                       # limit hit, or we left the GBG map
                             continue                        # province done → next target
                     else:
                         _escape_to_map(page)                # back out, commit nothing
