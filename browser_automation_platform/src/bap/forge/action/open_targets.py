@@ -560,7 +560,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             return 0
         # skip-list is keyed by the ROUND (world + endsAt) so it resets when the map changes
         round_key = f"{world}::{reader.snapshot.ends_at if reader.snapshot else '?'}"
-        skip |= _skip_load(round_key)
+        skip.update(_skip_load(round_key))                 # mutate in place (no rebind in closure)
         targets = [t for t in targets if t.province_id not in skip]  # learned non-fightable
         # order: lowest weakening % first (20→40→60), then centre rings first (…1 before …4)
         targets.sort(key=lambda t: (
