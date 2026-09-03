@@ -257,10 +257,14 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     return
                 import json as _j
                 batch = _j.loads(req.post_data or "[]")
+                methods = []
                 for r in batch if isinstance(batch, list) else []:
                     if isinstance(r, dict):
-                        latest["methods"].append(
-                            f"{r.get('requestClass')}.{r.get('requestMethod')}")
+                        methods.append(f"{r.get('requestClass')}.{r.get('requestMethod')}")
+                latest["methods"].extend(methods)
+                if watch and methods:
+                    print(f"[watch] {time.strftime('%H:%M:%S')} request: {', '.join(methods)}",
+                          flush=True)
                 pid = parse_province_id_from_game_json(batch)
                 if pid is not None:
                     latest["pid"] = pid
