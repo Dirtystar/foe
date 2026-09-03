@@ -44,25 +44,36 @@ def _hover_click(page, x, y):  # pragma: no cover - live
     page.mouse.up()
 
 
+def _enter_gbg(page, reader, gbg_pos, *, timeout=30):  # pragma: no cover - live
+    """From the city, click the GBG entrance to open the map and trigger a fresh
+    getBattleground. Returns the fresh Battleground snapshot (or None)."""
+    _hover_click(page, gbg_pos[0], gbg_pos[1])
+    deadline = time.time() + timeout
+    while reader.snapshot is None and time.time() < deadline:
+        page.wait_for_timeout(1000)
+    page.wait_for_timeout(1500)
+    return reader.snapshot
+
+
 def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
-                    inter_ms, reload_every):  # pragma: no cover - live
+                    inter_ms, reload_every, stall_stop=6):  # pragma: no cover - live
     """Fight the province currently on the army screen: click Automatická bitva each iteration,
-    press R (Reload units) every ``reload_every`` fights, stop at the attrition ``limit``.
-    Returns the number of battles that actually started."""
+    press R (Reload units) every ``reload_every`` fights, stop at the attrition ``limit`` or
+    after ``stall_stop`` consecutive non-starting clicks (province conquered / screen changed).
+    Returns "limit" if the attrition limit was reached, else "done"."""
     abx, aby = autobattle
-    fought = 0
+    misses = 0
     for i in range(repeat):
         lvl = reader.attrition_level
         if limit is not None and lvl is not None and lvl >= limit:
             print(f"  attrition {lvl} ≥ limit {limit} — STOP.", flush=True)
-            break
+            return "limit"
         latest["pid"] = None
         latest["methods"] = []
         _hover_click(page, abx, aby)                       # the battle
         page.wait_for_timeout(inter_ms)
         started = any("startByBattleType" in m for m in latest["methods"])
-        if started:
-            fought += 1
+        misses = 0 if started else misses + 1
         reloaded = False
         if reload_every and (i + 1) % reload_every == 0:
             clicker.press("r")                             # replenish attacking units
@@ -70,7 +81,11 @@ def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
             reloaded = True
         print(f"  fight {i + 1}/{repeat}: started={started} reload={reloaded} "
               f"attrition={reader.attrition_level}", flush=True)
-    return fought
+        if misses >= stall_stop:
+            print(f"  {misses} clicks without a battle — province done / screen changed.",
+                  flush=True)
+            break
+    return "done"
 
 
 # A labeled CSS-pixel grid so we can read a canvas element's exact click coordinate.
@@ -199,7 +214,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
              click_here=False, repeat=1, limit=None, inter_ms=1200, reload_every=3,
              watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1650, 250),
-             utok=(1157, 800), autobattle=(1150, 790),
+             farm=False, pcts=None, utok=(1157, 800), autobattle=(1150, 790),
              connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
@@ -275,34 +290,35 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         page.on("response", _on_response)
         page.on("request", _on_request)
 
-        if enter_gbg:
+        if enter_gbg or farm:
             gx, gy = gbg_pos
-            print(f"[enter] clicking the GBG entrance in the city at ({gx},{gy}), waiting for "
-                  "fresh getBattleground…", flush=True)
-            _hover_click(page, gx, gy)
-            deadline = time.time() + 30
-            while reader.snapshot is None and time.time() < deadline:
-                page.wait_for_timeout(1000)
-            page.wait_for_timeout(1500)
-            try:
-                page.screenshot(path="gbg_entered.png")
-            except Exception:
-                pass
-            bg = reader.snapshot
+            print(f"[enter] opening GBG via the city entrance ({gx},{gy}) for fresh data…",
+                  flush=True)
+            bg = _enter_gbg(page, reader, gbg_pos)
             if bg is None:
-                print("[enter] no getBattleground within 30s — the entrance coord may be off. "
-                      "SEND gbg_entered.png (did the GBG map open?).", flush=True)
+                try:
+                    page.screenshot(path="gbg_entered.png")
+                except Exception:
+                    pass
+                print("[enter] no getBattleground — the entrance coord may be off (--gbg-x/-y). "
+                      "SEND gbg_entered.png.", flush=True)
                 return 0
             ref = bg.server_time or int(time.time())
-            names = page.evaluate(_JS_NAMES) or {}
+            names0 = page.evaluate(_JS_NAMES) or {}
             openatk = [p for p in bg.provinces if p.is_attack_battle_type and not bg.is_mine(p)
                        and not p.is_locked(ref) and p.gain_attrition_chance is not None]
-            print(f"[enter] entered GBG, fresh data: {len(openatk)} open-attackable:", flush=True)
-            for p in sorted(openatk, key=lambda p: (p.gain_attrition_chance, p.id)):
-                print(f"    {_name(names, p.id)} id={p.id} gain%={p.gain_attrition_chance}",
-                      flush=True)
-            print("[enter] SEND gbg_entered.png (is the GBG map open now?).", flush=True)
-            return 0
+            print(f"[enter] entered GBG, fresh data: {len(openatk)} open-attackable "
+                  + ", ".join(f"{_name(names0, p.id)}[{p.gain_attrition_chance}%]"
+                              for p in sorted(openatk,
+                                              key=lambda p: (p.gain_attrition_chance, p.id))),
+                  flush=True)
+            if not farm:
+                try:
+                    page.screenshot(path="gbg_entered.png")
+                except Exception:
+                    pass
+                return 0
+            # farm: fall through to solve transform + select + fight loop
 
         if reload_first:
             print("[reload] reloading the tab to force a fresh getBattleground (login prefetches "
@@ -423,13 +439,14 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         deadline = time.time() + 12
         while reader.snapshot is None and time.time() < deadline:
             page.wait_for_timeout(1000)
-        targets = reader.targets(include_locked=False) if reader.snapshot else []
+        targets = (reader.targets(include_locked=False, allowed_pcts=pcts)
+                   if reader.snapshot else [])
         if not targets:
-            print("\nNo attackable provinces right now (getBattleground reports none open). The "
-                  "transform is solved & saved — re-run when sectors are open to fight.", flush=True)
+            print(f"\nNo attackable provinces right now (allowed %={pcts or 'all'}). Transform "
+                  "saved — re-run when sectors are open.", flush=True)
             return 0
-        targets = targets[:n]
-        print(f"\nAttackable now ({len(targets)}): "
+        targets = targets[:(n if not farm else len(targets))]
+        print(f"\nAttackable now ({len(targets)}, allowed %={pcts or 'all'}): "
               + ", ".join(f"{_name(names, t.province_id)}[{t.gain_attrition_chance}%]"
                           for t in targets), flush=True)
         _escape_to_map(page)
@@ -449,10 +466,18 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                 for p in rows:
                     print(f"    {_name(names, p.id)} id={p.id} gain%={p.gain_attrition_chance} "
                           f"locked={p.is_locked(ref)} siege={bool(p.conquest_progress)}", flush=True)
-            print(f"\n[attack] reaching the battle screen (Útok at ({ux},{uy})). Pans off-screen "
-                  "targets in. Backs out with Escape — nothing is actually fought.", flush=True)
+            if farm:
+                print(f"\n[farm] farming {world} to attrition limit={limit}, allowed %={pcts or 'all'}.",
+                      flush=True)
+            else:
+                print(f"\n[attack] reaching the battle screen (Útok at ({ux},{uy})). Pans off-screen "
+                      "targets in. Backs out with Escape — nothing is actually fought.", flush=True)
             reached = None
             for t in targets:
+                lvl = reader.attrition_level
+                if limit is not None and lvl is not None and lvl >= limit:
+                    print(f"[farm] attrition {lvl} ≥ limit {limit} — world done.", flush=True)
+                    break
                 f = flags.get(t.province_id)
                 if f is None:
                     continue
@@ -484,9 +509,14 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     if fight:
                         print(f"  [fight] farming {_name(names, t.province_id)} to attrition "
                               f"limit={limit}…", flush=True)
-                        _run_fight_loop(page, clicker, reader, latest, autobattle, repeat=repeat,
-                                        limit=limit, inter_ms=inter_ms, reload_every=reload_every)
+                        status = _run_fight_loop(page, clicker, reader, latest, autobattle,
+                                                 repeat=repeat, limit=limit, inter_ms=inter_ms,
+                                                 reload_every=reload_every)
                         _escape_to_map(page)
+                        if farm:
+                            if status == "limit":
+                                break                       # world's attrition limit hit
+                            continue                        # province done → next target
                     else:
                         _escape_to_map(page)                # back out, commit nothing
                     break
@@ -494,10 +524,12 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                       f"(guild-ignore dialog or locked) — methods={latest['methods'] or '(none)'}",
                       flush=True)
                 _escape_to_map(page)                        # cancel dialog / close window
-            if reached is not None:
+            if farm:
+                print(f"\n[farm] {world} pass complete. Attrition now {reader.attrition_level} "
+                      f"(limit {limit}).", flush=True)
+            elif reached is not None:
                 print(f"\n[attack] Full chain works end-to-end on province {reached}: map → open "
-                      "→ Útok → battle screen. SEND gbg_battle.png. Ready for the fight loop! 🎯",
-                      flush=True)
+                      "→ Útok → battle screen. 🎯", flush=True)
             else:
                 print("\n[attack] No target reached the battle screen (all guild-ignored/locked "
                       "or off-screen). Re-run when normal attackable sectors are open.", flush=True)
@@ -722,16 +754,27 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="click the city GBG entrance to open GBG + get fresh getBattleground")
     ap.add_argument("--gbg-x", type=int, default=1650, dest="gbg_x", help="GBG entrance CSS x")
     ap.add_argument("--gbg-y", type=int, default=250, dest="gbg_y", help="GBG entrance CSS y")
+    ap.add_argument("--farm", action="store_true",
+                    help="autonomous: enter GBG → fresh targets → fight each to the attrition limit")
+    ap.add_argument("--pcts", default=None,
+                    help="only attack these weakening %% (comma list, e.g. 20,40,60)")
     args = ap.parse_args(argv)
+    pcts = None
+    if args.pcts:
+        pcts = {int(x) for x in args.pcts.replace(" ", "").split(",") if x}
+    repeat = args.repeat
+    if args.farm and repeat == 1:
+        repeat = 300                                       # per-province fight cap for farming
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
-                     debug=args.debug, overlay=args.overlay, attack=args.attack or args.fight,
-                     fight=args.fight, grid_only=args.grid, click_here=args.click,
-                     repeat=args.repeat, limit=args.limit, inter_ms=args.inter,
+                     debug=args.debug, overlay=args.overlay,
+                     attack=args.attack or args.fight or args.farm,
+                     fight=args.fight or args.farm, grid_only=args.grid, click_here=args.click,
+                     repeat=repeat, limit=args.limit, inter_ms=args.inter,
                      reload_every=args.reload_every, watch=args.watch,
                      reload_first=args.reload_first, enter_gbg=args.enter_gbg,
-                     gbg_pos=(args.gbg_x, args.gbg_y), utok=(args.ux, args.uy),
-                     autobattle=(args.abx, args.aby))
+                     gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts,
+                     utok=(args.ux, args.uy), autobattle=(args.abx, args.aby))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
         print(f"Open failed on {args.cdp}: {exc}")
