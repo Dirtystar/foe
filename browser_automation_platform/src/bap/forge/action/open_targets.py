@@ -198,7 +198,8 @@ _JS_OVERLAY = """
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
              click_here=False, repeat=1, limit=None, inter_ms=1200, reload_every=3,
-             watch=0, reload_first=False, utok=(1157, 800), autobattle=(1150, 790),
+             watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1650, 250),
+             utok=(1157, 800), autobattle=(1150, 790),
              connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
@@ -273,6 +274,35 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
 
         page.on("response", _on_response)
         page.on("request", _on_request)
+
+        if enter_gbg:
+            gx, gy = gbg_pos
+            print(f"[enter] clicking the GBG entrance in the city at ({gx},{gy}), waiting for "
+                  "fresh getBattleground…", flush=True)
+            _hover_click(page, gx, gy)
+            deadline = time.time() + 30
+            while reader.snapshot is None and time.time() < deadline:
+                page.wait_for_timeout(1000)
+            page.wait_for_timeout(1500)
+            try:
+                page.screenshot(path="gbg_entered.png")
+            except Exception:
+                pass
+            bg = reader.snapshot
+            if bg is None:
+                print("[enter] no getBattleground within 30s — the entrance coord may be off. "
+                      "SEND gbg_entered.png (did the GBG map open?).", flush=True)
+                return 0
+            ref = bg.server_time or int(time.time())
+            names = page.evaluate(_JS_NAMES) or {}
+            openatk = [p for p in bg.provinces if p.is_attack_battle_type and not bg.is_mine(p)
+                       and not p.is_locked(ref) and p.gain_attrition_chance is not None]
+            print(f"[enter] entered GBG, fresh data: {len(openatk)} open-attackable:", flush=True)
+            for p in sorted(openatk, key=lambda p: (p.gain_attrition_chance, p.id)):
+                print(f"    {_name(names, p.id)} id={p.id} gain%={p.gain_attrition_chance}",
+                      flush=True)
+            print("[enter] SEND gbg_entered.png (is the GBG map open now?).", flush=True)
+            return 0
 
         if reload_first:
             print("[reload] reloading the tab to force a fresh getBattleground (login prefetches "
@@ -688,6 +718,10 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="listen N seconds for getBattleground refreshes and dump provinces")
     ap.add_argument("--reload", action="store_true", dest="reload_first",
                     help="reload the tab to force a fresh getBattleground, then dump targets")
+    ap.add_argument("--enter", action="store_true", dest="enter_gbg",
+                    help="click the city GBG entrance to open GBG + get fresh getBattleground")
+    ap.add_argument("--gbg-x", type=int, default=1650, dest="gbg_x", help="GBG entrance CSS x")
+    ap.add_argument("--gbg-y", type=int, default=250, dest="gbg_y", help="GBG entrance CSS y")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
@@ -695,7 +729,8 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                      fight=args.fight, grid_only=args.grid, click_here=args.click,
                      repeat=args.repeat, limit=args.limit, inter_ms=args.inter,
                      reload_every=args.reload_every, watch=args.watch,
-                     reload_first=args.reload_first, utok=(args.ux, args.uy),
+                     reload_first=args.reload_first, enter_gbg=args.enter_gbg,
+                     gbg_pos=(args.gbg_x, args.gbg_y), utok=(args.ux, args.uy),
                      autobattle=(args.abx, args.aby))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
