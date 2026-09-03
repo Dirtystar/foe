@@ -324,7 +324,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
              click_here=False, repeat=1, limit=None, inter_ms=150, reload_every=5,
              watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1650, 250),
-             farm=False, pcts=None, skip=None, utok=None, autobattle=None,
+             farm=False, pcts=None, skip=None, find_gbg=False, utok=None, autobattle=None,
              connect=None):  # pragma: no cover - live
     skip = skip if skip is not None else set()             # provinceIds that never reach a fight
     from bap.forge.action.calibrate import _fetch_map_layout
@@ -408,6 +408,27 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         autobattle_xy = autobattle or _centre_button(_vw0, _vh0, _AUTOBATTLE_OFF)
         print(f"[calib] viewport {_vw0}x{_vh0} → Útok {utok_xy}, Auto-battle {autobattle_xy}",
               flush=True)
+
+        if find_gbg:
+            # In the CITY: hunt for a DOM element that opens GBG (viewport-independent entry).
+            js = ("() => Array.from(document.querySelectorAll('*')).map(el => {"
+                  " const s=((el.id||'')+' '+((el.getAttribute&&el.getAttribute('class'))||'')+' '"
+                  " +(el.getAttribute&&(el.getAttribute('title')||el.getAttribute('data-original-title'))||'')"
+                  " +' '+((el.textContent||'').slice(0,30))).toLowerCase();"
+                  " if(!/gbg|battleground|bitevní|bojiště|guildbattle/.test(s)) return null;"
+                  " const r=el.getBoundingClientRect();"
+                  " return {tag:el.tagName,id:(el.id||'').slice(0,30),"
+                  " cls:((el.getAttribute&&el.getAttribute('class'))||'').slice(0,50),"
+                  " title:((el.getAttribute&&(el.getAttribute('title')||el.getAttribute('data-original-title')))||'').slice(0,40),"
+                  " rect:[Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)]};"
+                  " }).filter(x=>x && x.rect[2]>0)")
+            hits = page.evaluate(js) or []
+            import json as _j
+            print(f"[find-gbg] {len(hits)} DOM elements mention GBG (in the city):", flush=True)
+            print(_j.dumps(hits, indent=2, ensure_ascii=False)[:3000], flush=True)
+            print("[find-gbg] if any is a clickable icon/button for GBG, we click it by selector "
+                  "→ resolution-independent entry.", flush=True)
+            return 0
 
         if enter_gbg or farm:
             gx, gy = gbg_pos
@@ -909,6 +930,8 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="click the city GBG entrance to open GBG + get fresh getBattleground")
     ap.add_argument("--gbg-x", type=int, default=1650, dest="gbg_x", help="GBG entrance CSS x")
     ap.add_argument("--gbg-y", type=int, default=250, dest="gbg_y", help="GBG entrance CSS y")
+    ap.add_argument("--find-gbg", action="store_true", dest="find_gbg",
+                    help="in the CITY: list DOM elements that could open GBG (viewport-independent)")
     ap.add_argument("--farm", action="store_true",
                     help="autonomous: enter GBG → fresh targets → fight each to the attrition limit")
     ap.add_argument("--pcts", default=None,
@@ -971,6 +994,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                         reload_every=args.reload_every, watch=args.watch,
                         reload_first=args.reload_first, enter_gbg=args.enter_gbg,
                         gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts, skip=_skip,
+                        find_gbg=args.find_gbg,
                         utok=((args.ux, args.uy) if args.ux and args.uy else None),
                         autobattle=((args.abx, args.aby) if args.abx and args.aby else None))
 
