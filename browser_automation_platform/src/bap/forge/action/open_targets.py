@@ -198,7 +198,7 @@ _JS_OVERLAY = """
 def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calibration.json",
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
              click_here=False, repeat=1, limit=None, inter_ms=1200, reload_every=3,
-             watch=0, utok=(1157, 800), autobattle=(1150, 790),
+             watch=0, reload_first=False, utok=(1157, 800), autobattle=(1150, 790),
              connect=None):  # pragma: no cover - live
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
@@ -273,6 +273,40 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
 
         page.on("response", _on_response)
         page.on("request", _on_request)
+
+        if reload_first:
+            print("[reload] reloading the tab to force a fresh getBattleground (login prefetches "
+                  "it)…", flush=True)
+            try:
+                page.reload()
+            except Exception as exc:
+                print(f"[reload] reload error: {exc}", flush=True)
+            deadline = time.time() + 40
+            while reader.snapshot is None and time.time() < deadline:
+                page.wait_for_timeout(1000)
+            bg = reader.snapshot
+            if bg is None:
+                print("[reload] no getBattleground within 40s after reload.", flush=True)
+                try:
+                    page.screenshot(path="gbg_afterreload.png")
+                except Exception:
+                    pass
+                return 0
+            ref = bg.server_time or int(time.time())
+            names = page.evaluate(_JS_NAMES) or {}
+            openatk = [p for p in bg.provinces if p.is_attack_battle_type and not bg.is_mine(p)
+                       and not p.is_locked(ref) and p.gain_attrition_chance is not None]
+            print(f"[reload] fresh getBattleground: {len(openatk)} open-attackable:", flush=True)
+            for p in sorted(openatk, key=lambda p: (p.gain_attrition_chance, p.id)):
+                print(f"    {_name(names, p.id)} id={p.id} gain%={p.gain_attrition_chance}",
+                      flush=True)
+            try:
+                page.screenshot(path="gbg_afterreload.png")
+            except Exception:
+                pass
+            print("[reload] SEND gbg_afterreload.png — is the game on the GBG map or in the city "
+                  "after reload?", flush=True)
+            return 0
 
         if watch:
             names = page.evaluate(_JS_NAMES) or {}
@@ -652,13 +686,16 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="with --click: press R (Reload units) every Nth fight; 0 disables")
     ap.add_argument("--watch", type=int, default=0,
                     help="listen N seconds for getBattleground refreshes and dump provinces")
+    ap.add_argument("--reload", action="store_true", dest="reload_first",
+                    help="reload the tab to force a fresh getBattleground, then dump targets")
     args = ap.parse_args(argv)
     try:
         r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
                      debug=args.debug, overlay=args.overlay, attack=args.attack or args.fight,
                      fight=args.fight, grid_only=args.grid, click_here=args.click,
                      repeat=args.repeat, limit=args.limit, inter_ms=args.inter,
-                     reload_every=args.reload_every, watch=args.watch, utok=(args.ux, args.uy),
+                     reload_every=args.reload_every, watch=args.watch,
+                     reload_first=args.reload_first, utok=(args.ux, args.uy),
                      autobattle=(args.abx, args.aby))
         return 0 if r is not None else 1
     except Exception as exc:  # noqa: BLE001
