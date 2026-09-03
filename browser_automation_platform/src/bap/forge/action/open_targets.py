@@ -58,6 +58,8 @@ def _hover_click(page, x, y):  # pragma: no cover - live
 def _refresh_offset(page, nav, flags, marker_ids):  # pragma: no cover - live
     """Reset the offset to the map's CURRENT position by re-reading a marker arrow (scale is
     fixed), so positioning stays exact after panning. Returns True on success."""
+    if not _in_gbg(page):                                  # never mark/click off the GBG map
+        return False
     for mid in marker_ids:
         fl = flags.get(mid)
         if fl is None:
@@ -549,8 +551,9 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                 # offset stays exact (blind panning drifts on far/opposite-side provinces).
                 x, y = nav.screen_for(f)
                 for _ in range(6):
-                    if _refresh_offset(page, nav, flags, marker_ids):
-                        x, y = nav.screen_for(f)
+                    if not _refresh_offset(page, nav, flags, marker_ids):
+                        break                               # off the GBG map — don't pan blindly
+                    x, y = nav.screen_for(f)
                     if 90 <= x <= vw - 90 and 90 <= y <= vh - 90:
                         break
                     dx = max(-vw * 0.5, min(vw * 0.5, vw / 2 - x))
@@ -830,6 +833,9 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="autonomous: enter GBG → fresh targets → fight each to the attrition limit")
     ap.add_argument("--pcts", default=None,
                     help="only attack these weakening %% (comma list, e.g. 20,40,60)")
+    ap.add_argument("--passes", type=int, default=1,
+                    help="with --farm: run this many self-healing passes (each re-enters GBG "
+                         "from scratch — the watchdog; use a big number to run all day)")
     args = ap.parse_args(argv)
     pcts = None
     if args.pcts:
@@ -837,20 +843,32 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     repeat = args.repeat
     if args.farm and repeat == 1:
         repeat = 300                                       # per-province fight cap for farming
-    try:
-        r = run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
-                     debug=args.debug, overlay=args.overlay,
-                     attack=args.attack or args.fight or args.farm,
-                     fight=args.fight or args.farm, grid_only=args.grid, click_here=args.click,
-                     repeat=repeat, limit=args.limit, inter_ms=args.inter,
-                     reload_every=args.reload_every, watch=args.watch,
-                     reload_first=args.reload_first, enter_gbg=args.enter_gbg,
-                     gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts,
-                     utok=((args.ux, args.uy) if args.ux and args.uy else None), autobattle=((args.abx, args.aby) if args.abx and args.aby else None))
-        return 0 if r is not None else 1
-    except Exception as exc:  # noqa: BLE001
-        print(f"Open failed on {args.cdp}: {exc}")
-        return 1
+
+    def _once():
+        return run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
+                        debug=args.debug, overlay=args.overlay,
+                        attack=args.attack or args.fight or args.farm,
+                        fight=args.fight or args.farm, grid_only=args.grid, click_here=args.click,
+                        repeat=repeat, limit=args.limit, inter_ms=args.inter,
+                        reload_every=args.reload_every, watch=args.watch,
+                        reload_first=args.reload_first, enter_gbg=args.enter_gbg,
+                        gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts,
+                        utok=((args.ux, args.uy) if args.ux and args.uy else None),
+                        autobattle=((args.abx, args.aby) if args.abx and args.aby else None))
+
+    # Watchdog: each pass is independent and re-establishes GBG from scratch (F5 + entrance),
+    # so any breakage just ends the pass and the next one starts clean.
+    passes = args.passes if args.farm else 1
+    for i in range(passes):
+        if passes > 1:
+            print(f"\n===== farm pass {i + 1}/{passes} =====", flush=True)
+        try:
+            _once()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[watchdog] pass {i + 1} failed: {exc} — restarting from scratch.", flush=True)
+        if passes > 1 and i + 1 < passes:
+            time.sleep(4)
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
