@@ -54,6 +54,12 @@ _JS_NAMES = ("() => { const m = {}; document.querySelectorAll('tr[data-id]').for
              " if (b) m[tr.getAttribute('data-id')] = b.textContent.trim(); }); return m; }")
 
 
+# Leader "Cíl" (focus target) marks from FoE Helper — those rows carry a .focus-target img.
+_JS_CIL = ("() => Array.from(document.querySelectorAll('tr[data-id]'))"
+           ".filter(tr => tr.querySelector('.focus-target'))"
+           ".map(tr => parseInt(tr.getAttribute('data-id')))")
+
+
 def _name(names, pid):
     return names.get(str(pid)) or f"#{pid}"
 
@@ -562,8 +568,20 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         round_key = f"{world}::{reader.snapshot.ends_at if reader.snapshot else '?'}"
         skip.update(_skip_load(round_key))                 # mutate in place (no rebind in closure)
         targets = [t for t in targets if t.province_id not in skip]  # learned non-fightable
-        # order: lowest weakening % first (20→40→60), then centre rings first (…1 before …4)
+        # Cíl (leader focus target) overrides the % allowlist and gets absolute priority
+        try:
+            cil = {int(i) for i in (page.evaluate(_JS_CIL) or [])}
+        except Exception:
+            cil = set()
+        if cil:
+            have = {t.province_id for t in targets}
+            for t in reader.targets(include_locked=False):       # all %, add Cíl even if % not allowed
+                if t.province_id in cil and t.province_id not in skip and t.province_id not in have:
+                    targets.append(t)
+            print(f"[cíl] leader targets prioritised: {sorted(cil)}", flush=True)
+        # order: Cíl first, then lowest % (20→40→60), then centre rings (…1 before …4)
         targets.sort(key=lambda t: (
+            0 if t.province_id in cil else 1,
             t.gain_attrition_chance if t.gain_attrition_chance is not None else 999,
             _ring(names.get(str(t.province_id), "")),
             t.province_id))
