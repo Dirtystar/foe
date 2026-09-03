@@ -904,27 +904,36 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="with --worlds: how many full round-robin cycles (default: all day)")
     args = ap.parse_args(argv)
 
-    if args.worlds:                                        # round-robin across worlds
+    if args.worlds:                                        # PARALLEL farming: one process per world
+        import subprocess
+        import sys
         cfg = json.load(open(args.worlds, encoding="utf-8"))
         gbg = cfg.get("gbg", {"x": 1650, "y": 250})
         worlds = cfg.get("worlds", [])
-        print(f"[round-robin] {len(worlds)} worlds × {args.cycles} cycles: "
+        print(f"[parallel] launching {len(worlds)} worlds concurrently, {args.cycles} passes each: "
               f"{[w['world'] for w in worlds]}", flush=True)
-        for c in range(args.cycles):
-            print(f"\n########## cycle {c + 1}/{args.cycles} ##########", flush=True)
-            for w in worlds:
-                wp = w.get("pcts")
-                print(f"\n#### world {w['world']} (limit {w.get('limit')}, %={wp or 'all'}) ####",
-                      flush=True)
-                try:
-                    run_open(args.cdp, w["world"], tab=w.get("tab", w["world"]),
-                             farm=True, attack=True, fight=True, repeat=300,
-                             limit=w.get("limit"), pcts=(set(wp) if wp else None),
-                             inter_ms=args.inter, reload_every=args.reload_every,
-                             gbg_pos=(w.get("gbg_x", gbg["x"]), w.get("gbg_y", gbg["y"])))
-                except Exception as exc:  # noqa: BLE001
-                    print(f"[round-robin] {w['world']} failed: {exc} — next world.", flush=True)
-                time.sleep(3)
+        procs = []
+        for w in worlds:
+            cmd = [sys.executable, "-m", "bap.forge.action.open_targets",
+                   "--world", w["world"], "--tab", w.get("tab", w["world"]),
+                   "--cdp", args.cdp, "--farm", "--passes", str(args.cycles),
+                   "--inter", str(args.inter), "--reload-every", str(args.reload_every),
+                   "--gbg-x", str(w.get("gbg_x", gbg["x"])),
+                   "--gbg-y", str(w.get("gbg_y", gbg["y"]))]
+            if w.get("limit") is not None:
+                cmd += ["--limit", str(w["limit"])]
+            if w.get("pcts"):
+                cmd += ["--pcts", ",".join(str(x) for x in w["pcts"])]
+            print(f"[parallel] → {w['world']}", flush=True)
+            procs.append((w["world"], subprocess.Popen(cmd)))
+            time.sleep(2)                                   # stagger CDP connects / GBG entries
+        try:
+            for _, p in procs:
+                p.wait()
+        except KeyboardInterrupt:
+            print("\n[parallel] stopping all worlds…", flush=True)
+            for _, p in procs:
+                p.terminate()
         return 0
     pcts = None
     if args.pcts:
