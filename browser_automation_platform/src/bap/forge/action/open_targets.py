@@ -268,8 +268,9 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
              debug=False, overlay=False, attack=False, fight=False, grid_only=False,
              click_here=False, repeat=1, limit=None, inter_ms=1200, reload_every=3,
              watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1650, 250),
-             farm=False, pcts=None, utok=None, autobattle=None,
+             farm=False, pcts=None, skip=None, utok=None, autobattle=None,
              connect=None):  # pragma: no cover - live
+    skip = skip if skip is not None else set()             # provinceIds that never reach a fight
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
     from bap.forge.gbg_data.live import LiveGbgReader, make_response_handler
@@ -507,8 +508,9 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             print(f"\nNo attackable provinces right now (allowed %={pcts or 'all'}). Transform "
                   "saved — re-run when sectors are open.", flush=True)
             return 0
+        targets = [t for t in targets if t.province_id not in skip]  # learned non-fightable
         targets = targets[:(n if not farm else len(targets))]
-        print(f"\nAttackable now ({len(targets)}, allowed %={pcts or 'all'}): "
+        print(f"\nAttackable now ({len(targets)}, allowed %={pcts or 'all'}, skip={sorted(skip)}): "
               + ", ".join(f"{_name(names, t.province_id)}[{t.gain_attrition_chance}%]"
                           for t in targets), flush=True)
         _escape_to_map(page)
@@ -595,9 +597,10 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     else:
                         _escape_to_map(page)                # back out, commit nothing
                     break
+                if _in_gbg(page):
+                    skip.add(t.province_id)                  # remember: never reaches a fight
                 print(f"  ⏭ {_name(names, t.province_id)} (id={t.province_id}): no army preview "
-                      f"(guild-ignore dialog or locked) — methods={latest['methods'] or '(none)'}",
-                      flush=True)
+                      f"(guild HQ / ignore / not adjacent) — skipping henceforth", flush=True)
                 _escape_to_map(page)                        # cancel dialog / close window
             if farm:
                 print(f"\n[farm] {world} pass complete. Attrition now {reader.attrition_level} "
@@ -844,6 +847,8 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     if args.farm and repeat == 1:
         repeat = 300                                       # per-province fight cap for farming
 
+    _skip = set()                                          # shared across passes (learned non-fightable)
+
     def _once():
         return run_open(args.cdp, args.world, tab=args.tab, tab_index=args.tab_index, n=args.n,
                         debug=args.debug, overlay=args.overlay,
@@ -852,7 +857,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                         repeat=repeat, limit=args.limit, inter_ms=args.inter,
                         reload_every=args.reload_every, watch=args.watch,
                         reload_first=args.reload_first, enter_gbg=args.enter_gbg,
-                        gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts,
+                        gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts, skip=_skip,
                         utok=((args.ux, args.uy) if args.ux and args.uy else None),
                         autobattle=((args.abx, args.aby) if args.abx and args.aby else None))
 
