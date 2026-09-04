@@ -141,7 +141,7 @@ def run_calibrate(endpoint, world, *, tab=None, tab_index=None, store=DEFAULT_ST
                 layout = _fetch_map_layout(page)
             layout = layout or reader.map_layout
         if layout is None:
-            print("Couldn't read the map layout. Tell Radek what the [debug] lines said.",
+            print("Couldn't read the map layout. Note what the [debug] lines said.",
                   flush=True)
             return None
         map_id = reader.snapshot.map_id if reader.snapshot else None

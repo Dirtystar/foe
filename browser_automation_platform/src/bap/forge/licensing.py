@@ -16,7 +16,7 @@ many worlds the farmer will drive.
 Owner side (you), to mint a key::
 
     python -m bap.forge.licensing gen --tier quad --days 30
-    python -m bap.forge.licensing gen --tier unlimited --days 365 --name "Radek"
+    python -m bap.forge.licensing gen --tier unlimited --days 365 --name "Customer"
 
 Customer side (the app) verifies with :func:`verify_key`. The signing secret lives in
 ``FOE_LICENSE_SECRET`` (env) if set, else the built-in default below — change it before you sell,

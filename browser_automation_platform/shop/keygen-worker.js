@@ -12,7 +12,7 @@
  *   FROM_EMAIL       — verified sender address, e.g. "keys@yourdomain.com".
  *   VARIANT_TIERS    — JSON mapping store variant id → tier, e.g. {"111":"solo","222":"quad"}.
  *
- * Test locally: GET /?tier=quad&days=30&name=Radek&secret=LICENSE_SECRET → prints a key.
+ * Test locally: GET /?tier=quad&days=30&name=Buyer&secret=LICENSE_SECRET → prints a key.
  */
 
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";

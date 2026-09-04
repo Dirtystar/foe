@@ -87,7 +87,7 @@ Edit (add/adjust badges, press 1-5 for 20/40/60/80/100)
   → status shows "● Unsaved changes"
   → tick "Reviewed"  (works even with zero badges)
   → click "Save"
-  → status shows "✅ Saved to: C:\Users\radek\foe\browser_automation_platform\dataset\labels.json · HH:MM:SS"
+  → status shows "✅ Saved to: C:\Users\you\foe\browser_automation_platform\dataset\labels.json · HH:MM:SS"
   → close the window
   → reopen the same command
   → badges, percentages and Reviewed are restored

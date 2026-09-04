@@ -8,10 +8,10 @@ from bap.forge import licensing as lic
 
 
 def test_generate_verify_round_trip():
-    key = lic.generate_key("quad", days=30, name="Radek")
+    key = lic.generate_key("quad", days=30, name="Buyer")
     L = lic.verify_key(key)
     assert L is not None
-    assert L.tier == "quad" and L.name == "Radek"
+    assert L.tier == "quad" and L.name == "Buyer"
     assert L.worlds == 4 and L.is_valid()
 
 

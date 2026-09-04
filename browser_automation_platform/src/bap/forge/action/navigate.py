@@ -199,7 +199,7 @@ def run_verify(endpoint, world, *, tab=None, tab_index=None, n=3,
                   "scale.\nLook at the 'requests' shown above for each probe click:\n"
                   "  • if pid=None and '(no /game/json request seen)' → the click isn't opening a "
                   "province (wrong tab? overlay open? not on the GBG map?).\n"
-                  "  • if a request shows but no provinceId → tell Radek which method fired.\n"
+                  "  • if a request shows but no provinceId → note which method fired.\n"
                   "Make sure you're on the GBG map with attackable provinces near the centre.",
                   flush=True)
             return None

@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
           + (f" ({skipped} already there — skipped)." if skipped else "."))
     if exported:
         print("Next: commit them and run '5 - Push.bat' (or `git add` + push) to send "
-              "them to Radek.")
+              "them to the developer.")
     return 0
 
 

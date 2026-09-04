@@ -1233,4 +1233,4 @@ connection; no secrets are logged or persisted.
   paths still apply.
 - Extras pin lower bounds only; deployers should add a lockfile/constraints.
 
-[0.1.0]: https://github.com/Dirtystar/foe/releases/tag/v0.1.0
+[0.1.0]: https://github.com/your-org/foe/releases/tag/v0.1.0
