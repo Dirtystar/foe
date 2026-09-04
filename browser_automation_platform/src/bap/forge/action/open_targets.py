@@ -93,6 +93,28 @@ def _hover_click(page, x, y):  # pragma: no cover - live
     page.mouse.up()
 
 
+def _hover_click_cluster(page, x, y, spread=8):  # pragma: no cover - live
+    """Click a tight cluster around (x, y) — the entrance is a ~20px tile when the city is
+    zoomed fully out, so a few-px miss selects a neighbour. Hover once (canvas needs the
+    trajectory), then press-release at the centre and a ring of offsets; one lands on the tile."""
+    page.mouse.move(20, 20)
+    page.wait_for_timeout(80)
+    page.mouse.move(x, y, steps=25)
+    page.wait_for_timeout(300)
+    pts = [(0, 0), (spread, 0), (-spread, 0), (0, spread), (0, -spread),
+           (spread, spread), (-spread, -spread)]
+    for dx, dy in pts:
+        try:
+            page.mouse.move(x + dx, y + dy)
+            page.wait_for_timeout(40)
+            page.mouse.down()
+            page.wait_for_timeout(60)
+            page.mouse.up()
+            page.wait_for_timeout(120)
+        except Exception:
+            pass
+
+
 def _refresh_offset(page, nav, flags, marker_ids):  # pragma: no cover - live
     """Reset the offset to the map's CURRENT position by re-reading a marker arrow (scale is
     fixed), so positioning stays exact after panning. Returns True on success."""
@@ -169,7 +191,10 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
         except Exception:
             pass
         (ex, ey), how = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fixed fallback
-        _hover_click(page, ex, ey)                          # click the city GBG entrance
+        if how == "vision":
+            _hover_click_cluster(page, ex, ey)              # tiny zoomed-out tile → cluster-click
+        else:
+            _hover_click(page, ex, ey)
         print(f"[enter] clicked GBG entrance ({ex},{ey}) [{how}]; waiting for "
               f"getBattleground (try {attempt}/{tries})…", flush=True)
         deadline = time.time() + per_wait
