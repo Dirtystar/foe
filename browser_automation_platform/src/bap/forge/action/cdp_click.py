@@ -95,13 +95,16 @@ def _select_page(browser, *, index=None, match=None):  # pragma: no cover - live
         return pages[index]
     if match:
         m = match.lower()
-        hits = []
-        for p in pages:
-            try:
-                if m in (p.url or "").lower() or m in (p.title() or "").lower():
-                    hits.append(p)
-            except Exception:
-                continue
+        # Match on URL first — a plain property, never blocks. `page.title()` runs JS in the
+        # page and hangs on a tab stuck mid-load, so only fall back to it when no URL matched.
+        hits = [p for p in pages if m in (getattr(p, "url", "") or "").lower()]
+        if not hits:
+            for p in pages:
+                try:
+                    if m in (p.title() or "").lower():
+                        hits.append(p)
+                except Exception:
+                    continue
         if not hits:
             raise RuntimeError(f"no page matches --tab {match!r}")
         if len(hits) > 1:

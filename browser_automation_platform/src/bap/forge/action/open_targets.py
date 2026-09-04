@@ -367,7 +367,12 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
     from bap.forge.gbg_data.parser import parse_province_id_from_game_json
 
     def _go(browser):
+        print("[conn] connected; selecting tab…", flush=True)
         page = _select_page(browser, index=tab_index, match=(tab or world))
+        try:
+            print(f"[conn] tab selected: {getattr(page, 'url', '?')}", flush=True)
+        except Exception:
+            pass
         try:
             page.bring_to_front()
         except Exception:
@@ -918,6 +923,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         return _go(connect(endpoint))
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
+        print(f"[conn] connecting to Chrome CDP at {endpoint}…", flush=True)
         return _go(p.chromium.connect_over_cdp(endpoint))
 
 
