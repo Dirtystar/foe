@@ -66,30 +66,47 @@ def locate_entrance_in_image(image_bgr: np.ndarray, template_bgr: np.ndarray, *,
 
 
 def locate_entrance(page, *, template_path: str | None = None,
-                    min_score: float = MIN_SCORE):  # pragma: no cover - live
-    """Screenshot the Playwright ``page`` and locate the GBG entrance. Returns (x, y) in CSS
-    pixels (screenshot is scaled back to viewport), or None if not confidently found."""
+                    min_score: float = MIN_SCORE, debug_path: str | None = None):  # pragma: no cover
+    """Screenshot the Playwright ``page`` and locate the GBG entrance. Returns (x, y) in **CSS**
+    pixels (the screenshot is in device pixels; we convert), or None if not confidently found."""
     tmpl = load_template(template_path)
     if tmpl is None:
         print(f"[entrance] no template at {TEMPLATE_PATH} — save the entrance crop there.",
               flush=True)
         return None
-    png = page.screenshot()  # full viewport PNG bytes
+    png = page.screenshot()  # viewport PNG, in DEVICE pixels
     img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         return None
     found = locate_entrance_in_image(img, tmpl, min_score=min_score)
+    # The screenshot is device px; the mouse takes CSS px. Convert via innerWidth / screenshot
+    # width — this works even over CDP, where page.viewport_size is None (DPR>1 was clicking
+    # ~25% too far and off-screen). Same factor for x and y (DPR is uniform).
+    try:
+        css_w = page.evaluate("() => window.innerWidth")
+    except Exception:
+        css_w = None
+    sx = (css_w / img.shape[1]) if css_w and img.shape[1] else 1.0
+    if debug_path:
+        try:
+            vis = img.copy()
+            if found is not None:
+                _cx, _cy, m = found
+                x, y = m.top_left
+                w, h = m.size
+                cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 0, 255), 3)
+                cv2.circle(vis, (_cx, _cy), 8, (0, 255, 0), -1)
+            cv2.imwrite(debug_path, vis)
+        except Exception:
+            pass
     if found is None:
+        print(f"[entrance] no match ≥{min_score} (screenshot {img.shape[1]}x{img.shape[0]} dev, "
+              f"css_scale={sx:.3f})", flush=True)
         return None
     cx, cy, m = found
-    # The screenshot may be at devicePixelRatio > 1; scale click coords back to CSS pixels.
-    try:
-        vw = page.viewport_size["width"] if page.viewport_size else img.shape[1]
-    except Exception:
-        vw = img.shape[1]
-    sx = (vw / img.shape[1]) if img.shape[1] else 1.0
     out = (int(cx * sx), int(cy * sx))
-    print(f"[entrance] found score={m.score:.3f} scale={m.scale:.2f} at screen {out}", flush=True)
+    print(f"[entrance] found score={m.score:.3f} scale={m.scale:.2f} dev=({cx},{cy}) "
+          f"img={img.shape[1]}x{img.shape[0]} css_scale={sx:.3f} → click {out}", flush=True)
     return out
 
 

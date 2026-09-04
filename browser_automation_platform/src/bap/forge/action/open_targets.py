@@ -119,13 +119,14 @@ def _in_gbg(page):  # pragma: no cover - live
         return False
 
 
-def _entrance_point(page, gbg_pos):  # pragma: no cover - live
+def _entrance_point(page, gbg_pos, *, tag=""):  # pragma: no cover - live
     """Where to click to open GBG. Vision-locate the entrance building (any zoom/scroll,
     every world, no FoE Helper); fall back to the fixed ``gbg_pos`` only if vision can't find
     it (template missing / entrance off-screen)."""
     try:
         from bap.forge.action.gbg_entrance import locate_entrance
-        xy = locate_entrance(page)
+        dbg = f"entrance_{tag}.png" if tag else None
+        xy = locate_entrance(page, debug_path=dbg)
     except Exception as exc:  # noqa: BLE001
         print(f"[enter] vision locate failed ({exc}); using fallback {gbg_pos}", flush=True)
         xy = None
@@ -134,7 +135,7 @@ def _entrance_point(page, gbg_pos):  # pragma: no cover - live
     return gbg_pos, "fallback"
 
 
-def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15):  # pragma: no cover - live
+def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragma: no cover - live
     """Self-healing: guarantee we're on the GBG map with a fresh getBattleground. getBattleground
     only fires on GBG entry, so if we're already in GBG with no captured snapshot we reload to
     the city first, then click the entrance. The entrance is found by vision each try (falling
@@ -143,15 +144,16 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15):  # pragma: no co
         if reader.snapshot is not None:
             page.wait_for_timeout(800)
             return reader.snapshot
-        if _in_gbg(page):
-            print(f"[enter] in GBG but no fresh data — reloading to the city to re-enter "
-                  f"(try {attempt})…", flush=True)
-            try:
-                page.reload()
-            except Exception:
-                pass
-            page.wait_for_timeout(3500)
-        (ex, ey), how = _entrance_point(page, gbg_pos)      # vision, else fixed fallback
+        # Reload to normalise the view: whether we're in GBG or in a scrolled/zoomed city, a
+        # fresh load lands on the default city where the entrance sits at its usual, visible
+        # spot — so vision can find it reliably. FoE's WebGL city needs a few seconds to render.
+        print(f"[enter] reloading to a fresh default city view (try {attempt})…", flush=True)
+        try:
+            page.reload()
+        except Exception:
+            pass
+        page.wait_for_timeout(6000)
+        (ex, ey), how = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fixed fallback
         _hover_click(page, ex, ey)                          # click the city GBG entrance
         print(f"[enter] clicked GBG entrance ({ex},{ey}) [{how}]; waiting for "
               f"getBattleground (try {attempt}/{tries})…", flush=True)
@@ -450,15 +452,16 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         if enter_gbg or farm:
             print(f"[enter] opening GBG — vision-locating the entrance (fallback {gbg_pos})…",
                   flush=True)
-            bg = _enter_gbg(page, reader, gbg_pos)
+            bg = _enter_gbg(page, reader, gbg_pos, tag=str(world))
             if bg is None:
+                shot = f"gbg_entered_{world}.png"
                 try:
-                    page.screenshot(path="gbg_entered.png")
+                    page.screenshot(path=shot)
                 except Exception:
                     pass
-                print("[enter] no getBattleground — vision didn't find the entrance and the "
-                      "fallback missed. Check the template asset / --gbg-x/-y. SEND gbg_entered.png.",
-                      flush=True)
+                print(f"[enter] no getBattleground — vision didn't find the entrance and the "
+                      f"fallback missed. SEND {shot} and entrance_{world}.png "
+                      "(the vision debug frame).", flush=True)
                 return 0
             ref = bg.server_time or int(time.time())
             names0 = page.evaluate(_JS_NAMES) or {}
