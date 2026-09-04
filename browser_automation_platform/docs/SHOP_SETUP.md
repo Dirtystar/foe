@@ -83,6 +83,20 @@ as a tiny key registry + verifier so you can revoke.
 4. **Email binding (optional):** the app sends the buyer's email to `/verify`; if it doesn't match
    the key's recorded email the key is treated as invalid. Light anti-sharing, no passwords.
 
+## 5c. Renewal reminder emails (the "massage") — free
+
+The Worker also runs a **daily cron** (`scheduled()`) that emails expiring customers. No SMTP
+server — it reuses Resend (the same free email API as key delivery).
+
+1. `shop/wrangler.toml` already declares the cron (`crons = ["0 9 * * *"]`) and the `LICENSES` KV
+   binding. Set `RENEW_URL` to your pricing page and deploy (`npx wrangler deploy`).
+2. Each day it walks the registry and sends **one** email per stage — **7 days left**, **1 day
+   left**, **expired** — with dedupe flags so nobody is spammed. Lifetime and revoked keys are
+   skipped.
+3. Caveat: Lemon Squeezy subscriptions **auto-renew** and LS sends its own billing/dunning emails,
+   so these reminders are most useful for **win-back after a cancellation/expiry**. If you don't
+   want to nag active subscribers, keep only the `expired` stage (trim the others in `scheduled`).
+
 ## 6. Renewals & cancellations
 
 - Monthly keys expire at period end; `subscription_payment_success` issues a fresh key each

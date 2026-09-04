@@ -56,18 +56,39 @@ function safeEqual(a, b) {
   return r === 0;
 }
 
-async function sendEmail(env, to, key, tier) {
+async function mail(env, to, subject, html) {
   if (!env.RESEND_API_KEY || !to) return;
-  const html =
-    `<p>Thanks for buying the <b>${tier}</b> plan of Forge GBG Farmer!</p>` +
-    `<p>Your licence key:</p><p style="font:16px monospace;background:#f3f3f3;padding:10px;` +
-    `border-radius:8px">${key}</p>` +
-    `<p>Open the app, paste it into <b>Licence key</b>, and press <b>Save</b>.</p>`;
   await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: env.FROM_EMAIL, to, subject: "Your Forge GBG Farmer licence", html }),
+    body: JSON.stringify({ from: env.FROM_EMAIL, to, subject, html }),
   });
+}
+
+async function sendEmail(env, to, key, tier) {
+  await mail(env, to, "Your Forge GBG Farmer licence",
+    `<p>Thanks for buying the <b>${tier}</b> plan of Forge GBG Farmer!</p>` +
+    `<p>Your licence key:</p><p style="font:16px monospace;background:#f3f3f3;padding:10px;` +
+    `border-radius:8px">${key}</p>` +
+    `<p>Open the app, paste it into <b>Licence key</b>, and press <b>Save</b>.</p>`);
+}
+
+/** Renewal "massage": one email per stage (7 days / 1 day left / expired). */
+async function sendReminder(env, to, stage, daysLeft) {
+  const url = env.RENEW_URL || "#";
+  const cta = `<p><a href="${url}" style="background:#4f46e5;color:#fff;padding:10px 18px;` +
+    `border-radius:10px;text-decoration:none;font-weight:600">Renew now</a></p>`;
+  const M = {
+    "7": ["Your Forge GBG Farmer licence expires in 7 days",
+          `<p>Heads up — your licence expires in <b>7 days</b>. Renew to keep farming without a break.</p>`],
+    "1": ["⏳ 1 day left on your Forge GBG Farmer licence",
+          `<p>Last call — your licence expires <b>tomorrow</b>. Renew now so your worlds keep running.</p>`],
+    "expired": ["Your Forge GBG Farmer licence has expired",
+          `<p>Your licence has expired and the app dropped to the free tier. Come back anytime:</p>`],
+  };
+  const [subject, body] = M[stage] || M["7"];
+  await mail(env, to, subject, body + cta +
+    `<p style="color:#888;font-size:12px">You get this because you bought Forge GBG Farmer.</p>`);
 }
 
 async function setStatus(env, key, status) {
@@ -147,9 +168,41 @@ export default {
     }
     const key = await generateKey(env.LICENSE_SECRET, tier, { days, name: email });
     if (env.LICENSES) {
-      await env.LICENSES.put(key, JSON.stringify({ tier, email, status: "active", ts: Date.now() }));
+      const expires = days <= 0 ? 0 : Math.floor(Date.now() / 1000) + days * 86400;
+      await env.LICENSES.put(key, JSON.stringify(
+        { tier, email, status: "active", ts: Date.now(), expires }));
     }
     await sendEmail(env, email, key, tier);
     return json({ ok: true, tier, key });
+  },
+
+  /**
+   * Daily renewal reminders (Cloudflare Cron Trigger). Walks the registry and emails one message
+   * per stage — 7 days left, 1 day left, expired — with dedupe flags so nobody is spammed.
+   * Lifetime (expires=0) and revoked keys are skipped. Set RENEW_URL to your pricing page.
+   */
+  async scheduled(event, env) {
+    if (!env.LICENSES) return;
+    const now = Math.floor(Date.now() / 1000);
+    let cursor;
+    do {
+      const page = await env.LICENSES.list({ cursor });
+      for (const k of page.keys) {
+        const rec = await env.LICENSES.get(k.name, { type: "json" });
+        if (!rec || rec.status !== "active" || !rec.expires) continue;  // skip lifetime/revoked
+        const daysLeft = Math.ceil((rec.expires - now) / 86400);
+        let stage = null;
+        if (daysLeft <= 0 && !rec.rExp) stage = "expired";
+        else if (daysLeft <= 1 && daysLeft > 0 && !rec.r1) stage = "1";
+        else if (daysLeft <= 7 && daysLeft > 1 && !rec.r7) stage = "7";
+        if (!stage) continue;
+        await sendReminder(env, rec.email, stage, daysLeft);
+        if (stage === "expired") rec.rExp = true;
+        else if (stage === "1") rec.r1 = true;
+        else rec.r7 = true;
+        await env.LICENSES.put(k.name, JSON.stringify(rec));
+      }
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
   },
 };
