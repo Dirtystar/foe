@@ -119,10 +119,26 @@ def _in_gbg(page):  # pragma: no cover - live
         return False
 
 
+def _entrance_point(page, gbg_pos):  # pragma: no cover - live
+    """Where to click to open GBG. Vision-locate the entrance building (any zoom/scroll,
+    every world, no FoE Helper); fall back to the fixed ``gbg_pos`` only if vision can't find
+    it (template missing / entrance off-screen)."""
+    try:
+        from bap.forge.action.gbg_entrance import locate_entrance
+        xy = locate_entrance(page)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[enter] vision locate failed ({exc}); using fallback {gbg_pos}", flush=True)
+        xy = None
+    if xy is not None:
+        return xy, "vision"
+    return gbg_pos, "fallback"
+
+
 def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15):  # pragma: no cover - live
     """Self-healing: guarantee we're on the GBG map with a fresh getBattleground. getBattleground
     only fires on GBG entry, so if we're already in GBG with no captured snapshot we reload to
-    the city first, then click the entrance. Retries; returns the fresh snapshot or None."""
+    the city first, then click the entrance. The entrance is found by vision each try (falling
+    back to ``gbg_pos``). Retries; returns the fresh snapshot or None."""
     for attempt in range(1, tries + 1):
         if reader.snapshot is not None:
             page.wait_for_timeout(800)
@@ -135,8 +151,9 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15):  # pragma: no co
             except Exception:
                 pass
             page.wait_for_timeout(3500)
-        _hover_click(page, gbg_pos[0], gbg_pos[1])          # click the city GBG entrance
-        print(f"[enter] clicked GBG entrance ({gbg_pos[0]},{gbg_pos[1]}); waiting for "
+        (ex, ey), how = _entrance_point(page, gbg_pos)      # vision, else fixed fallback
+        _hover_click(page, ex, ey)                          # click the city GBG entrance
+        print(f"[enter] clicked GBG entrance ({ex},{ey}) [{how}]; waiting for "
               f"getBattleground (try {attempt}/{tries})…", flush=True)
         deadline = time.time() + per_wait
         while reader.snapshot is None and time.time() < deadline:
@@ -431,8 +448,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             return 0
 
         if enter_gbg or farm:
-            gx, gy = gbg_pos
-            print(f"[enter] opening GBG via the city entrance ({gx},{gy}) for fresh data…",
+            print(f"[enter] opening GBG — vision-locating the entrance (fallback {gbg_pos})…",
                   flush=True)
             bg = _enter_gbg(page, reader, gbg_pos)
             if bg is None:
@@ -440,8 +456,9 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     page.screenshot(path="gbg_entered.png")
                 except Exception:
                     pass
-                print("[enter] no getBattleground — the entrance coord may be off (--gbg-x/-y). "
-                      "SEND gbg_entered.png.", flush=True)
+                print("[enter] no getBattleground — vision didn't find the entrance and the "
+                      "fallback missed. Check the template asset / --gbg-x/-y. SEND gbg_entered.png.",
+                      flush=True)
                 return 0
             ref = bg.server_time or int(time.time())
             names0 = page.evaluate(_JS_NAMES) or {}
