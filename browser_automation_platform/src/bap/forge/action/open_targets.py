@@ -196,7 +196,9 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
             pass
         (ex, ey), how = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fixed fallback
         if how == "vision":
-            _hover_click_cluster(page, ex, ey)
+            _hover_click(page, ex, ey)                      # ONE precise click on the statue —
+            # the plaza is a dense cluster, so a cluster-click hits neighbours (Great Building,
+            # Guild-Raids/settlement portals). Precision, not spread, is what opens GBG.
         elif attempt >= tries:
             _hover_click(page, ex, ey)                      # last resort: the fixed fallback coord
         else:

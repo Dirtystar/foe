@@ -45,8 +45,11 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "detection", "asset
                             "gbg_entrance")
 TEMPLATE_PATH = os.path.join(TEMPLATE_DIR, "atlas_diamond.png")
 TEMPLATE_GLOB = os.path.join(TEMPLATE_DIR, "atlas_diamond*.png")
-# Below-centre so we land on the plaza/steps (clickable base), not the globe over the water.
-CLICK_ANCHOR = (0.5, 0.60)
+# Aim at the golden statue's body, not the plaza base: the entrance sits in a very dense
+# cluster (a Great Building overlaps the plaza; Guild-Raids/settlement portals are adjacent), so
+# the base overlaps a neighbour's hitbox. The statue itself is the clean GBG target. Not the very
+# top either — that's the globe over open water (a click there passes through).
+CLICK_ANCHOR = (0.5, 0.42)
 # Match must clear this to be trusted; below it we don't guess a wrong click.
 MIN_SCORE = 0.45
 
