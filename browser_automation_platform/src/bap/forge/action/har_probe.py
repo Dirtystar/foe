@@ -35,8 +35,13 @@ from collections import Counter
 
 # City-entity keys that, if present in a response item, mark it as the city map.
 _CITY_HINT_KEYS = ("cityentity_id", "cityEntityId", "city_entity_id")
-# Substrings in a building code that smell like the GBG entrance.
-_GBG_ENTRANCE_HINTS = ("battleground", "guild_battle", "gbg", "guildbattle")
+# The entrance PORTAL reads as "battleground" but NOT "gbg" — the "gbg" codes are the season
+# **prize buildings** you won and placed (W_MultiAge_GBG25C2 …), normal grid, normal ids. The
+# portal is a virtual entity: "battleground" in its code, a system id (>= _SYSTEM_ID_MIN), and
+# often an off-grid (negative) coord. Confirmed real code: V_IronAge_BattlegroundDiamond.
+_ENTRANCE_HINTS = ("battleground", "guild_battle", "guildbattle")
+_PRIZE_HINT = "gbg"
+_SYSTEM_ID_MIN = 2_000_000_000
 
 
 def _iter_game_json(har: dict):
@@ -97,7 +102,8 @@ def _entity_xy(d: dict):
 
 
 def find_city_entities(har: dict) -> list[dict]:
-    """Every city entity we can find in the HAR: {code, x, y, id}. Deepest source wins."""
+    """Every city entity we can find: {code, x, y, id, raw}. Deepest source wins (``raw`` is
+    the full entity dict, kept for --dump-id)."""
     found: dict = {}
 
     def _walk(node):
@@ -105,7 +111,7 @@ def find_city_entities(har: dict) -> list[dict]:
             code = _entity_code(node)
             x, y = _entity_xy(node)
             key = node.get("id") or (code, x, y)
-            found[key] = {"code": code, "x": x, "y": y, "id": node.get("id")}
+            found[key] = {"code": code, "x": x, "y": y, "id": node.get("id"), "raw": node}
         if isinstance(node, dict):
             for v in node.values():
                 _walk(v)
@@ -118,21 +124,46 @@ def find_city_entities(har: dict) -> list[dict]:
     return list(found.values())
 
 
+def _is_system_id(v) -> bool:
+    try:
+        return int(v) >= _SYSTEM_ID_MIN
+    except (TypeError, ValueError):
+        return False
+
+
 def gbg_entrance_candidates(entities: list[dict]) -> list[dict]:
+    """The entry portal(s): code says 'battleground' (not a 'gbg' prize building). Sorted so
+    the strongest signal — system id and/or off-grid coord — comes first."""
     out = []
     for ent in entities:
         code = str(ent.get("code") or "").lower()
-        if any(h in code for h in _GBG_ENTRANCE_HINTS):
-            out.append(ent)
+        if _PRIZE_HINT in code:
+            continue  # a placed GBG-season prize building, not the entrance
+        if not any(h in code for h in _ENTRANCE_HINTS):
+            continue
+        x, y = ent.get("x"), ent.get("y")
+        off_grid = (isinstance(x, int) and x < 0) or (isinstance(y, int) and y < 0)
+        ent = {**ent, "system_id": _is_system_id(ent.get("id")), "off_grid": off_grid}
+        out.append(ent)
+    out.sort(key=lambda e: (not e["system_id"], not e["off_grid"]))
     return out
 
 
-def run(path: str, grep: str | None = None) -> int:
+def run(path: str, grep: str | None = None, dump_id=None) -> int:
     try:
         with open(path, encoding="utf-8") as fh:
             har = json.load(fh)
     except (OSError, ValueError) as exc:
         print(f"Could not read HAR {path}: {exc}", flush=True)
+        return 1
+
+    if dump_id is not None:
+        want = str(dump_id)
+        for ent in find_city_entities(har):
+            if str(ent.get("id")) == want:
+                print(json.dumps(ent["raw"], indent=2, ensure_ascii=False), flush=True)
+                return 0
+        print(f"No city entity with id {dump_id} in this HAR.", flush=True)
         return 1
 
     seq = method_fingerprint(har)
@@ -165,14 +196,24 @@ def run(path: str, grep: str | None = None) -> int:
             print(f"  … and {len(entities) - 8} more", flush=True)
 
     cands = gbg_entrance_candidates(entities)
-    print("\n=== GBG-entrance candidates (by building code) ===", flush=True)
+    print("\n=== GBG-entrance PORTAL candidates (code=battleground, not a 'gbg' prize) ===",
+          flush=True)
     if cands:
         for ent in cands:
-            print(f"  ★ code={ent['code']}  grid=({ent['x']},{ent['y']})  id={ent['id']}",
+            tags = []
+            if ent["system_id"]:
+                tags.append("system-id")
+            if ent["off_grid"]:
+                tags.append("off-grid")
+            tag = ("  [" + ", ".join(tags) + "]") if tags else ""
+            print(f"  ★ code={ent['code']}  grid=({ent['x']},{ent['y']})  id={ent['id']}{tag}",
                   flush=True)
-        print("\nThat grid position + the live city camera transform places the entrance at\n"
-              "any zoom/scroll — no pixel calibration. Next: read the camera transform live\n"
-              "(same marker/arrow trick as the GBG map) and project this grid point.",
+        best = cands[0]
+        print(f"\nBest guess: id={best['id']} ({best['code']}). Dump its full record with\n"
+              f"  python -m bap.forge.action.har_probe {path!r} --dump-id {best['id']}\n"
+              "Then: grid + the live city camera → screen pixel at any zoom/scroll (no hard-\n"
+              "coded coord). Or better — trigger GBG entry the way the click does (the\n"
+              "GuildBattlegroundService.getBattleground call at the tail of the fingerprint).",
               flush=True)
     elif entities:
         print("  none matched the name hints — paste the code list above and we'll pick the\n"
@@ -192,8 +233,10 @@ def main(argv=None) -> int:
         description="Mine a FoE HAR for the GBG entry fingerprint + the city map building codes.")
     ap.add_argument("har", help="path to a .har recorded while clicking the GBG entrance")
     ap.add_argument("--grep", default=None, help="only print fingerprint lines containing this")
+    ap.add_argument("--dump-id", default=None, help="print the full JSON of the city entity "
+                    "with this id (learn the entrance's schema)")
     args = ap.parse_args(argv)
-    return run(args.har, grep=args.grep)
+    return run(args.har, grep=args.grep, dump_id=args.dump_id)
 
 
 if __name__ == "__main__":
