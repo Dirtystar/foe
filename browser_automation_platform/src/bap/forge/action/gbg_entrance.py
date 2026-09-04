@@ -23,6 +23,18 @@ import numpy as np
 
 from bap.forge.detection.template_match import MatchResult, match_multiscale
 
+
+def imread_unicode(path: str):
+    """cv2.imread that survives non-ASCII paths (Windows 'Obrázky', 'Snímek', …). OpenCV's
+    own imread mangles Unicode filenames, so read the bytes ourselves and decode."""
+    try:
+        data = np.fromfile(path, dtype=np.uint8)
+    except OSError:
+        return None
+    if data.size == 0:
+        return None
+    return cv2.imdecode(data, cv2.IMREAD_COLOR)
+
 # The reference sprite. Save the tight crop of the Atlas/diamond entrance here.
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "..", "detection", "assets",
                              "gbg_entrance", "atlas_diamond.png")
@@ -36,7 +48,7 @@ def load_template(path: str | None = None) -> np.ndarray | None:
     p = os.path.abspath(path or TEMPLATE_PATH)
     if not os.path.exists(p):
         return None
-    return cv2.imread(p, cv2.IMREAD_COLOR)
+    return imread_unicode(p)
 
 
 def locate_entrance_in_image(image_bgr: np.ndarray, template_bgr: np.ndarray, *,
@@ -83,7 +95,7 @@ def locate_entrance(page, *, template_path: str | None = None,
 
 def run(screenshot: str, template: str | None = None, debug: str | None = None,
         min_score: float = MIN_SCORE) -> int:
-    img = cv2.imread(screenshot, cv2.IMREAD_COLOR)
+    img = imread_unicode(screenshot)
     if img is None:
         print(f"Could not read screenshot {screenshot}", flush=True)
         return 1
