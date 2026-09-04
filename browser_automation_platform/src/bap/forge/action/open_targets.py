@@ -157,66 +157,52 @@ def _entrance_point(page, gbg_pos, *, tag=""):  # pragma: no cover - live
     return gbg_pos, "fallback"
 
 
+# Zoom-out steps to try, small → large. Fewer steps = bigger (clickable) entrance but a
+# narrower view; more steps = whole city in view but a tiny entrance that a click won't open.
+# Sweeping picks the first zoom where vision sees the entrance — the biggest clickable size.
+_ZOOM_SWEEP = (3, 5, 7, 9)
+
+
 def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragma: no cover - live
     """Self-healing: guarantee we're on the GBG map with a fresh getBattleground. getBattleground
-    only fires on GBG entry, so if we're already in GBG with no captured snapshot we reload to
-    the city first, then click the entrance. The entrance is found by vision each try (falling
-    back to ``gbg_pos``). Retries; returns the fresh snapshot or None."""
+    only fires on GBG entry, so each try reloads to the city, zooms out by an increasing amount,
+    vision-locates the entrance, and clicks it — clicking at the *least* zoomed-out level where
+    it's visible keeps the target big enough to open. Retries; returns the fresh snapshot or None."""
     for attempt in range(1, tries + 1):
         if reader.snapshot is not None:
             page.wait_for_timeout(800)
             return reader.snapshot
-        # Reload to normalise the view: whether we're in GBG or in a scrolled/zoomed city, a
-        # fresh load lands on the default city where the entrance sits at its usual, visible
-        # spot — so vision can find it reliably. FoE's WebGL city needs a few seconds to render.
-        print(f"[enter] reloading to a fresh city, then zooming out to see it all "
-              f"(try {attempt})…", flush=True)
+        steps = _ZOOM_SWEEP[min(attempt - 1, len(_ZOOM_SWEEP) - 1)]
+        print(f"[enter] reloading to a fresh city, zoom-out {steps} steps (try {attempt})…",
+              flush=True)
         try:
             page.reload()
         except Exception:
             pass
         page.wait_for_timeout(6000)
         # FoE auto-opens an "Event history" popup on every city load; it can cover the entrance.
-        # Escape closes FoE modals — press a couple of times to clear any popup before we look.
+        # Escape closes FoE modals — press a few times to clear any popup before we look.
         try:
             for _ in range(3):
                 page.keyboard.press("Escape")
                 page.wait_for_timeout(250)
         except Exception:
             pass
-        try:                                                # whole city in view → entrance visible
+        try:
             from bap.forge.action.gbg_entrance import zoom_out_city
-            zoom_out_city(page)
+            zoom_out_city(page, steps=steps)
             page.wait_for_timeout(900)                       # let the zoom settle before the shot
         except Exception:
             pass
         (ex, ey), how = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fixed fallback
-        # At full zoom-out the entrance tile is ~20px and a click won't open it. Centre it and
-        # zoom in (FoE zooms to the centre) so it grows into a big target, then re-locate & click.
         if how == "vision":
-            try:
-                from bap.forge.action.gbg_entrance import pan_drag, zoom_in_toward
-                vw = page.evaluate("() => window.innerWidth") or 1024
-                vh = page.evaluate("() => window.innerHeight") or 700
-                cx, cy = vw // 2, vh // 2
-                print(f"[enter] centring entrance ({ex},{ey})→({cx},{cy}), then zooming in…",
-                      flush=True)
-                pan_drag(page, ex, ey, cx, cy)
-                page.wait_for_timeout(700)
-                zoom_in_toward(page, cx, cy, steps=5)
-                page.wait_for_timeout(800)
-                (ex2, ey2), how2 = _entrance_point(page, gbg_pos, tag=tag)
-                if how2 == "vision":
-                    ex, ey, how = ex2, ey2, "vision+focus"
-                else:
-                    print("[enter] lost entrance after focus — fallback this try.", flush=True)
-                    ex, ey, how = gbg_pos[0], gbg_pos[1], "fallback"
-            except Exception as exc:  # noqa: BLE001
-                print(f"[enter] focus step failed: {exc}", flush=True)
-        if how.startswith("vision"):
-            _hover_click_cluster(page, ex, ey)              # cluster-click the (now bigger) tile
+            _hover_click_cluster(page, ex, ey)
+        elif attempt >= tries:
+            _hover_click(page, ex, ey)                      # last resort: the fixed fallback coord
         else:
-            _hover_click(page, ex, ey)
+            print(f"[enter] entrance not in view at zoom {steps} — more zoom-out next try.",
+                  flush=True)
+            continue                                        # don't waste the wait; widen the view
         print(f"[enter] clicked GBG entrance ({ex},{ey}) [{how}]; waiting for "
               f"getBattleground (try {attempt}/{tries})…", flush=True)
         deadline = time.time() + per_wait
