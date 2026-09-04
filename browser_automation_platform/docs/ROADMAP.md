@@ -1,67 +1,57 @@
-# Product roadmap — Autonomous GBG farmer (living document)
+# Forge GBG Farmer — Progress Roadmap
 
-_The vision: a non-technical user maps their FoE world tabs in a friendly GUI, sets a
-**max attrition** and an **allowed province % list** per world (once, remembered), clicks
-**START**, and leaves for the day. The app fights the allowed provinces on each world,
-**stops that world at its attrition limit** ("Done") while the others keep going, and
-**self-heals** (reload/restart) unattended. Evening: **STOP**. Later: English product, easy
-Mac/Linux/Win install, protected code, monetization._
+Living snapshot of how far each piece is. **Legend:** ✅ done · 🟡 works, needs polish ·
+🟠 partial · ⛔ not started. Percentages are rough, updated as we go.
 
-_Last updated: 2026-09-01. `✅ done · ⏳ partial · ❌ not started`. % = share of the full
-vision for that row._
+_Last updated: 2026-09-04._
 
-## Where we are
+## 1. Core farming engine — **95%**
 
-| # | Capability | State | % | Notes |
-|---|---|---|---|---|
-| **A. Perception (brain)** | | | **90%** | the hard part — done & proven |
-| A1 | Read GBG data (provinces, owners, %, unlock, siege) | ✅ | 95 | `gbg_data` parser, real fixtures |
-| A2 | Live attrition, updates **per battle** | ✅ | 100 | `getPlayerParticipant`, proven live (4→14) |
-| A3 | Rank/target provinces by attrition % | ✅ | 80 | advisor ranks; not yet filtered by a per-world allowlist |
-| **B. Action (hand)** | | | **55%** | click + background play work; navigation missing |
-| B1 | CDP targeted click + key (no mouse hijack) | ✅ | 90 | proven live on cz6 |
-| B2 | Pick the right tab + bring to front | ✅ | 90 | `--list/--tab/--tab-index` |
-| B3 | **Auto-open a chosen province on the map** | ⏳ | 40 | **feasibility confirmed**: `map/data` flags + 2-pt calibration transform + %-allowlist all built & tested; live navigation next |
-| B4 | Self-heal (reload/restart window on error) | ❌ | 0 | required for all-day unattended |
-| B5 | **Background play (no focus stealing)** | ✅ | 85 | **CONFIRMED live** — anti-throttle flags + `--no-raise` fought hidden tabs without stealing focus |
-| **C. Orchestration** | | | **65%** | multi-world rotation landed |
-| C1 | Single-world gated fight loop (stop at real attrition) | ✅ | 100 | proven live |
-| C2 | **Multi-world round-robin** | ✅ | 80 | `bap-forge-farm`, config-driven; live glue needs field-testing |
-| C3 | Per-world "Done" + keep others running | ✅ | 90 | delivered in the scheduler |
-| C4 | Event-paced fighting (exact counts, zero waste) | ❌ | 0 | optional refinement |
-| **D. Config & persistence** | | | **20%** | |
-| D1 | World manager (worlds, browser mode) | ✅ | 60 | exists in the app |
-| D2 | Per-world autoplay config (attrition limit + % allowlist + fight point) | ❌ | 5 | JSON config first, GUI later |
-| D3 | Persisted, set-once, occasionally edited | ❌ | 10 | settings infra exists to build on |
-| **E. GUI / UX** | | | **20%** | |
-| E1 | Existing PySide6 console (observe-only) | ✅ | 50 | not yet autoplay-oriented |
-| E2 | Autoplay GUI: map tabs, set limits, START/STOP, per-world status | ❌ | 5 | the user-facing product |
-| E3 | Non-technical friendly, intuitive | ⏳ | 30 | nav split done; needs the autoplay screen |
-| **F. Productization (future)** | | | **10%** | after the engine is complete |
-| F1 | Cross-platform install (Mac/Linux/Win) | ⏳ | 30 | Python + packaging exists |
-| F2 | English UI + optional i18n | ⏳ | 10 | strings not centralized |
-| F3 | Hidden/obfuscated code base | ❌ | 0 | vision stage |
-| F4 | Monetization / licensing | ❌ | 0 | vision stage |
+| Feature | % | Status |
+|---|---:|---|
+| Read GBG data (`/game/json` parser, model, attrition) | 100 | ✅ |
+| Rank targets (lowest % first, centre rings, Cíl priority, Stop skip) | 95 | ✅ |
+| Round-keyed skip-list (resets each GBG round) | 100 | ✅ |
+| Map transform from FoE-Helper markers (pan + place any province) | 100 | ✅ |
+| Open province → Útok → Auto-battle chain (live-confirmed) | 95 | 🟡 |
+| Attrition gate (stop at the limit, live reading) | 100 | ✅ |
+| Fast fight cadence (auto-battle + R reload) | 90 | 🟡 |
+| Self-heal (reload + re-enter on stall) | 85 | 🟡 |
+| Parallel multi-world farming (one process per world) | 85 | 🟡 |
 
-**Overall engine (A–C1): ~85% and proven live. Overall product vision: ~35%.**
-The perception + action + single-world gate — the technically hard core — works end to end.
-What remains is orchestration across worlds, the map-navigation "where", config/GUI, and
-productization.
+## 2. Entry & browser — **80%**
 
-## Known risks / open questions
+| Feature | % | Status |
+|---|---:|---|
+| Identify GBG entrance (HAR → Atlas building) | 100 | ✅ |
+| Vision-locate the entrance (multi-scale template match) | 95 | ✅ |
+| DPR / device→CSS click mapping | 100 | ✅ |
+| Reliable entry click across window sizes | 70 | 🟠 needs a right-sized (owned) window |
+| Owned browser launcher (fixed window, anti-throttle, profile) | 70 | 🟡 auto window-size calibration pending |
+| End-to-end farm run (enter → fight → next world) | 60 | 🟠 verifying live |
 
-- **Non-Chrome browsers:** CDP drives **Chromium-based** browsers (Chrome, Edge, Brave). A
-  Firefox path would need a different mechanism — flag as a constraint to confirm with users.
-- **B3 map navigation** is the biggest remaining engineering unknown: opening a *chosen*
-  province needs its on-screen point (map hitmaps from the assets + camera state, or vision).
-  Until then, autoplay fights whatever province is already open under the fixed button.
-- **All-day resilience (B4):** reloads change the screen; self-heal must re-find the fight
-  point and GBG map after recovery.
+## 3. Product — **75%**
 
-## Next up
+| Feature | % | Status |
+|---|---:|---|
+| Licence tiers + prices (1/2/4/8/∞ worlds) | 95 | ✅ |
+| Offline key check + world-count enforcement | 95 | ✅ |
+| End-user GUI (key, worlds, limits, %s, Start/Stop) | 60 | 🟡 needs live status + log view |
+| End-user documentation | 70 | 🟡 |
 
-**B3 — province auto-selection:** the farm currently fights whatever province is open under a
-world's fixed button. Next it should read the allowed-% provinces (data ✅) and **open them on
-the map** — the map-navigation "where" (hitmaps + camera, or vision). This unlocks the "attack
-only the provinces I allow" part of the vision. Then **B4 self-heal** and the **E2 autoplay
-GUI**.
+## 4. Release readiness — **15%**
+
+| Feature | % | Status |
+|---|---:|---|
+| Codebase cleanup (drop dev tools) | 30 | 🟠 started |
+| Wean off FoE Helper (native `.gbg-tabs` / markers / names / Cíl) | 15 | 🟠 still dependent |
+| Packaging (installer + bundled Chromium, Win/macOS/Linux) | 5 | ⛔ |
+| Obfuscation / licence hardening | 0 | ⛔ |
+
+---
+
+### Next up
+1. Verify the full farm loop end-to-end (enter → target → fight → next world) on a right-sized window.
+2. Auto-set the launcher window size so entry is reliable on the first try.
+3. GUI polish: live status + a log panel.
+4. Decide removal of superseded `autoplay` / `round_robin`.
