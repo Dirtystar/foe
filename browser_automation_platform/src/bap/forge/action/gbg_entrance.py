@@ -109,6 +109,24 @@ def zoom_out_city(page, steps: int = 10, pause_ms: int = 120):  # pragma: no cov
         print(f"[entrance] zoom-out failed: {exc}", flush=True)
 
 
+def pan_drag(page, x0, y0, x1, y1, steps: int = 20):  # pragma: no cover - live
+    """Drag the city so the world point under (x0, y0) moves to (x1, y1). In FoE a mouse
+    down-move-up pans (a click without movement selects), so this re-centres the entrance
+    without opening anything. Used to put the entrance at the viewport centre before zooming in
+    (FoE zooms toward the centre), so it grows there into a big, reliably clickable target."""
+    try:
+        page.mouse.move(x0, y0)
+        page.wait_for_timeout(80)
+        page.mouse.down()
+        page.wait_for_timeout(120)
+        page.mouse.move(x1, y1, steps=steps)
+        page.wait_for_timeout(120)
+        page.mouse.up()
+        page.wait_for_timeout(300)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[entrance] pan failed: {exc}", flush=True)
+
+
 def zoom_in_toward(page, x, y, steps: int = 4, pause_ms: int = 150):  # pragma: no cover - live
     """Zoom in a few steps toward CSS point (x, y). FoE zooms toward the cursor, so the entrance
     stays roughly under (x, y) and grows into a big, reliably clickable target — the fix for the

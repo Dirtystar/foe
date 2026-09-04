@@ -191,8 +191,30 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
         except Exception:
             pass
         (ex, ey), how = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fixed fallback
+        # At full zoom-out the entrance tile is ~20px and a click won't open it. Centre it and
+        # zoom in (FoE zooms to the centre) so it grows into a big target, then re-locate & click.
         if how == "vision":
-            _hover_click_cluster(page, ex, ey)              # tiny zoomed-out tile → cluster-click
+            try:
+                from bap.forge.action.gbg_entrance import pan_drag, zoom_in_toward
+                vw = page.evaluate("() => window.innerWidth") or 1024
+                vh = page.evaluate("() => window.innerHeight") or 700
+                cx, cy = vw // 2, vh // 2
+                print(f"[enter] centring entrance ({ex},{ey})→({cx},{cy}), then zooming in…",
+                      flush=True)
+                pan_drag(page, ex, ey, cx, cy)
+                page.wait_for_timeout(700)
+                zoom_in_toward(page, cx, cy, steps=5)
+                page.wait_for_timeout(800)
+                (ex2, ey2), how2 = _entrance_point(page, gbg_pos, tag=tag)
+                if how2 == "vision":
+                    ex, ey, how = ex2, ey2, "vision+focus"
+                else:
+                    print("[enter] lost entrance after focus — fallback this try.", flush=True)
+                    ex, ey, how = gbg_pos[0], gbg_pos[1], "fallback"
+            except Exception as exc:  # noqa: BLE001
+                print(f"[enter] focus step failed: {exc}", flush=True)
+        if how.startswith("vision"):
+            _hover_click_cluster(page, ex, ey)              # cluster-click the (now bigger) tile
         else:
             _hover_click(page, ex, ey)
         print(f"[enter] clicked GBG entrance ({ex},{ey}) [{how}]; waiting for "
