@@ -50,6 +50,20 @@ def test_never_expires():
     assert L.expires == 0 and L.is_valid(now=10**12)
 
 
+def test_lifetime_tier_unlimited_and_forever():
+    t = lic.TIERS["lifetime"]
+    assert t.worlds is None and t.one_time is True and t.price_label == "$199 one-time"
+    L = lic.verify_key(lic.generate_key("lifetime", days=0))          # minted with no expiry
+    assert L.expires == 0 and L.is_valid(now=10**12)                  # never expires
+    assert L.max_worlds() >= 8                                        # unlimited worlds
+    assert lic.allowed_worlds(lic.generate_key("lifetime", days=0), now=10**12) >= 8
+
+
+def test_price_label_monthly_vs_onetime():
+    assert lic.TIERS["quad"].price_label == "$12/mo"
+    assert lic.TIERS["lifetime"].price_label == "$199 one-time"
+
+
 def test_allowed_worlds_gate():
     assert lic.allowed_worlds(None) == lic.FREE_WORLDS           # no key → free tier
     assert lic.allowed_worlds("garbage") == lic.FREE_WORLDS      # invalid → free tier

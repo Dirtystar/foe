@@ -48,6 +48,15 @@
   .buy{margin-top:auto;display:block;text-align:center;background:var(--brand);color:var(--brand-ink);
     text-decoration:none;font-weight:600;padding:11px;border-radius:11px}
   .buy.free{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .lifetime{margin-top:22px;background:linear-gradient(135deg,var(--brand),var(--accent));
+    color:#fff;border-radius:18px;padding:24px 26px;display:flex;gap:18px;align-items:center;
+    justify-content:space-between;flex-wrap:wrap;box-shadow:var(--shadow)}
+  .lifetime .t{font-size:21px;font-weight:800;margin:0}
+  .lifetime .d{opacity:.92;font-size:15px;margin:4px 0 0}
+  .lifetime .p{font-size:34px;font-weight:800;letter-spacing:-.02em}
+  .lifetime .p small{font-size:14px;font-weight:600;opacity:.9}
+  .lifetime a{background:#fff;color:var(--brand);text-decoration:none;font-weight:700;
+    padding:12px 22px;border-radius:12px;white-space:nowrap}
   .steps{counter-reset:s;max-width:680px;margin:0 auto;display:grid;gap:14px}
   .step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
     display:flex;gap:14px;align-items:flex-start}
@@ -75,7 +84,8 @@
     duo:       "#buy-duo",
     quad:      "#buy-quad",
     octa:      "#buy-octa",
-    unlimited: "#buy-unlimited"
+    unlimited: "#buy-unlimited",
+    lifetime:  "#buy-lifetime"
   };
   // ─────────────────────────────────────────────────────────────────────────
   addEventListener("DOMContentLoaded", () => {
@@ -155,6 +165,14 @@
       <ul><li>No world limit</li><li>Everything, forever</li></ul>
       <a class="buy" data-buy="unlimited" href="#">Get Unlimited</a>
     </div>
+  </div>
+  <div class="lifetime">
+    <div>
+      <p class="t">⭐ Lifetime — pay once, own it forever</p>
+      <p class="d">Unlimited worlds. No monthly fee, no expiry. Every future update included.</p>
+    </div>
+    <div class="p">$199 <small>one-time</small></div>
+    <a data-buy="lifetime" href="#">Get Lifetime</a>
   </div>
   <p class="note" style="text-align:center">After checkout you get a licence key by email — paste
     it into the app and press Save. Prices in USD; EU VAT handled at checkout.</p>

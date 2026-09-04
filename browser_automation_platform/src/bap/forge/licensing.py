@@ -44,16 +44,23 @@ def _secret() -> bytes:
 class Tier:
     name: str
     worlds: int | None          # None = unlimited
-    price_usd_month: int
+    price_usd: int
+    one_time: bool = False       # True = pay once, no expiry (lifetime); else monthly
+
+    @property
+    def price_label(self) -> str:
+        return f"${self.price_usd} one-time" if self.one_time else f"${self.price_usd}/mo"
 
 
-# The product's tiers, cheapest first. Prices are placeholders — tune freely.
+# The product's tiers, cheapest first. Prices are placeholders — tune freely. ``lifetime`` is a
+# one-time purchase for unlimited worlds that never expires (key minted with days<=0).
 TIERS: dict[str, Tier] = {
     "solo": Tier("solo", 1, 4),
     "duo": Tier("duo", 2, 7),
     "quad": Tier("quad", 4, 12),
     "octa": Tier("octa", 8, 20),
     "unlimited": Tier("unlimited", None, 30),
+    "lifetime": Tier("lifetime", None, 199, one_time=True),
 }
 
 
@@ -177,9 +184,9 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
         print(describe(lic))
         return 0 if (lic and lic.is_valid()) else 1
     if args.cmd == "tiers":
-        print(f"{'tier':<12}{'worlds':<10}{'USD/month'}")
+        print(f"{'tier':<12}{'worlds':<10}{'price'}")
         for t in TIERS.values():
-            print(f"{t.name:<12}{('∞' if t.worlds is None else t.worlds)!s:<10}{t.price_usd_month}")
+            print(f"{t.name:<12}{('∞' if t.worlds is None else t.worlds)!s:<10}{t.price_label}")
         return 0
     return 1
 

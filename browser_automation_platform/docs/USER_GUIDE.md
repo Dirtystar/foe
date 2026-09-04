@@ -57,6 +57,7 @@ A good starting point: attrition limit **150**, attack **20/40/60 %** only.
 | Quad | 4 | 12 |
 | Octa | 8 | 20 |
 | Unlimited | all | 30 |
+| **Lifetime** | all | **199 one-time** (no monthly, never expires) |
 
 Your licence key sets how many worlds you can enable. If you tick more than your plan allows,
 the app tells you and **Start** stays disabled until you're within the limit. Upgrading is just

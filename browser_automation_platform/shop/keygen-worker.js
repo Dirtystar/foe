@@ -105,9 +105,16 @@ export default {
     if (!tier) return new Response("no tier for variant " + variant, { status: 200 });
 
     const email = attrs.user_email || attrs.customer_email || "";
-    // Monthly plan: valid to the next renewal (+2 days grace), else 32 days from now.
-    const renews = attrs.renews_at ? Math.floor(new Date(attrs.renews_at).getTime() / 1000) : 0;
-    const days = renews ? Math.ceil((renews - Date.now() / 1000) / 86400) + 2 : 32;
+    // Lifetime / one-time tiers never expire (days<=0). Monthly plans are valid to the next
+    // renewal (+2 days grace), or 32 days from now if the payload has no renewal date.
+    const ONE_TIME = new Set(["lifetime"]);
+    let days;
+    if (ONE_TIME.has(tier)) {
+      days = 0;
+    } else {
+      const renews = attrs.renews_at ? Math.floor(new Date(attrs.renews_at).getTime() / 1000) : 0;
+      days = renews ? Math.ceil((renews - Date.now() / 1000) / 86400) + 2 : 32;
+    }
 
     const key = await generateKey(env.LICENSE_SECRET, tier, { days, name: email });
     await sendEmail(env, email, key, tier);

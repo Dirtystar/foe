@@ -35,8 +35,10 @@ Keep it private. Anyone with it can mint keys.
 
 Lemon Squeezy is a *merchant of record* — it collects payment and handles EU VAT for you.
 
-1. Create a store, then a **product** with 5 **variants**: Solo, Duo, Quad, Octa, Unlimited,
-   priced $4/$7/$12/$20/$30 per month (subscriptions).
+1. Create a store, then a **product** with the **variants**: Solo, Duo, Quad, Octa, Unlimited
+   priced $4/$7/$12/$20/$30 per month (subscriptions), plus a **Lifetime** variant at $199 as a
+   **one-time** (non-subscription) purchase. Map `lifetime` in `VARIANT_TIERS`; the Worker's
+   `ONE_TIME` set already issues it a never-expiring key.
 2. Upload the installer as the product's file, or just host it publicly and use `DOWNLOAD_URL`.
 3. Copy each variant's **checkout URL** into `CHECKOUT` in `index.html`.
 4. Note each variant's **id** (Settings → API, or the variant page) for step 4.

@@ -149,11 +149,11 @@ class FarmerWindow(QWidget):
         cur = licensing.TIERS.get(lic.tier) if lic and lic.is_valid() else None
         if cur is None:
             nxt = tiers[0]
-            return f"Free tier (1 world). Upgrade to {nxt.name} for ${nxt.price_usd_month}/mo."
-        higher = [t for t in tiers if t.price_usd_month > cur.price_usd_month]
-        up = f"  Upgrade to {higher[0].name} for ${higher[0].price_usd_month}/mo." if higher else ""
+            return f"Free tier (1 world). Upgrade to {nxt.name} for {nxt.price_label}."
+        higher = [t for t in tiers if t.price_usd > cur.price_usd]
+        up = f"  Upgrade to {higher[0].name} for {higher[0].price_label}." if higher else ""
         worlds = "unlimited" if cur.worlds is None else f"{cur.worlds}"
-        return f"{cur.name} plan — {worlds} worlds, ${cur.price_usd_month}/mo.{up}"
+        return f"{cur.name} plan — {worlds} worlds, {cur.price_label}.{up}"
 
     def _poll_proc(self):
         if self._proc is not None and self._proc.poll() is not None:
