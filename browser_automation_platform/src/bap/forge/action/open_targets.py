@@ -142,25 +142,28 @@ def _in_gbg(page):  # pragma: no cover - live
 
 
 def _entrance_point(page, gbg_pos, *, tag=""):  # pragma: no cover - live
-    """Where to click to open GBG. Vision-locate the entrance building (any zoom/scroll,
-    every world, no FoE Helper); fall back to the fixed ``gbg_pos`` only if vision can't find
-    it (template missing / entrance off-screen)."""
+    """Where to click to open GBG, and at what template scale. Vision-locate the entrance
+    (any zoom/scroll, every world, no FoE Helper); fall back to the fixed ``gbg_pos`` only if
+    vision can't find it. Returns ((x, y), how, scale); scale is None for the fallback."""
     try:
         from bap.forge.action.gbg_entrance import locate_entrance
         dbg = f"entrance_{tag}.png" if tag else None
-        xy = locate_entrance(page, debug_path=dbg)
+        found = locate_entrance(page, debug_path=dbg)
     except Exception as exc:  # noqa: BLE001
         print(f"[enter] vision locate failed ({exc}); using fallback {gbg_pos}", flush=True)
-        xy = None
-    if xy is not None:
-        return xy, "vision"
-    return gbg_pos, "fallback"
+        found = None
+    if found is not None:
+        return (found[0], found[1]), "vision", found[2]
+    return gbg_pos, "fallback", None
 
 
 # Zoom-out steps to try, small → large. Fewer steps = bigger (clickable) entrance but a
 # narrower view; more steps = whole city in view but a tiny entrance that a click won't open.
 # Sweeping picks the first zoom where vision sees the entrance — the biggest clickable size.
 _ZOOM_SWEEP = (3, 5, 7, 9)
+# Entrance opens when it renders at ~this template scale or bigger (entered at 0.27, failed at
+# 0.21). Below it the tile is too small in the dense plaza to click reliably.
+_MIN_CLICK_SCALE = 0.26
 
 
 def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragma: no cover - live
@@ -194,8 +197,16 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
             page.wait_for_timeout(900)                       # let the zoom settle before the shot
         except Exception:
             pass
-        (ex, ey), how = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fixed fallback
+        (ex, ey), how, scale = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fallback
         if how == "vision":
+            # Confirmed empirically: the entrance opens when it renders at scale ≳0.26 (entered
+            # at 0.27) but NOT at min zoom (0.21) — too small a tile in a dense plaza. On a wide
+            # window the whole big city only fits at min zoom, so the entrance never gets big
+            # enough. Warn clearly (it's a window-size issue, not our logic) but still try.
+            if scale is not None and scale < _MIN_CLICK_SCALE:
+                print(f"[enter] ⚠ entrance renders at scale {scale:.2f} < {_MIN_CLICK_SCALE} — "
+                      "likely too small to open at this window size. A ~1536px-wide window (or "
+                      "the app's fixed window) shows it big enough. Trying anyway…", flush=True)
             _hover_click(page, ex, ey)                      # ONE precise click on the statue —
             # the plaza is a dense cluster, so a cluster-click hits neighbours (Great Building,
             # Guild-Raids/settlement portals). Precision, not spread, is what opens GBG.

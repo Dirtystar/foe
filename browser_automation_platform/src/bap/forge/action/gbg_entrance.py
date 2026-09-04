@@ -190,9 +190,9 @@ def locate_entrance(page, *, template_path: str | None = None,
         return None
     name, m = best
     cx, cy = m.anchor(*CLICK_ANCHOR)
-    out = (int(cx * sx), int(cy * sx))
+    out = (int(cx * sx), int(cy * sx), m.scale)      # (x, y, template scale)
     print(f"[entrance] found via {name} score={m.score:.3f} scale={m.scale:.2f} dev=({cx},{cy}) "
-          f"img={img.shape[1]}x{img.shape[0]} css_scale={sx:.3f} → click {out}", flush=True)
+          f"img={img.shape[1]}x{img.shape[0]} css_scale={sx:.3f} → click {out[:2]}", flush=True)
     return out
 
 
