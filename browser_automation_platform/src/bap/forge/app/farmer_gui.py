@@ -40,6 +40,7 @@ from bap.forge import licensing
 WORLDS = ["cz1", "cz2", "cz3", "cz4", "cz5", "cz6", "cz7", "cz8"]
 PCTS = [20, 40, 60, 80, 100]
 LICENSE_FILE = "license.key"
+EMAIL_FILE = "license.email"
 CONFIG_FILE = "worlds_farm.json"
 ACCEPT_FILE = os.path.join(os.path.expanduser("~"), ".forge_gbg_farmer_accepted")
 
@@ -62,16 +63,16 @@ DISCLAIMER_TEXT = (
     "By clicking “I understand and accept” you agree to these terms.")
 
 
+def _read_file(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
 def _load_license_key() -> str:
-    if os.environ.get("FOE_LICENSE_KEY"):
-        return os.environ["FOE_LICENSE_KEY"]
-    if os.path.exists(LICENSE_FILE):
-        try:
-            with open(LICENSE_FILE, encoding="utf-8") as fh:
-                return fh.read().strip()
-        except OSError:
-            return ""
-    return ""
+    return os.environ.get("FOE_LICENSE_KEY") or _read_file(LICENSE_FILE)
 
 
 class WorldRow:
@@ -113,9 +114,16 @@ class FarmerWindow(QWidget):
         self.save_key_btn = QPushButton("Save")
         self.save_key_btn.clicked.connect(self._save_key)
         lic_box.addWidget(self.save_key_btn, 0, 2)
+        lic_box.addWidget(QLabel("Purchase email:"), 1, 0)
+        self.email_edit = QLineEdit(_read_file(EMAIL_FILE))
+        self.email_edit.setPlaceholderText("the email you bought with (for online verification)")
+        lic_box.addWidget(self.email_edit, 1, 1)
+        self.check_btn = QPushButton("Check online")
+        self.check_btn.clicked.connect(self._check_online)
+        lic_box.addWidget(self.check_btn, 1, 2)
         self.lic_label = QLabel()
         self.lic_label.setWordWrap(True)
-        lic_box.addWidget(self.lic_label, 1, 0, 1, 3)
+        lic_box.addWidget(self.lic_label, 2, 0, 1, 3)
         root.addLayout(lic_box)
 
         # --- worlds table --------------------------------------------------
@@ -211,9 +219,25 @@ class FarmerWindow(QWidget):
         try:
             with open(LICENSE_FILE, "w", encoding="utf-8") as fh:
                 fh.write(self._current_key())
+            with open(EMAIL_FILE, "w", encoding="utf-8") as fh:
+                fh.write(self.email_edit.text().strip())
             self.status.setText(f"Licence saved to {LICENSE_FILE}.")
         except OSError as exc:
             QMessageBox.warning(self, "Save failed", str(exc))
+
+    def _check_online(self):
+        """One-shot online verification (revocation + email). Authoritative check also runs at
+        Start; this just shows the result now."""
+        from bap.forge import license_online
+        key = self._current_key()
+        if not key:
+            self.status.setText("Enter a licence key first.")
+            return
+        self.status.setText("Checking licence online…")
+        QApplication.processEvents()
+        worlds, note = license_online.entitlement(key, self.email_edit.text().strip() or None)
+        self.lic_label.setText(note + f"  →  up to {worlds} world(s).")
+        self.status.setText("Licence checked.")
 
     # -- run ----------------------------------------------------------------
     def _enabled_configs(self) -> list[dict]:
@@ -243,6 +267,8 @@ class FarmerWindow(QWidget):
                "--worlds", CONFIG_FILE]
         if self._current_key():
             cmd += ["--license", self._current_key()]
+        if self.email_edit.text().strip():
+            cmd += ["--email", self.email_edit.text().strip()]
         try:
             self._proc = subprocess.Popen(cmd)  # noqa: S603
         except Exception as exc:  # noqa: BLE001

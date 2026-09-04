@@ -66,6 +66,23 @@ value in the Worker's `LS_WEBHOOK_SECRET`), and subscribe to `order_created` and
 `subscription_payment_success`. On each payment the Worker mints a key valid until the next
 renewal (+2 days grace) and emails it.
 
+## 5b. Online revocation (your kill switch — recommended for Lifetime)
+
+Offline keys can't be taken back, so a leaked lifetime key would unlock forever. The Worker doubles
+as a tiny key registry + verifier so you can revoke.
+
+1. **KV:** create a KV namespace and bind it to the Worker as `LICENSES`. The issuer already
+   records every sold key there (`{tier, email, status:"active"}`).
+2. **App:** ship it with `FOE_VERIFY_URL` set to `https://<your-worker>/verify`. The app then
+   checks each key online, caches the result, and tolerates being offline for 7 days before a paid
+   key drops to the free tier (see `bap/forge/license_online.py`). If `FOE_VERIFY_URL` is unset,
+   the app stays offline-only (no revocation) — so turn it on by shipping that one env value.
+3. **Revoke a key:** `POST https://<your-worker>/revoke?secret=<LICENSE_SECRET>` with body
+   `{"key":"FOE-…"}` (or `?key=…`). Reinstate with `/reinstate`. Next time that app verifies, it
+   drops to the free tier.
+4. **Email binding (optional):** the app sends the buyer's email to `/verify`; if it doesn't match
+   the key's recorded email the key is treated as invalid. Light anti-sharing, no passwords.
+
 ## 6. Renewals & cancellations
 
 - Monthly keys expire at period end; `subscription_payment_success` issues a fresh key each

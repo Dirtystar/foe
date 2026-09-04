@@ -1,22 +1,26 @@
 /**
- * Forge GBG Farmer — licence-key issuer (Cloudflare Worker, free tier).
+ * Forge GBG Farmer — licence issuer + verifier (Cloudflare Worker, free tier).
  *
- * Runs on a store webhook (Lemon Squeezy `order_created` / `subscription_payment_success`),
- * generates the SAME offline HMAC key our app verifies (mirrors `bap/forge/licensing.py`), and
- * emails it to the buyer. No server, no database required.
+ * Three jobs, one Worker:
+ *  1. Store webhook (Lemon Squeezy) → mint the SAME offline HMAC key our app verifies
+ *     (mirrors `bap/forge/licensing.py`), record it in KV, and email it to the buyer.
+ *  2. `GET /verify?key=…&email=…` → tell the app whether a key is active / revoked (online
+ *     revocation; see `bap/forge/license_online.py`). Optionally checks the buyer's email.
+ *  3. `POST /revoke?secret=…` (and `/reinstate`) → flip a key's status. Your kill switch.
  *
- * Env vars (Worker → Settings → Variables):
- *   LICENSE_SECRET   — MUST equal the app's FOE_LICENSE_SECRET (keeps keys verifiable offline).
- *   LS_WEBHOOK_SECRET— Lemon Squeezy webhook signing secret (verifies the request is real).
- *   RESEND_API_KEY   — Resend.com API key (free tier) for sending the email. Swap for any sender.
- *   FROM_EMAIL       — verified sender address, e.g. "keys@yourdomain.com".
- *   VARIANT_TIERS    — JSON mapping store variant id → tier, e.g. {"111":"solo","222":"quad"}.
+ * Bindings / vars (Worker → Settings):
+ *   KV namespace  LICENSES   — the key registry.
+ *   LICENSE_SECRET    — MUST equal the app's FOE_LICENSE_SECRET (offline verification).
+ *   LS_WEBHOOK_SECRET — Lemon Squeezy webhook signing secret.
+ *   RESEND_API_KEY + FROM_EMAIL — to email the key (Resend free tier; swap for any sender).
+ *   VARIANT_TIERS — JSON map store variant id → tier, e.g. {"111":"solo","555":"lifetime"}.
  *
- * Test locally: GET /?tier=quad&days=30&name=Buyer&secret=LICENSE_SECRET → prints a key.
+ * Test: GET /?tier=quad&days=30&secret=<LICENSE_SECRET> → prints a key.
  */
 
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const enc = (s) => new TextEncoder().encode(s);
+const ONE_TIME = new Set(["lifetime"]);              // one-time tiers → never-expiring key
 
 function base32(bytes) {
   let bits = 0, val = 0, out = "";
@@ -33,21 +37,18 @@ async function hmacBytes(secret, msg) {
     "raw", enc(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, enc(msg)));
 }
+const toHex = (b) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+const json = (o, status = 200) =>
+  new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });
 
-function toHex(bytes) {
-  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/** Generate a licence key identical to licensing.generate_key(). */
+/** Identical to licensing.generate_key(). */
 async function generateKey(secret, tier, { days = 30, name = "" } = {}) {
   const expires = days <= 0 ? 0 : Math.floor(Date.now() / 1000) + days * 86400;
-  const body = `${tier}|${expires}|${name}`;
-  const payload = base32(enc(body));
+  const payload = base32(enc(`${tier}|${expires}|${name}`));
   const sig = base32(await hmacBytes(secret, payload)).slice(0, 16);
   return `FOE-${payload}-${sig}`;
 }
 
-/** Constant-time-ish compare for the webhook signature. */
 function safeEqual(a, b) {
   if (a.length !== b.length) return false;
   let r = 0;
@@ -56,7 +57,7 @@ function safeEqual(a, b) {
 }
 
 async function sendEmail(env, to, key, tier) {
-  if (!env.RESEND_API_KEY) return; // configure a sender to actually deliver
+  if (!env.RESEND_API_KEY || !to) return;
   const html =
     `<p>Thanks for buying the <b>${tier}</b> plan of Forge GBG Farmer!</p>` +
     `<p>Your licence key:</p><p style="font:16px monospace;background:#f3f3f3;padding:10px;` +
@@ -64,21 +65,55 @@ async function sendEmail(env, to, key, tier) {
     `<p>Open the app, paste it into <b>Licence key</b>, and press <b>Save</b>.</p>`;
   await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: { "Authorization": `Bearer ${env.RESEND_API_KEY}`,
-               "Content-Type": "application/json" },
-    body: JSON.stringify({ from: env.FROM_EMAIL, to, subject: "Your Forge GBG Farmer licence",
-                           html }),
+    headers: { "Authorization": `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: env.FROM_EMAIL, to, subject: "Your Forge GBG Farmer licence", html }),
   });
+}
+
+async function setStatus(env, key, status) {
+  if (!env.LICENSES) return false;
+  const rec = (await env.LICENSES.get(key, { type: "json" })) || {};
+  rec.status = status;
+  await env.LICENSES.put(key, JSON.stringify(rec));
+  return true;
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, "");
 
-    // --- test/preview endpoint (guarded by the secret) ---------------------
+    // 2) verify — called by the app; no secret (the full key is the credential).
+    if (path === "/verify") {
+      const key = url.searchParams.get("key") || "";
+      const rec = env.LICENSES ? await env.LICENSES.get(key, { type: "json" }) : null;
+      if (!rec) return json({ status: "unknown" });
+      if (rec.status === "revoked") return json({ status: "revoked" });
+      const email = (url.searchParams.get("email") || "").toLowerCase();
+      if (email && rec.email && email !== String(rec.email).toLowerCase()) {
+        return json({ status: "email_mismatch" });
+      }
+      return json({ status: "active", tier: rec.tier });
+    }
+
+    // 3) revoke / reinstate — your kill switch (guarded by the licence secret).
+    if (path === "/revoke" || path === "/reinstate") {
+      if (url.searchParams.get("secret") !== env.LICENSE_SECRET) {
+        return new Response("forbidden", { status: 403 });
+      }
+      let key = url.searchParams.get("key");
+      if (!key && request.method === "POST") {
+        try { key = (await request.json()).key; } catch { /* ignore */ }
+      }
+      if (!key) return json({ error: "key required" }, 400);
+      const ok = await setStatus(env, key, path === "/revoke" ? "revoked" : "active");
+      return json({ ok, key, status: path === "/revoke" ? "revoked" : "active" });
+    }
+
+    // test/preview key generation (guarded).
     if (request.method === "GET") {
       const tier = url.searchParams.get("tier");
-      if (!tier) return new Response("Forge GBG Farmer key issuer. POST store webhooks here.");
+      if (!tier) return new Response("Forge GBG Farmer key service. /verify, /revoke, webhook POST.");
       if (url.searchParams.get("secret") !== env.LICENSE_SECRET) {
         return new Response("forbidden", { status: 403 });
       }
@@ -89,7 +124,7 @@ export default {
       return new Response(key + "\n");
     }
 
-    // --- store webhook -----------------------------------------------------
+    // 1) store webhook → issue + register + email.
     const raw = await request.text();
     const sig = request.headers.get("X-Signature") || "";
     const expect = toHex(await hmacBytes(env.LS_WEBHOOK_SECRET, raw));
@@ -97,30 +132,24 @@ export default {
 
     let payload;
     try { payload = JSON.parse(raw); } catch { return new Response("bad json", { status: 400 }); }
-
     const attrs = payload?.data?.attributes || {};
     const variant = String(attrs.variant_id ?? attrs.first_order_item?.variant_id ?? "");
-    const map = JSON.parse(env.VARIANT_TIERS || "{}");
-    const tier = map[variant];
-    if (!tier) return new Response("no tier for variant " + variant, { status: 200 });
+    const tier = JSON.parse(env.VARIANT_TIERS || "{}")[variant];
+    if (!tier) return json({ ok: false, reason: "no tier for variant " + variant });
 
     const email = attrs.user_email || attrs.customer_email || "";
-    // Lifetime / one-time tiers never expire (days<=0). Monthly plans are valid to the next
-    // renewal (+2 days grace), or 32 days from now if the payload has no renewal date.
-    const ONE_TIME = new Set(["lifetime"]);
     let days;
     if (ONE_TIME.has(tier)) {
-      days = 0;
+      days = 0;                                          // lifetime: never expires
     } else {
       const renews = attrs.renews_at ? Math.floor(new Date(attrs.renews_at).getTime() / 1000) : 0;
       days = renews ? Math.ceil((renews - Date.now() / 1000) / 86400) + 2 : 32;
     }
-
     const key = await generateKey(env.LICENSE_SECRET, tier, { days, name: email });
+    if (env.LICENSES) {
+      await env.LICENSES.put(key, JSON.stringify({ tier, email, status: "active", ts: Date.now() }));
+    }
     await sendEmail(env, email, key, tier);
-    // Return the key too, so you can also read it from the store's webhook log.
-    return new Response(JSON.stringify({ ok: true, tier, key }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ ok: true, tier, key });
   },
 };

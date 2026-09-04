@@ -1032,25 +1032,28 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="with --worlds: how many full round-robin cycles (default: all day)")
     ap.add_argument("--license", default=None,
                     help="licence key (else FOE_LICENSE_KEY env or a license.key file); caps worlds")
+    ap.add_argument("--email", default=None,
+                    help="purchase email for email-bound keys (else FOE_LICENSE_EMAIL)")
     args = ap.parse_args(argv)
 
     if args.worlds:                                        # PARALLEL farming: one process per world
         import subprocess
         import sys
 
-        from bap.forge import licensing
+        from bap.forge import license_online
         cfg = json.load(open(args.worlds, encoding="utf-8"))
         gbg = cfg.get("gbg", {"x": 1650, "y": 250})
         worlds = cfg.get("worlds", [])
-        # Licence gate: cap the number of worlds to the tier. Key from --license, else the
-        # FOE_LICENSE_KEY env var, else a license.key file next to the config; no key = free (1).
+        # Licence gate: cap the number of worlds to the tier, and enforce ONLINE REVOCATION
+        # (offline-tolerant; see license_online). Key from --license, else FOE_LICENSE_KEY, else a
+        # license.key file. Email from --email/FOE_LICENSE_EMAIL (optional; for email-bound keys).
         key = args.license or os.environ.get("FOE_LICENSE_KEY")
         if not key and os.path.exists("license.key"):
             with open("license.key", encoding="utf-8") as fh:
                 key = fh.read().strip()
-        allowed = licensing.allowed_worlds(key)
-        print("[license] " + licensing.describe(licensing.verify_key(key) if key else None),
-              flush=True)
+        email = args.email or os.environ.get("FOE_LICENSE_EMAIL")
+        allowed, note = license_online.entitlement(key, email)
+        print("[license] " + note, flush=True)
         if len(worlds) > allowed:
             print(f"[license] config has {len(worlds)} worlds; your plan allows {allowed}. "
                   f"Farming the first {allowed}. Upgrade to unlock more.", flush=True)
