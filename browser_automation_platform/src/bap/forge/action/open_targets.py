@@ -155,12 +155,23 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
             pass
         page.wait_for_timeout(6000)
         try:                                                # whole city in view → entrance visible
-            from bap.forge.action.gbg_entrance import zoom_out_city
+            from bap.forge.action.gbg_entrance import zoom_in_toward, zoom_out_city
             zoom_out_city(page)
             page.wait_for_timeout(900)                       # let the zoom settle before the shot
         except Exception:
-            pass
+            zoom_in_toward = None
         (ex, ey), how = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fixed fallback
+        # Zoom-out makes the entrance tiny → a few-px miss hits a neighbour. If vision found it,
+        # zoom back in toward it so it's a big, reliable click target, then re-locate precisely.
+        if how == "vision" and zoom_in_toward is not None:
+            try:
+                zoom_in_toward(page, ex, ey)
+                page.wait_for_timeout(700)
+                (ex2, ey2), how2 = _entrance_point(page, gbg_pos, tag=tag)
+                if how2 == "vision":
+                    ex, ey, how = ex2, ey2, "vision+zoom"
+            except Exception:
+                pass
         _hover_click(page, ex, ey)                          # click the city GBG entrance
         print(f"[enter] clicked GBG entrance ({ex},{ey}) [{how}]; waiting for "
               f"getBattleground (try {attempt}/{tries})…", flush=True)

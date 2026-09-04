@@ -109,6 +109,20 @@ def zoom_out_city(page, steps: int = 10, pause_ms: int = 120):  # pragma: no cov
         print(f"[entrance] zoom-out failed: {exc}", flush=True)
 
 
+def zoom_in_toward(page, x, y, steps: int = 4, pause_ms: int = 150):  # pragma: no cover - live
+    """Zoom in a few steps toward CSS point (x, y). FoE zooms toward the cursor, so the entrance
+    stays roughly under (x, y) and grows into a big, reliably clickable target — the fix for the
+    tiny footprint at full zoom-out where a few-pixel miss selected a neighbour."""
+    try:
+        page.mouse.move(x, y)
+        page.wait_for_timeout(80)
+        for _ in range(steps):
+            page.mouse.wheel(0, -300)         # wheel up = zoom in
+            page.wait_for_timeout(pause_ms)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[entrance] zoom-in failed: {exc}", flush=True)
+
+
 def locate_entrance(page, *, template_path: str | None = None,
                     min_score: float = MIN_SCORE, debug_path: str | None = None):  # pragma: no cover
     """Screenshot the Playwright ``page`` and locate the GBG entrance. Returns (x, y) in **CSS**
