@@ -43,12 +43,12 @@ class MatchResult:
 
 
 def _default_scales() -> list[float]:
-    # 0.45 → 1.60 in ~8% steps: covers the FoE city zoom range comfortably. 1.0 (native) is
-    # always included so an unscaled sprite matches exactly.
-    out, s = {1.0}, 0.45
+    # 0.25 → 1.60 in ~7% steps: a reference sprite cropped from a zoomed-in view can appear
+    # much smaller in a normal screenshot, so sweep well below 1.0. 1.0 (native) always included.
+    out, s = {1.0}, 0.25
     while s <= 1.60001:
         out.add(round(s, 3))
-        s *= 1.08
+        s *= 1.07
     return sorted(out)
 
 
