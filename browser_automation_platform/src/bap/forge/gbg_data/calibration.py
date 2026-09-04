@@ -1,0 +1,156 @@
+"""Map calibration — turn two "clicked a province → the game told us which one" samples
+into a persisted map→screen transform, so the app can place *any* province afterwards.
+
+The clever bit (so a user never has to identify province ids): you click any two provinces;
+opening each fires a `/game/json` request carrying its `provinceId`
+(`parse_province_id_from_game_json`). Pair that id's known map-flag position
+(`MapLayout.flag`) with the click's screen point → one calibration sample. Two samples
+(provinces apart in x and y) solve the axis-aligned transform.
+
+Persistence keeps the transform per world + map id, so it survives restarts and is only
+redone when the map (or the map view) changes. Pure logic + a tiny JSON store; no browser.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+from bap.forge.gbg_data.map_layout import MapLayout, MapTransform
+
+
+@dataclass(frozen=True)
+class CalibrationSample:
+    province_id: int
+    screen: tuple      # (x, y) viewport CSS px where the user clicked
+
+
+def solve_transform(layout: MapLayout, a: CalibrationSample,
+                    b: CalibrationSample) -> MapTransform:
+    """Solve the map→screen transform from two province clicks. Each province's map point is
+    its flag from ``layout``; the screen point is where the user clicked. Raises if a
+    province has no flag or the two are not apart on both axes."""
+    fa, fb = layout.flag(a.province_id), layout.flag(b.province_id)
+    if fa is None or fb is None:
+        raise ValueError("a calibration province has no flag in the map layout")
+    return MapTransform.from_two_points(fa, tuple(a.screen), fb, tuple(b.screen))
+
+
+class CalibrationCollector:
+    """Pairs the user's flag clicks with the province the game reports, into samples.
+
+    Per province-open, the **first** click (the flag on the map) is the screen point we
+    want; the ``provinceId`` arrives a moment later in a `getArmyPreview` request. So: the
+    first click of a sequence is kept, later clicks (e.g. the Attack button) ignored, and the
+    sample is emitted when the province id lands. Pure + testable."""
+
+    def __init__(self, need: int = 2) -> None:
+        self.need = need
+        self.samples: list = []
+        self._last_click = None
+        self._captured: set = set()
+
+    def on_click(self, x, y) -> None:
+        # track the most recent click; the flag click that opens a province is the last click
+        # before that province's first provinceId request.
+        self._last_click = (float(x), float(y))
+
+    def on_province(self, province_id) -> None:
+        pid = int(province_id)
+        if pid in self._captured:
+            # a province fires provinceId several times (preview → info → battle); ignore the
+            # repeats WITHOUT touching the click, so the next province's flag click survives.
+            return
+        if self._last_click is not None:
+            self.samples.append(CalibrationSample(pid, self._last_click))
+            self._captured.add(pid)
+            self._last_click = None
+
+    def reset_current(self) -> None:
+        self._click = None
+        self._pid = None
+
+    @property
+    def done(self) -> bool:
+        return len(self.samples) >= self.need
+
+
+def solve_uniform(layout: MapLayout, samples) -> MapTransform:
+    """Least-squares fit of a **uniform-scale** transform (screen = s*map + offset, same s on
+    both axes — the map is a bitmap scaled uniformly) over any number of province clicks.
+    Robust to imprecise clicks and uneven spread; needs ≥ 2 provinces with some spread.
+    Returns a MapTransform whose scale_x == scale_y. Raises if the points are degenerate."""
+    pts = [(layout.flag(s.province_id), tuple(s.screen))
+           for s in samples if layout.flag(s.province_id) is not None]
+    if len(pts) < 2:
+        raise ValueError("need at least two provinces with known flags")
+    mx = [p[0][0] for p in pts]; my = [p[0][1] for p in pts]
+    sx = [p[1][0] for p in pts]; sy = [p[1][1] for p in pts]
+    n = len(pts)
+    mmx = sum(mx) / n; mmy = sum(my) / n
+    msx = sum(sx) / n; msy = sum(sy) / n
+    num = (sum((mx[i] - mmx) * (sx[i] - msx) for i in range(n))
+           + sum((my[i] - mmy) * (sy[i] - msy) for i in range(n)))
+    den = (sum((mx[i] - mmx) ** 2 for i in range(n))
+           + sum((my[i] - mmy) ** 2 for i in range(n)))
+    if den == 0:
+        raise ValueError("calibration provinces are all at the same map point")
+    s = num / den
+    off_x = msx - s * mmx
+    off_y = msy - s * mmy
+    return MapTransform(scale_x=s, scale_y=s, off_x=off_x, off_y=off_y)
+
+
+def residual(layout: MapLayout, transform: MapTransform, samples) -> float:
+    """Max pixel error between a sample's click and where the transform places its flag —
+    a quality check on a calibration (small = good)."""
+    worst = 0.0
+    for smp in samples:
+        f = layout.flag(smp.province_id)
+        if f is None:
+            continue
+        px, py = transform.to_screen(*f)
+        d = ((px - smp.screen[0]) ** 2 + (py - smp.screen[1]) ** 2) ** 0.5
+        worst = max(worst, d)
+    return worst
+
+
+def _key(world: str, map_id: str | None) -> str:
+    return f"{world}::{map_id or '?'}"
+
+
+def save_calibration(path, world: str, map_id: str | None, t: MapTransform) -> None:
+    """Persist ``t`` under (world, map_id) in a small JSON store (merged with any existing)."""
+    p = Path(path)
+    data = {}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    data[_key(world, map_id)] = {
+        "world": world, "map_id": map_id,
+        "scale_x": t.scale_x, "scale_y": t.scale_y, "off_x": t.off_x, "off_y": t.off_y,
+    }
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def load_calibration(path, world: str, map_id: str | None) -> MapTransform | None:
+    """Load a saved transform for (world, map_id), or None if absent/unreadable."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        e = data.get(_key(world, map_id))
+        if not e:
+            return None
+        return MapTransform(e["scale_x"], e["scale_y"], e["off_x"], e["off_y"])
+    except Exception:
+        return None
+
+
+__all__ = ["CalibrationSample", "CalibrationCollector", "solve_transform",
+           "solve_uniform", "residual", "save_calibration", "load_calibration"]

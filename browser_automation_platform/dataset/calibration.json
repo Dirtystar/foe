@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "weakening_regions": {
+    "1600x900": {
+      "x": 157,
+      "y": -2,
+      "w": 43,
+      "h": 27
+    },
+    "1920x912": {
+      "x": 290,
+      "y": -1,
+      "w": 116,
+      "h": 43
+    },
+    "1920x869": {
+      "x": 187,
+      "y": 0,
+      "w": 83,
+      "h": 26
+    }
+  },
+  "battle_map_regions": {
+    "1600x900": {
+      "x": 13,
+      "y": 20,
+      "w": 1510,
+      "h": 881
+    },
+    "1920x912": {
+      "x": 19,
+      "y": 48,
+      "w": 1872,
+      "h": 840
+    },
+    "1920x869": {
+      "x": 2,
+      "y": 31,
+      "w": 1858,
+      "h": 833
+    }
+  },
+  "geometry": {
+    "1920x912": {
+      "raw_w": 1920,
+      "raw_h": 912,
+      "viewport_w": null,
+      "viewport_h": null,
+      "device_pixel_ratio": null,
+      "zoom": null,
+      "browser_mode": null,
+      "cdp_endpoint": null,
+      "key": "1920x912"
+    }
+  }
+}

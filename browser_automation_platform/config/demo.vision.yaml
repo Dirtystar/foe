@@ -1,0 +1,46 @@
+# Real-vision demo. Run with real browser AND real analyzers:
+#   python -m bap.main config/demo.vision.yaml --real --real-vision --seconds 3
+#
+# Flow: open a self-contained data: page with large text -> real screenshot
+# -> real Tesseract OCR reads the number -> a rule fires when the number is
+# below a threshold -> a real Playwright click is performed.
+#
+# Requires the 'vision' extra and the tesseract binary. The data: URL keeps
+# the demo offline.
+version: 1
+
+settings:
+  max_sessions: 1
+  headless: true
+  browser_engine: chromium
+
+rule_packs:
+  demo:
+    - id: click_when_number_low
+      cooldown_ms: 1000
+      condition:
+        type: all
+        conditions:
+          - type: exists
+            field: screen.number
+          - type: compare
+            field: screen.number
+            op: less_than
+            value: 100
+      actions:
+        - type: click
+          params: { selector: "#go" }
+
+profiles:
+  - id: demo
+    start_url: "data:text/html,<html><body style='font-size:64px'>42<button id='go'>Go</button></body></html>"
+    session:
+      interval_ms: 1000
+    rule_pack: demo
+    capture_bindings:
+      - name: screen
+        target: full_page
+        analyzers:
+          - type: ocr
+            settings:
+              numeric: true

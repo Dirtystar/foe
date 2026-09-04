@@ -1,0 +1,55 @@
+# Attended (user-driven) example configuration.
+#
+# In attended mode YOU open the browser, log in, and open the pages you want to
+# watch — then assign each open tab to a session in the app. There are NO URLs
+# in this file; the app never navigates for you.
+#
+# In the GUI (bap-gui config/attended.example.yaml):
+#   1. Tools shows an "Attended" panel:  Open Browser  →  Scan tabs.
+#   2. Open your pages as tabs in the browser window that appears.
+#   3. Scan tabs, then pick a tab for each session below.
+#   4. Start (enabled once every session has a tab).
+#
+# Each session captures its assigned tab every interval and evaluates its rules.
+# This example uses the built-in demo analyzers/actions so it runs with just the
+# GUI installed (no vision libraries needed) — swap in real analyzers/rules once
+# your tabs are wired up.
+version: 1
+
+settings:
+  attended: true          # user assigns tabs; no start_url navigation
+  max_sessions: 4
+  browser_engine: chromium
+
+rule_packs:
+  watch:
+    - id: observe
+      # A permissive placeholder rule so sessions have something to evaluate.
+      # Replace with real conditions/actions for your target pages.
+      condition:
+        type: exists
+        field: screen.ready
+      actions:
+        - type: log
+          params: { message: "tick observed" }
+
+profiles:
+  - id: session_1
+    session: { interval_ms: 1000, jitter_ms: 200 }
+    rule_pack: watch
+    capture_bindings:
+      - name: screen
+        target: full_page
+        analyzers:
+          - type: ocr
+            settings: { emit: { ready: true } }
+
+  - id: session_2
+    session: { interval_ms: 1000, jitter_ms: 200 }
+    rule_pack: watch
+    capture_bindings:
+      - name: screen
+        target: full_page
+        analyzers:
+          - type: ocr
+            settings: { emit: { ready: true } }

@@ -1,0 +1,22 @@
+[project]
+name = "bap-fake-plugin"
+version = "0.1.0"
+description = "Example third-party plugin for the Browser Automation Platform"
+requires-python = ">=3.11"
+
+# Plugins are ordinary packages that declare entry points in the bap groups.
+# The entry-point NAME is the config `type` string; the target is a zero-arg
+# factory returning a VisionAnalyzerPort / ActionHandlerPort.
+[project.entry-points."bap.analyzers"]
+fake_ocr = "fake_plugin:create_analyzer"
+
+[project.entry-points."bap.actions"]
+fake_click = "fake_plugin:create_handler"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fake_plugin*"]

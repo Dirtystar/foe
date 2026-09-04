@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge GBG Farmer</title>
+<meta name="description" content="Farm Guild Battlegrounds in Forge of Empires automatically, across up to 8 worlds at once.">
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#1a1d24; --muted:#5b6270; --line:#e6e8ec;
+    --brand:#4f46e5; --brand-ink:#ffffff; --accent:#0ea5a4; --shadow:0 6px 24px rgba(20,24,40,.08);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0e1116; --card:#171b22; --ink:#eef1f6; --muted:#9aa3b2; --line:#262c36;
+    --brand:#7c74ff; --brand-ink:#0e1116; --accent:#2dd4bf; --shadow:0 8px 28px rgba(0,0,0,.5);
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--brand)}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+  header{padding:60px 0 30px;text-align:center}
+  .logo{display:inline-flex;align-items:center;gap:10px;font-weight:700;font-size:20px}
+  .logo span{font-size:26px}
+  h1{font-size:clamp(30px,5vw,46px);line-height:1.15;margin:22px 0 10px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:19px;max-width:640px;margin:0 auto 26px}
+  .cta{display:inline-block;background:var(--brand);color:var(--brand-ink);text-decoration:none;
+    font-weight:600;padding:12px 22px;border-radius:12px;box-shadow:var(--shadow)}
+  .cta.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);box-shadow:none}
+  .row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .note{color:var(--muted);font-size:14px;margin-top:12px}
+  section{padding:34px 0}
+  h2{font-size:26px;letter-spacing:-.01em;text-align:center;margin:0 0 6px}
+  .lead{color:var(--muted);text-align:center;margin:0 auto 26px;max-width:620px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}
+  .plan{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;
+    box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .plan.pop{border-color:var(--brand);position:relative}
+  .badge{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--brand);
+    color:var(--brand-ink);font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .plan h3{margin:0 0 2px;font-size:18px}
+  .worlds{color:var(--muted);font-size:14px}
+  .price{font-size:34px;font-weight:800;margin:14px 0 2px;letter-spacing:-.02em}
+  .price small{font-size:14px;font-weight:600;color:var(--muted)}
+  .plan ul{list-style:none;padding:0;margin:14px 0 18px;font-size:14px;color:var(--muted)}
+  .plan li{padding:4px 0 4px 22px;position:relative}
+  .plan li::before{content:"✓";position:absolute;left:0;color:var(--accent);font-weight:700}
+  .buy{margin-top:auto;display:block;text-align:center;background:var(--brand);color:var(--brand-ink);
+    text-decoration:none;font-weight:600;padding:11px;border-radius:11px}
+  .buy.free{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .steps{counter-reset:s;max-width:680px;margin:0 auto;display:grid;gap:14px}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+    display:flex;gap:14px;align-items:flex-start}
+  .step b{display:flex;flex:0 0 30px;height:30px;width:30px;border-radius:50%;background:var(--brand);
+    color:var(--brand-ink);align-items:center;justify-content:center;font-size:15px}
+  details{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:2px 16px;
+    margin:10px auto;max-width:720px}
+  summary{cursor:pointer;font-weight:600;padding:12px 0}
+  details p{color:var(--muted);margin:0 0 14px}
+  footer{color:var(--muted);text-align:center;padding:40px 0;font-size:14px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<!--
+  ONE-PAGE SHOP — fill in the two config values below, then host this file for free
+  (Cloudflare Pages / GitHub Pages). See docs/SHOP_SETUP.md.
+  Each plan's data-buy is the checkout URL for that plan (Lemon Squeezy / Gumroad).
+  DOWNLOAD_URL is the public installer link.
+-->
+<script>
+  // ── EDIT THESE ───────────────────────────────────────────────────────────
+  const DOWNLOAD_URL = "#download";            // public installer link
+  const CHECKOUT = {                           // per-plan checkout URLs
+    solo:      "#buy-solo",
+    duo:       "#buy-duo",
+    quad:      "#buy-quad",
+    octa:      "#buy-octa",
+    unlimited: "#buy-unlimited"
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+  addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("[data-buy]").forEach(a => {
+      const url = CHECKOUT[a.getAttribute("data-buy")];
+      if (url) a.href = url;
+    });
+    document.querySelectorAll("[data-download]").forEach(a => a.href = DOWNLOAD_URL);
+  });
+</script>
+
+<header class="wrap">
+  <div class="logo"><span>⚔️</span> Forge GBG Farmer</div>
+  <h1>Farm Guild Battlegrounds<br>while you sleep.</h1>
+  <p class="sub">Auto-fights Guild Battlegrounds in Forge of Empires across up to 8 worlds at
+    once. Pick your worlds, set the attrition limit, press Start — and walk away.</p>
+  <div class="row">
+    <a class="cta" href="#pricing">See plans</a>
+    <a class="cta ghost" data-download href="#download">Download the app</a>
+  </div>
+  <p class="note">Free tier included — farm 1 world at no cost. No account needed to try.</p>
+</header>
+
+<section class="wrap">
+  <h2>What it does</h2>
+  <p class="lead">One window. Every world. All day.</p>
+  <div class="grid">
+    <div class="plan"><h3>🎯 Smart targeting</h3><p class="worlds">Fights the lowest-attrition
+      provinces first and honours your guild's Cíl / Stop marks.</p></div>
+    <div class="plan"><h3>🌍 Many worlds at once</h3><p class="worlds">Runs cz1–cz8 in parallel
+      in a single browser the app manages for you.</p></div>
+    <div class="plan"><h3>♻️ Self-healing</h3><p class="worlds">If a world stalls it reloads and
+      re-enters GBG on its own — true all-day, unattended farming.</p></div>
+    <div class="plan"><h3>🛑 Attrition limit</h3><p class="worlds">Stops each world at the limit
+      you set, so you never overfarm.</p></div>
+  </div>
+</section>
+
+<section class="wrap" id="pricing">
+  <h2>Simple plans</h2>
+  <p class="lead">Pay monthly for as many worlds as you farm. Cancel anytime.</p>
+  <div class="grid">
+    <div class="plan">
+      <h3>Free</h3><div class="worlds">1 world</div>
+      <div class="price">$0</div>
+      <ul><li>Full farming engine</li><li>1 world</li><li>No account</li></ul>
+      <a class="buy free" data-download href="#download">Download</a>
+    </div>
+    <div class="plan">
+      <h3>Solo</h3><div class="worlds">1 world</div>
+      <div class="price">$4<small>/mo</small></div>
+      <ul><li>Priority updates</li><li>1 world</li></ul>
+      <a class="buy" data-buy="solo" href="#">Get Solo</a>
+    </div>
+    <div class="plan">
+      <h3>Duo</h3><div class="worlds">2 worlds</div>
+      <div class="price">$7<small>/mo</small></div>
+      <ul><li>2 worlds in parallel</li></ul>
+      <a class="buy" data-buy="duo" href="#">Get Duo</a>
+    </div>
+    <div class="plan pop">
+      <span class="badge">Most popular</span>
+      <h3>Quad</h3><div class="worlds">4 worlds</div>
+      <div class="price">$12<small>/mo</small></div>
+      <ul><li>4 worlds in parallel</li><li>Best value per world</li></ul>
+      <a class="buy" data-buy="quad" href="#">Get Quad</a>
+    </div>
+    <div class="plan">
+      <h3>Octa</h3><div class="worlds">8 worlds</div>
+      <div class="price">$20<small>/mo</small></div>
+      <ul><li>All 8 worlds</li></ul>
+      <a class="buy" data-buy="octa" href="#">Get Octa</a>
+    </div>
+    <div class="plan">
+      <h3>Unlimited</h3><div class="worlds">every world</div>
+      <div class="price">$30<small>/mo</small></div>
+      <ul><li>No world limit</li><li>Everything, forever</li></ul>
+      <a class="buy" data-buy="unlimited" href="#">Get Unlimited</a>
+    </div>
+  </div>
+  <p class="note" style="text-align:center">After checkout you get a licence key by email — paste
+    it into the app and press Save. Prices in USD; EU VAT handled at checkout.</p>
+</section>
+
+<section class="wrap" id="download">
+  <h2>Get started in 3 steps</h2>
+  <div class="steps">
+    <div class="step"><b>1</b><div><strong>Download &amp; install</strong> the app for your system
+      (Windows, macOS, Linux), then open it.</div></div>
+    <div class="step"><b>2</b><div><strong>Open browser &amp; log in</strong> to your Forge worlds
+      in the window the app opens, and open Guild Battlegrounds once.</div></div>
+    <div class="step"><b>3</b><div><strong>Paste your key, pick worlds, Start.</strong> Free tier
+      needs no key — farm 1 world right away.</div></div>
+  </div>
+  <div class="row" style="margin-top:24px">
+    <a class="cta" data-download href="#">Download the app</a>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Questions</h2>
+  <details><summary>Do I need a licence to try it?</summary>
+    <p>No. The free tier farms 1 world with the full engine. Buy a plan only when you want more
+    worlds at once.</p></details>
+  <details><summary>How does the licence work?</summary>
+    <p>After buying, you get a key by email. Paste it into the app and press Save. It's checked
+    offline — no login, no phone-home. Your plan sets how many worlds you can run at once.</p></details>
+  <details><summary>Which platforms?</summary>
+    <p>Windows, macOS and Linux. The app manages its own browser, so there's nothing else to set
+    up.</p></details>
+  <details><summary>Can I cancel?</summary>
+    <p>Yes, anytime, from the receipt/checkout portal. You keep access until the period ends.</p></details>
+</section>
+
+<footer class="wrap">
+  Forge GBG Farmer is an independent tool and is not affiliated with or endorsed by InnoGames or
+  Forge of Empires. Use responsibly and at your own discretion.
+</footer>
+</body>
+</html>

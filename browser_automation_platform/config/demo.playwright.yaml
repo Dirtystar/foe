@@ -1,0 +1,41 @@
+# Real-browser demo. Run with:
+#   python -m bap.main config/demo.playwright.yaml --real --seconds 3
+#
+# Flow: open a self-contained data: page -> capture it -> a stub OCR analyzer
+# emits page.ready (real vision adapters are future work) -> one rule matches
+# -> a real Playwright click is performed on the page's button.
+#
+# The data: URL keeps the demo offline; swap start_url for any real site.
+version: 1
+
+settings:
+  max_sessions: 1
+  headless: true
+  browser_engine: chromium
+
+rule_packs:
+  demo:
+    - id: click_button_when_ready
+      cooldown_ms: 1000
+      condition:
+        type: exists
+        field: page.ready
+      actions:
+        - type: click
+          params: { selector: "#go" }
+
+profiles:
+  - id: demo
+    start_url: "data:text/html,<html><body><button id='go'>Go</button><h1>Ready</h1></body></html>"
+    session:
+      interval_ms: 1000
+    rule_pack: demo
+    capture_bindings:
+      - name: page
+        target: full_page
+        analyzers:
+          # Placeholder vision: emits page.ready so the rule fires. Replace
+          # with a real OCR/template analyzer when those adapters land.
+          - type: ocr
+            settings:
+              emit: { ready: true }

@@ -1,0 +1,13 @@
+{
+  "gbg": { "x": 1390, "y": 250 },
+  "worlds": [
+    { "world": "cz1", "tab": "cz1", "limit": 150, "pcts": [20, 40, 60] },
+    { "world": "cz2", "tab": "cz2", "limit": 150, "pcts": [20, 40, 60] },
+    { "world": "cz3", "tab": "cz3", "limit": 150, "pcts": [20, 40, 60] },
+    { "world": "cz4", "tab": "cz4", "limit": 150, "pcts": [20, 40, 60] },
+    { "world": "cz5", "tab": "cz5", "limit": 150, "pcts": [20, 40, 60] },
+    { "world": "cz6", "tab": "cz6", "limit": 150, "pcts": [20, 40, 60] },
+    { "world": "cz7", "tab": "cz7", "limit": 150, "pcts": [20, 40, 60] },
+    { "world": "cz8", "tab": "cz8", "limit": 150, "pcts": [20, 40, 60] }
+  ]
+}
