@@ -147,12 +147,18 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
         # Reload to normalise the view: whether we're in GBG or in a scrolled/zoomed city, a
         # fresh load lands on the default city where the entrance sits at its usual, visible
         # spot — so vision can find it reliably. FoE's WebGL city needs a few seconds to render.
-        print(f"[enter] reloading to a fresh default city view (try {attempt})…", flush=True)
+        print(f"[enter] reloading to a fresh city, then zooming out to see it all "
+              f"(try {attempt})…", flush=True)
         try:
             page.reload()
         except Exception:
             pass
         page.wait_for_timeout(6000)
+        try:                                                # whole city in view → entrance visible
+            from bap.forge.action.gbg_entrance import zoom_out_city
+            zoom_out_city(page)
+        except Exception:
+            pass
         (ex, ey), how = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fixed fallback
         _hover_click(page, ex, ey)                          # click the city GBG entrance
         print(f"[enter] clicked GBG entrance ({ex},{ey}) [{how}]; waiting for "

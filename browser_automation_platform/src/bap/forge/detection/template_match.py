@@ -43,9 +43,10 @@ class MatchResult:
 
 
 def _default_scales() -> list[float]:
-    # 0.25 → 1.60 in ~7% steps: a reference sprite cropped from a zoomed-in view can appear
-    # much smaller in a normal screenshot, so sweep well below 1.0. 1.0 (native) always included.
-    out, s = {1.0}, 0.25
+    # 0.12 → 1.60 in ~7% steps: a normal-zoom sprite appears tiny when the city is zoomed fully
+    # out (entry zooms out so the whole city — and the entrance — is in view), so sweep well
+    # below 1.0. 1.0 (native) always included so an unscaled sprite matches exactly.
+    out, s = {1.0}, 0.12
     while s <= 1.60001:
         out.add(round(s, 3))
         s *= 1.07

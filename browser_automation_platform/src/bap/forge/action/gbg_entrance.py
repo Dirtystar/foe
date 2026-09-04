@@ -16,6 +16,7 @@ The live ``locate_entrance(page)`` screenshots the Playwright page and returns t
 
 from __future__ import annotations
 
+import glob
 import os
 
 import cv2
@@ -35,9 +36,15 @@ def imread_unicode(path: str):
         return None
     return cv2.imdecode(data, cv2.IMREAD_COLOR)
 
-# The reference sprite. Save the tight crop of the Atlas/diamond entrance here.
-TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "..", "detection", "assets",
-                             "gbg_entrance", "atlas_diamond.png")
+# The reference sprites. `atlas_diamond.png` is the normal-zoom crop; add more crops named
+# `atlas_diamond*.png` (e.g. `atlas_diamond_zoomout.png`, a tiny min-zoom Atlas) and all are
+# tried — the best match across templates and scales wins. Players sit at different zooms, so
+# the entry sequence zooms fully out first (whole city in view, entrance always visible), where
+# the zoom-out template matches strongly.
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "detection", "assets",
+                            "gbg_entrance")
+TEMPLATE_PATH = os.path.join(TEMPLATE_DIR, "atlas_diamond.png")
+TEMPLATE_GLOB = os.path.join(TEMPLATE_DIR, "atlas_diamond*.png")
 # Below-centre so we land on the plaza/steps (clickable base), not the globe over the water.
 CLICK_ANCHOR = (0.5, 0.60)
 # Match must clear this to be trusted; below it we don't guess a wrong click.
@@ -49,6 +56,28 @@ def load_template(path: str | None = None) -> np.ndarray | None:
     if not os.path.exists(p):
         return None
     return imread_unicode(p)
+
+
+def load_templates() -> list[tuple[str, np.ndarray]]:
+    """Every entrance reference sprite (all ``atlas_diamond*.png``), as (name, image)."""
+    out = []
+    for p in sorted(glob.glob(TEMPLATE_GLOB)):
+        img = imread_unicode(p)
+        if img is not None:
+            out.append((os.path.basename(p), img))
+    return out
+
+
+def _best_over_templates(image_bgr, templates, *, min_score):
+    """Best (name, MatchResult) across several templates, or None."""
+    best_name, best = None, None
+    for name, tmpl in templates:
+        m = match_multiscale(image_bgr, tmpl, min_score=0.0)
+        if m is not None and (best is None or m.score > best.score):
+            best_name, best = name, m
+    if best is None or best.score < min_score:
+        return None
+    return best_name, best
 
 
 def locate_entrance_in_image(image_bgr: np.ndarray, template_bgr: np.ndarray, *,
@@ -65,20 +94,40 @@ def locate_entrance_in_image(image_bgr: np.ndarray, template_bgr: np.ndarray, *,
     return cx, cy, m
 
 
+def zoom_out_city(page, steps: int = 10, pause_ms: int = 120):  # pragma: no cover - live
+    """Zoom the city all the way out with the mouse wheel over the canvas centre. Min zoom is a
+    fixed limit on every machine, so this gives a resolution/zoom-independent view where the
+    whole city — and thus the entrance — is on screen. Extra steps past the limit are harmless."""
+    try:
+        w = page.evaluate("() => window.innerWidth") or 1000
+        h = page.evaluate("() => window.innerHeight") or 700
+        page.mouse.move(w // 2, h // 2)
+        for _ in range(steps):
+            page.mouse.wheel(0, 300)          # wheel down = zoom out in FoE
+            page.wait_for_timeout(pause_ms)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[entrance] zoom-out failed: {exc}", flush=True)
+
+
 def locate_entrance(page, *, template_path: str | None = None,
                     min_score: float = MIN_SCORE, debug_path: str | None = None):  # pragma: no cover
     """Screenshot the Playwright ``page`` and locate the GBG entrance. Returns (x, y) in **CSS**
-    pixels (the screenshot is in device pixels; we convert), or None if not confidently found."""
-    tmpl = load_template(template_path)
-    if tmpl is None:
-        print(f"[entrance] no template at {TEMPLATE_PATH} — save the entrance crop there.",
-              flush=True)
+    pixels (the screenshot is in device pixels; we convert), or None if not confidently found.
+    Tries every ``atlas_diamond*.png`` template (normal- and zoomed-out crops)."""
+    if template_path is not None:
+        tmpl = load_template(template_path)
+        templates = [(os.path.basename(template_path), tmpl)] if tmpl is not None else []
+    else:
+        templates = load_templates()
+    if not templates:
+        print(f"[entrance] no template(s) in {TEMPLATE_DIR} — save the entrance crop as "
+              "atlas_diamond.png.", flush=True)
         return None
     png = page.screenshot()  # viewport PNG, in DEVICE pixels
     img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         return None
-    found = locate_entrance_in_image(img, tmpl, min_score=min_score)
+    best = _best_over_templates(img, templates, min_score=min_score)
     # The screenshot is device px; the mouse takes CSS px. Convert via innerWidth / screenshot
     # width — this works even over CDP, where page.viewport_size is None (DPR>1 was clicking
     # ~25% too far and off-screen). Same factor for x and y (DPR is uniform).
@@ -90,22 +139,24 @@ def locate_entrance(page, *, template_path: str | None = None,
     if debug_path:
         try:
             vis = img.copy()
-            if found is not None:
-                _cx, _cy, m = found
+            if best is not None:
+                _name, m = best
                 x, y = m.top_left
                 w, h = m.size
+                acx, acy = m.anchor(*CLICK_ANCHOR)
                 cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 0, 255), 3)
-                cv2.circle(vis, (_cx, _cy), 8, (0, 255, 0), -1)
+                cv2.circle(vis, (acx, acy), 8, (0, 255, 0), -1)
             cv2.imwrite(debug_path, vis)
         except Exception:
             pass
-    if found is None:
-        print(f"[entrance] no match ≥{min_score} (screenshot {img.shape[1]}x{img.shape[0]} dev, "
-              f"css_scale={sx:.3f})", flush=True)
+    if best is None:
+        print(f"[entrance] no match ≥{min_score} across {len(templates)} template(s) "
+              f"(screenshot {img.shape[1]}x{img.shape[0]} dev, css_scale={sx:.3f})", flush=True)
         return None
-    cx, cy, m = found
+    name, m = best
+    cx, cy = m.anchor(*CLICK_ANCHOR)
     out = (int(cx * sx), int(cy * sx))
-    print(f"[entrance] found score={m.score:.3f} scale={m.scale:.2f} dev=({cx},{cy}) "
+    print(f"[entrance] found via {name} score={m.score:.3f} scale={m.scale:.2f} dev=({cx},{cy}) "
           f"img={img.shape[1]}x{img.shape[0]} css_scale={sx:.3f} → click {out}", flush=True)
     return out
 
