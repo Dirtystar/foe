@@ -154,6 +154,14 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
         except Exception:
             pass
         page.wait_for_timeout(6000)
+        # FoE auto-opens an "Event history" popup on every city load; it can cover the entrance.
+        # Escape closes FoE modals — press a couple of times to clear any popup before we look.
+        try:
+            for _ in range(3):
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(250)
+        except Exception:
+            pass
         try:                                                # whole city in view → entrance visible
             from bap.forge.action.gbg_entrance import zoom_in_toward, zoom_out_city
             zoom_out_city(page)
