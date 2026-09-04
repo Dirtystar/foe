@@ -41,6 +41,25 @@ WORLDS = ["cz1", "cz2", "cz3", "cz4", "cz5", "cz6", "cz7", "cz8"]
 PCTS = [20, 40, 60, 80, 100]
 LICENSE_FILE = "license.key"
 CONFIG_FILE = "worlds_farm.json"
+ACCEPT_FILE = os.path.join(os.path.expanduser("~"), ".forge_gbg_farmer_accepted")
+
+FOOTER_DISCLAIMER = (
+    "Independent, unofficial tool — not affiliated with or endorsed by InnoGames or Forge of "
+    "Empires. Use at your own risk; automation may breach the game's Terms and get your account "
+    "banned. Provided “as is”, no warranty, no liability.")
+
+DISCLAIMER_TEXT = (
+    "Forge GBG Farmer is an independent, unofficial tool. It is NOT affiliated with, endorsed "
+    "by, or associated with InnoGames or Forge of Empires; all trademarks belong to their "
+    "owners.\n\n"
+    "USE AT YOUR OWN RISK. Automating gameplay may violate the game's Terms of Service and can "
+    "result in warnings, suspension, or a permanent ban of your game account. You are solely "
+    "responsible for how you use this app and for any consequences, including account penalties "
+    "or loss of in-game items or progress.\n\n"
+    "The app is provided “as is”, without warranty of any kind. To the maximum extent "
+    "permitted by law, the authors and distributors accept no liability for any damages or "
+    "account actions arising from its use.\n\n"
+    "By clicking “I understand and accept” you agree to these terms.")
 
 
 def _load_license_key() -> str:
@@ -133,6 +152,12 @@ class FarmerWindow(QWidget):
         self.stop_btn.clicked.connect(self._stop)
         btns.addWidget(self.stop_btn)
         root.addLayout(btns)
+
+        # Always-visible liability notice.
+        disc = QLabel(FOOTER_DISCLAIMER)
+        disc.setWordWrap(True)
+        disc.setStyleSheet("color:#888;font-size:11px;")
+        root.addWidget(disc)
 
         self.key_edit.textChanged.connect(self._refresh_license)
 
@@ -254,8 +279,33 @@ def _readonly(text: str) -> QTableWidgetItem:
     return it
 
 
+def _require_acceptance() -> bool:  # pragma: no cover - GUI
+    """Show the disclaimer once; the user must accept before using the app. Returns True to
+    proceed. Acceptance is recorded so it's asked only on the first run."""
+    if os.path.exists(ACCEPT_FILE):
+        return True
+    box = QMessageBox()
+    box.setWindowTitle("Before you start — please read")
+    box.setIcon(QMessageBox.Warning)
+    box.setText("Disclaimer & Terms of Use")
+    box.setInformativeText(DISCLAIMER_TEXT)
+    accept = box.addButton("I understand and accept", QMessageBox.AcceptRole)
+    box.addButton("Quit", QMessageBox.RejectRole)
+    box.exec()
+    if box.clickedButton() is accept:
+        try:
+            with open(ACCEPT_FILE, "w", encoding="utf-8") as fh:
+                fh.write("accepted\n")
+        except OSError:
+            pass
+        return True
+    return False
+
+
 def main(argv=None) -> int:  # pragma: no cover - GUI
     app = QApplication.instance() or QApplication(argv or sys.argv)
+    if not _require_acceptance():
+        return 0
     win = FarmerWindow()
     win.show()
     return app.exec()
