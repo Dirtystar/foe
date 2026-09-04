@@ -36,6 +36,10 @@ bap-forge-autoplay = "bap.forge.action.autoplay:main"
 bap-forge-farm = "bap.forge.action.round_robin:main"
 bap-forge-calibrate = "bap.forge.action.calibrate:main"
 bap-forge-verify = "bap.forge.action.navigate:main"
+bap-forge-open = "bap.forge.action.open_targets:main"
+bap-forge-launch = "bap.forge.action.launcher:main"
+bap-forge-farmer = "bap.forge.app.farmer_gui:main"
+bap-forge-license = "bap.forge.licensing:main"
 
 [project.optional-dependencies]
 # Real vision analyzers (OCR + template matching).
