@@ -157,6 +157,7 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
         try:                                                # whole city in view → entrance visible
             from bap.forge.action.gbg_entrance import zoom_out_city
             zoom_out_city(page)
+            page.wait_for_timeout(900)                       # let the zoom settle before the shot
         except Exception:
             pass
         (ex, ey), how = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fixed fallback
