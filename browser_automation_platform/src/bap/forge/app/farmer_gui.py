@@ -17,7 +17,7 @@ import os
 import subprocess  # noqa: S404
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -135,7 +135,32 @@ class FarmerWindow(QWidget):
         root.addLayout(btns)
 
         self.key_edit.textChanged.connect(self._refresh_license)
+
+        # Poll the farm subprocess so the UI resets itself when farming ends on its own.
+        self._timer = QTimer(self)
+        self._timer.setInterval(1500)
+        self._timer.timeout.connect(self._poll_proc)
+        self._timer.start()
         self._refresh_license()
+
+    def _plan_line(self, lic) -> str:
+        """Tier + price, plus a one-line upsell to the next tier up."""
+        tiers = list(licensing.TIERS.values())
+        cur = licensing.TIERS.get(lic.tier) if lic and lic.is_valid() else None
+        if cur is None:
+            nxt = tiers[0]
+            return f"Free tier (1 world). Upgrade to {nxt.name} for ${nxt.price_usd_month}/mo."
+        higher = [t for t in tiers if t.price_usd_month > cur.price_usd_month]
+        up = f"  Upgrade to {higher[0].name} for ${higher[0].price_usd_month}/mo." if higher else ""
+        worlds = "unlimited" if cur.worlds is None else f"{cur.worlds}"
+        return f"{cur.name} plan — {worlds} worlds, ${cur.price_usd_month}/mo.{up}"
+
+    def _poll_proc(self):
+        if self._proc is not None and self._proc.poll() is not None:
+            self._proc = None
+            self.status.setText("Farming stopped.")
+            self.stop_btn.setEnabled(False)
+            self._refresh_license()
 
     # -- licence ------------------------------------------------------------
     def _current_key(self) -> str:
@@ -148,7 +173,8 @@ class FarmerWindow(QWidget):
         key = self._current_key()
         lic = licensing.verify_key(key) if key else None
         allowed = self._allowed()
-        self.lic_label.setText(licensing.describe(lic) + f"  →  up to {allowed} world(s).")
+        self.lic_label.setText(f"{licensing.describe(lic)}  →  up to {allowed} world(s).\n"
+                               f"{self._plan_line(lic)}")
         enabled = [r for r in self.rows if r.enable.isChecked()]
         over = len(enabled) > allowed
         self.status.setText(
