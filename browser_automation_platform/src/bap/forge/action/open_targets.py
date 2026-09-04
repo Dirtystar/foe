@@ -1030,14 +1030,31 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="round-robin config JSON (per-world tab/limit/pcts); cycles all worlds")
     ap.add_argument("--cycles", type=int, default=1000,
                     help="with --worlds: how many full round-robin cycles (default: all day)")
+    ap.add_argument("--license", default=None,
+                    help="licence key (else FOE_LICENSE_KEY env or a license.key file); caps worlds")
     args = ap.parse_args(argv)
 
     if args.worlds:                                        # PARALLEL farming: one process per world
         import subprocess
         import sys
+
+        from bap.forge import licensing
         cfg = json.load(open(args.worlds, encoding="utf-8"))
         gbg = cfg.get("gbg", {"x": 1650, "y": 250})
         worlds = cfg.get("worlds", [])
+        # Licence gate: cap the number of worlds to the tier. Key from --license, else the
+        # FOE_LICENSE_KEY env var, else a license.key file next to the config; no key = free (1).
+        key = args.license or os.environ.get("FOE_LICENSE_KEY")
+        if not key and os.path.exists("license.key"):
+            with open("license.key", encoding="utf-8") as fh:
+                key = fh.read().strip()
+        allowed = licensing.allowed_worlds(key)
+        print("[license] " + licensing.describe(licensing.verify_key(key) if key else None),
+              flush=True)
+        if len(worlds) > allowed:
+            print(f"[license] config has {len(worlds)} worlds; your plan allows {allowed}. "
+                  f"Farming the first {allowed}. Upgrade to unlock more.", flush=True)
+            worlds = worlds[:allowed]
         print(f"[parallel] launching {len(worlds)} worlds concurrently, {args.cycles} passes each: "
               f"{[w['world'] for w in worlds]}", flush=True)
         procs = []
