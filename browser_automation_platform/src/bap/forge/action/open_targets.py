@@ -43,6 +43,8 @@ def _skip_save(round_key, s):
         pass
 
 from bap.forge.action.locate import clear_marker, locate_province
+from bap.forge.action.native_calibrate import centrality as _centrality
+from bap.forge.action.native_calibrate import native_solve as _native_solve
 from bap.forge.action.navigate import _escape_to_map, _r, _viewport, open_province
 from bap.forge.action.solve import _JS_MARKER_IDS
 from bap.forge.gbg_data.calibration import CalibrationSample, residual, save_calibration, solve_uniform
@@ -405,7 +407,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
              click_here=False, repeat=1, limit=None, inter_ms=150, reload_every=5,
              watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1390, 250),
              farm=False, pcts=None, skip=None, find_gbg=False, utok=None, autobattle=None,
-             connect=None):  # pragma: no cover - live
+             native_calib=False, connect=None):  # pragma: no cover - live
     skip = skip if skip is not None else set()             # provinceIds that never reach a fight
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
@@ -627,34 +629,42 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             print("Couldn't read the map layout — open the GBG map and re-run.", flush=True)
             return None
         flags = layout.flags
-        names = page.evaluate(_JS_NAMES) or {}
+        names = {} if native_calib else (page.evaluate(_JS_NAMES) or {})
+        cent = _centrality(flags) if native_calib else {}    # geometry ring (no Helper names)
         vw, vh = _viewport(page)
         print(f"Map {layout.map_id}: {len(flags)} provinces. Viewport {vw}x{vh}.", flush=True)
 
-        # --- solve transform from marker arrows --------------------------------
-        ids = [int(i) for i in (page.evaluate(_JS_MARKER_IDS) or []) if int(i) in flags]
-        ids = list(dict.fromkeys(ids))
+        # --- solve the transform -----------------------------------------------
         samples = []
-        for pid in ids:
-            xy = locate_province(page, pid)
-            clear_marker(page)
-            if xy is not None:
-                samples.append(CalibrationSample(pid, xy))
-                print(f"  marker {_name(names, pid)} (id={pid}): screen ({_r(xy[0])},{_r(xy[1])})",
-                      flush=True)
-        if len(samples) >= 2:
-            transform = solve_uniform(layout, samples)
-        elif len(samples) == 1:
-            # scale has been exactly 1.0 every run (map at 1:1 zoom); one marker fixes the offset
-            s = samples[0]
-            fx, fy = flags[s.province_id]
-            transform = MapTransform(1.0, 1.0, s.screen[0] - fx, s.screen[1] - fy)
-            print("Only 1 markable province — assuming scale=1.0 (observed every run); offset "
-                  "from that one marker.", flush=True)
+        if native_calib:
+            # FoE-Helper-free: probe the canvas, read which province each click opens, and fit.
+            transform = _native_solve(page, layout, latest, _hover_click, _escape_to_map, vw, vh)
+            if transform is None:
+                return None
         else:
-            print("No markable provinces found. Open the GBG map with the FoE Helper box "
-                  "visible.", flush=True)
-            return None
+            # from FoE Helper marker arrows
+            ids = [int(i) for i in (page.evaluate(_JS_MARKER_IDS) or []) if int(i) in flags]
+            ids = list(dict.fromkeys(ids))
+            for pid in ids:
+                xy = locate_province(page, pid)
+                clear_marker(page)
+                if xy is not None:
+                    samples.append(CalibrationSample(pid, xy))
+                    print(f"  marker {_name(names, pid)} (id={pid}): screen "
+                          f"({_r(xy[0])},{_r(xy[1])})", flush=True)
+            if len(samples) >= 2:
+                transform = solve_uniform(layout, samples)
+            elif len(samples) == 1:
+                # scale has been exactly 1.0 every run (map at 1:1); one marker fixes the offset
+                s = samples[0]
+                fx, fy = flags[s.province_id]
+                transform = MapTransform(1.0, 1.0, s.screen[0] - fx, s.screen[1] - fy)
+                print("Only 1 markable province — assuming scale=1.0; offset from that marker.",
+                      flush=True)
+            else:
+                print("No markable provinces found. Open the GBG map with the FoE Helper box "
+                      "visible, or run with --native-calib.", flush=True)
+                return None
         save_calibration(store, world, layout.map_id, transform)
         print(f"Transform: scale={transform.scale_x:.4f} offset=({transform.off_x:.0f},"
               f"{transform.off_y:.0f})  residual={residual(layout, transform, samples):.1f}px",
@@ -675,22 +685,29 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         round_key = f"{world}::{reader.snapshot.ends_at if reader.snapshot else '?'}"
         skip.update(_skip_load(round_key))                 # mutate in place (no rebind in closure)
         targets = [t for t in targets if t.province_id not in skip]  # learned non-fightable
-        # Cíl (leader focus target) overrides the % allowlist and gets absolute priority
-        try:
-            cil = {int(i) for i in (page.evaluate(_JS_CIL) or [])}
-        except Exception:
+        # Cíl (leader focus target) overrides the % allowlist and gets absolute priority.
+        # Not available without FoE Helper (no game API exposes the marks) → empty in native mode.
+        if native_calib:
             cil = set()
+        else:
+            try:
+                cil = {int(i) for i in (page.evaluate(_JS_CIL) or [])}
+            except Exception:
+                cil = set()
         if cil:
             have = {t.province_id for t in targets}
             for t in reader.targets(include_locked=False):       # all %, add Cíl even if % not allowed
                 if t.province_id in cil and t.province_id not in skip and t.province_id not in have:
                     targets.append(t)
             print(f"[cíl] leader targets prioritised: {sorted(cil)}", flush=True)
-        # order: Cíl first, then lowest % (20→40→60), then centre rings (…1 before …4)
+        # order: Cíl first, then lowest % (20→40→60), then centre first (name ring, or geometry
+        # centrality in native mode), then id.
+        def _ring_key(pid):
+            return cent.get(pid, 9e9) if native_calib else _ring(names.get(str(pid), ""))
         targets.sort(key=lambda t: (
             0 if t.province_id in cil else 1,
             t.gain_attrition_chance if t.gain_attrition_chance is not None else 999,
-            _ring(names.get(str(t.province_id), "")),
+            _ring_key(t.province_id),
             t.province_id))
         targets = targets[:(n if not farm else len(targets))]
         print(f"\nAttackable now ({len(targets)}, allowed %={pcts or 'all'}, skip={sorted(skip)}): "
@@ -1034,6 +1051,9 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                     help="licence key (else FOE_LICENSE_KEY env or a license.key file); caps worlds")
     ap.add_argument("--email", default=None,
                     help="purchase email for email-bound keys (else FOE_LICENSE_EMAIL)")
+    ap.add_argument("--native-calib", action="store_true", dest="native_calib",
+                    help="calibrate the map WITHOUT FoE Helper (probe clicks → provinceId); "
+                         "drops name/ring/Cíl too. Experimental — see docs/DEHELPER_PLAN.md")
     args = ap.parse_args(argv)
 
     if args.worlds:                                        # PARALLEL farming: one process per world
@@ -1072,6 +1092,8 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                 cmd += ["--limit", str(w["limit"])]
             if w.get("pcts"):
                 cmd += ["--pcts", ",".join(str(x) for x in w["pcts"])]
+            if args.native_calib:
+                cmd += ["--native-calib"]
             print(f"[parallel] → {w['world']}", flush=True)
             procs.append((w["world"], subprocess.Popen(cmd)))
             time.sleep(2)                                   # stagger CDP connects / GBG entries
@@ -1101,7 +1123,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                         reload_every=args.reload_every, watch=args.watch,
                         reload_first=args.reload_first, enter_gbg=args.enter_gbg,
                         gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts, skip=_skip,
-                        find_gbg=args.find_gbg,
+                        find_gbg=args.find_gbg, native_calib=args.native_calib,
                         utok=((args.ux, args.uy) if args.ux and args.uy else None),
                         autobattle=((args.abx, args.aby) if args.abx and args.aby else None))
 
