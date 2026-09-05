@@ -74,46 +74,62 @@ _MARK_KEY = __import__("re").compile(
     r"strateg|priorit|\btarget|ignore|focus|\bstop|annotat|\bnote|sector|\bhand|\bmark", __import__("re").I)
 
 
-def scan_marks(har: dict) -> None:
-    """Find where the leader's Stop/Cíl marks live: list every GuildBattleground* call, and print
-    any object anywhere in /game/json whose keys look like a sector mark/strategy."""
-    calls = {}
-    hits = []
-    seen = set()
-
-    def _walk(node, path):
-        if isinstance(node, dict):
-            if any(_MARK_KEY.search(k) for k in node.keys()):
-                sig = tuple(sorted(node.keys()))
-                if sig not in seen:
-                    seen.add(sig)
-                    hits.append((path, node))
-            for k, v in node.items():
-                _walk(v, f"{path}.{k}")
-        elif isinstance(node, list):
-            for v in node[:3]:               # a few items is enough to see the shape
-                _walk(v, path + "[]")
-
+def _gbg_response(har, method):
+    """Latest responseData for a GuildBattleground* method (getBattleground / getState / …)."""
+    found = None
     for _url, body in _iter_game_json(har):
         for it in _server_items(body):
-            rc = it.get("requestClass") or ""
-            rm = it.get("requestMethod") or ""
+            if it.get("requestMethod") == method and "battleground" in str(
+                    it.get("requestClass", "")).lower():
+                found = it.get("responseData", it)
+    return found
+
+
+def scan_marks(har: dict) -> None:
+    """Find the leader Stop/Cíl marks by STRUCTURE, not key name (the field name is unknown): list
+    the GBG calls, dump getState in full, and in getBattleground flag provinces that carry any key
+    the others don't (the marked ones) — that extra field is the mark."""
+    calls = {}
+    for _url, body in _iter_game_json(har):
+        for it in _server_items(body):
+            rc, rm = it.get("requestClass") or "", it.get("requestMethod") or ""
             if "battleground" in str(rc).lower():
                 calls[f"{rc}.{rm}"] = calls.get(f"{rc}.{rm}", 0) + 1
-            _walk(it.get("responseData", it), rc or "?")
-
     print("=== GuildBattleground* calls seen ===", flush=True)
     for k, n in sorted(calls.items()):
         print(f"  {n:3}x  {k}", flush=True)
-    print(f"\n=== objects with mark/strategy-like keys: {len(hits)} ===", flush=True)
-    for path, obj in hits[:25]:
-        keys = ", ".join(list(obj.keys())[:12])
-        print(f"  [{path}]  keys: {keys}", flush=True)
-        print("    " + json.dumps(obj, ensure_ascii=False)[:300], flush=True)
-    if not hits:
-        print("  none — the marks may only appear when set. Record the HAR on a map the leader has "
-              "marked (open GBG, and open the guild strategy/marks panel if there is one).",
+
+    # getState — likely holds guild-level marks; dump it whole (it's small).
+    state = _gbg_response(har, "getState")
+    print("\n=== GuildBattlegroundStateService.getState responseData ===", flush=True)
+    print(json.dumps(state, ensure_ascii=False, indent=1)[:2500] if state is not None
+          else "  (not in this HAR)", flush=True)
+
+    # getBattleground — find per-province fields that only marked sectors carry.
+    bg = _gbg_response(har, "getBattleground") or {}
+    provs = ((bg.get("map") or {}).get("provinces")) if isinstance(bg, dict) else None
+    print("\n=== getBattleground map/top-level keys ===", flush=True)
+    if isinstance(bg, dict):
+        print("  responseData keys:", ", ".join(bg.keys()), flush=True)
+        if isinstance(bg.get("map"), dict):
+            print("  map keys:", ", ".join(bg["map"].keys()), flush=True)
+    if isinstance(provs, list) and provs:
+        baseline = set(provs[0].keys())
+        for p in provs:
+            baseline &= set(p.keys())            # keys present on EVERY province
+        print(f"\n=== provinces: {len(provs)}; baseline keys: "
+              f"{', '.join(sorted(baseline))} ===", flush=True)
+        extras = [p for p in provs if set(p.keys()) - baseline]
+        print(f"=== provinces with EXTRA keys (likely the marked ones): {len(extras)} ===",
               flush=True)
+        for p in extras[:12]:
+            print("  " + json.dumps(p, ensure_ascii=False)[:300], flush=True)
+        if not extras:
+            print("  none — marks aren't a per-province field here. Check the getState dump above, "
+                  "or open the guild strategy panel while recording so its request is captured.",
+                  flush=True)
+    else:
+        print("  (no provinces array found in getBattleground)", flush=True)
 
 
 def method_fingerprint(har: dict) -> list[tuple[str, str]]:
