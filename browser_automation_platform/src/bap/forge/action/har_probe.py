@@ -68,6 +68,54 @@ def _server_items(body):
     return []
 
 
+# Keys that would carry a leader's sector mark (Cíl / Stop / strategy) — the marks are native
+# game data, readable by any guild member, so they must ride on some /game/json field.
+_MARK_KEY = __import__("re").compile(
+    r"strateg|priorit|\btarget|ignore|focus|\bstop|annotat|\bnote|sector|\bhand|\bmark", __import__("re").I)
+
+
+def scan_marks(har: dict) -> None:
+    """Find where the leader's Stop/Cíl marks live: list every GuildBattleground* call, and print
+    any object anywhere in /game/json whose keys look like a sector mark/strategy."""
+    calls = {}
+    hits = []
+    seen = set()
+
+    def _walk(node, path):
+        if isinstance(node, dict):
+            if any(_MARK_KEY.search(k) for k in node.keys()):
+                sig = tuple(sorted(node.keys()))
+                if sig not in seen:
+                    seen.add(sig)
+                    hits.append((path, node))
+            for k, v in node.items():
+                _walk(v, f"{path}.{k}")
+        elif isinstance(node, list):
+            for v in node[:3]:               # a few items is enough to see the shape
+                _walk(v, path + "[]")
+
+    for _url, body in _iter_game_json(har):
+        for it in _server_items(body):
+            rc = it.get("requestClass") or ""
+            rm = it.get("requestMethod") or ""
+            if "battleground" in str(rc).lower():
+                calls[f"{rc}.{rm}"] = calls.get(f"{rc}.{rm}", 0) + 1
+            _walk(it.get("responseData", it), rc or "?")
+
+    print("=== GuildBattleground* calls seen ===", flush=True)
+    for k, n in sorted(calls.items()):
+        print(f"  {n:3}x  {k}", flush=True)
+    print(f"\n=== objects with mark/strategy-like keys: {len(hits)} ===", flush=True)
+    for path, obj in hits[:25]:
+        keys = ", ".join(list(obj.keys())[:12])
+        print(f"  [{path}]  keys: {keys}", flush=True)
+        print("    " + json.dumps(obj, ensure_ascii=False)[:300], flush=True)
+    if not hits:
+        print("  none — the marks may only appear when set. Record the HAR on a map the leader has "
+              "marked (open GBG, and open the guild strategy/marks panel if there is one).",
+              flush=True)
+
+
 def method_fingerprint(har: dict) -> list[tuple[str, str]]:
     """Ordered (requestClass, requestMethod) across every /game/json response item.
 
@@ -149,13 +197,17 @@ def gbg_entrance_candidates(entities: list[dict]) -> list[dict]:
     return out
 
 
-def run(path: str, grep: str | None = None, dump_id=None) -> int:
+def run(path: str, grep: str | None = None, dump_id=None, marks=False) -> int:
     try:
         with open(path, encoding="utf-8") as fh:
             har = json.load(fh)
     except (OSError, ValueError) as exc:
         print(f"Could not read HAR {path}: {exc}", flush=True)
         return 1
+
+    if marks:
+        scan_marks(har)
+        return 0
 
     if dump_id is not None:
         want = str(dump_id)
@@ -235,8 +287,10 @@ def main(argv=None) -> int:
     ap.add_argument("--grep", default=None, help="only print fingerprint lines containing this")
     ap.add_argument("--dump-id", default=None, help="print the full JSON of the city entity "
                     "with this id (learn the entrance's schema)")
+    ap.add_argument("--marks", action="store_true",
+                    help="find the leader Stop/Cíl sector marks in the /game/json (native, no Helper)")
     args = ap.parse_args(argv)
-    return run(args.har, grep=args.grep, dump_id=args.dump_id)
+    return run(args.har, grep=args.grep, dump_id=args.dump_id, marks=args.marks)
 
 
 if __name__ == "__main__":

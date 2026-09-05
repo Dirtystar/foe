@@ -36,32 +36,29 @@ doesn't need names. Replace name-parsing with **geometry**: rank provinces by di
 map centroid (`native_calibrate.centrality`) — central sectors first, straight from `map/data`
 flags. Logs just show `#id`.
 
-### 4. Cíl / Stop leader marks — the hard part ⚠️
-The leader's Cíl (fight-this) and Stop (never-fight) marks are **not in `getBattleground`** and no
-GBG service method in the client exposes them (confirmed via the live client probe). They appear to
-be a **FoE-Helper-only overlay** (guild-shared through the Helper's own channel), so there is no
-native game API to read them.
+### 4. Cíl / Stop leader marks — native after all ✅ (find the field)
+Correction: Stop/Cíl are a **native game feature** — a guild member with the right sets them, but
+**every guild member can read them** without FoE Helper. So the marks ride on some `/game/json`
+field; they were simply absent from our one sample (an unmarked map).
 
-Options, cheapest first:
-- **A. Drop the feature.** Fight purely by %, then centrality. Simple, fully Helper-free. Lose the
-  leader-coordination nicety.
-- **B. Manual marks in our app.** Let the user type "always fight" / "never fight" province ids (or
-  pick on a map view) per world. Replaces the leader overlay with our own — Helper-free, and it's
-  our data.
-- **C. Find a real source.** Record a HAR on a map the leader has marked and diff it — if the marks
-  ride on a guild message/annotation endpoint, we can read them natively. Unknown until we look.
-- **D. Cooperation.** If the marks only live in FoE Helper, integrate with it *for this one feature*
-  (or partner with its authors) while everything else runs native.
+Plan: record a HAR on a map the leader **has** marked and run
+``python -m bap.forge.action.har_probe marked.har --marks`` — it lists the GuildBattleground* calls
+and prints any object whose keys look like a sector mark/strategy (e.g. a per-province
+``sectorStrategy`` / priority field, or a map-level marks array). Once we know the field, parse it
+into the model and honour it natively:
+- **Stop** → add to the skip set (never fight), same effect as today.
+- **Cíl** → absolute priority, same ordering as today.
 
-**Recommendation:** ship **A or B now** (fully Helper-free), keep **C** as a quick HAR experiment,
-and consider **D** only if the leader-marks feature proves important enough to users.
+No FoE Helper, no cooperation needed. `_JS_CIL` gets deleted along with the rest.
 
 ## Rollout (no risk to the working path)
 1. Land `native_calibrate` behind an opt-in `--native-calib` flag; keep the Helper path default.
 2. Live-test native calibration on one world; compare `residual` to the Helper solve.
 3. Make native the **fallback** when Helper markers are absent, then the default.
 4. Swap `_in_gbg` and `_ring` for the native versions.
-5. Decide Cíl (A/B/C/D) and remove the last `tr[data-id]` reads.
+5. Find the marks field from a marked-map HAR, parse Stop/Cíl natively, and remove the last
+   `tr[data-id]` reads.
 
-Result: items 1–3 are straightforward and mostly built; only **Cíl (4)** may need cooperation —
-matching the "if it's too big, we'll consider cooperation" call.
+Result: all four dependencies are replaceable with native game data — no FoE Helper and no
+cooperation required. The only outstanding unknown is the exact marks field name, which one
+marked-map HAR reveals.
