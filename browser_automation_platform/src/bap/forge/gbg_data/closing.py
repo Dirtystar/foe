@@ -9,9 +9,13 @@ This is pure data (independent of how many times *we* clicked — many players h
 province), exactly what we want. These helpers read our guild's progress and say whether to
 **leave** a province alone, and at most how many fights we may still do on it (``room``).
 
-Note: ``getBattleground`` only refreshes on GBG entry, so ``progress`` here is the value at
-entry. We therefore gate conservatively — skip provinces already within the margin, and cap a
-province's fight loop to the room measured at entry. (Live per-fight refinement is a follow-up.)
+Confirmed live (MCP capture): a province closes when ``progress == maxProgress``; each **won fight
+adds exactly +1**; our guild is ``currentParticipantId``. Crucially there is **no live progress
+feed** — ``BattlefieldService.startByBattleType`` returns only the battle log, and nothing
+refreshes ``conquestProgress`` until GBG is left and re-entered (even the game client has no live
+counter). So **entry-time gating is the only possibility**: cap a province to the room measured at
+entry; the farmer's per-pass GBG re-entry re-reads fresh progress (the "re-enter to confirm" rule).
+Counting fights *started* (>= fights won) only ever leaves a bigger margin, so it stays safe.
 """
 
 from __future__ import annotations
