@@ -107,6 +107,33 @@ def _centre_button(vw, vh, off):
     return (round(vw / 2) + off[0], round(vh / 2) + off[1])
 
 
+def _fit_window(page, target_w=1500, max_ok=1600):  # pragma: no cover - live
+    """Make the browser window narrow enough that the GBG entrance renders at a clickable size.
+    We connect over CDP, so we can resize the real Chrome window (all tabs share it). Only shrinks
+    when it's too wide; a too-wide window renders the whole city — and the tiny entrance — at once,
+    so the entrance click won't register (scale < ~0.26)."""
+    try:
+        vw = page.evaluate("() => window.innerWidth") or 0
+    except Exception:
+        return
+    if not vw or vw <= max_ok:
+        return
+    try:
+        cdp = page.context.new_cdp_session(page)
+        info = cdp.send("Browser.getWindowForTarget")
+        wid, bounds = info["windowId"], info.get("bounds", {})
+        h = bounds.get("height") or 900
+        cdp.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}})
+        cdp.send("Browser.setWindowBounds",
+                 {"windowId": wid, "bounds": {"width": target_w, "height": h}})
+        page.wait_for_timeout(700)
+        nvw = page.evaluate("() => window.innerWidth")
+        print(f"[window] resized {vw}→{nvw}px wide so the GBG entrance is clickable.", flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[window] couldn't auto-resize ({exc}) — narrow the window to ~1500px manually.",
+              flush=True)
+
+
 def _hover_click(page, x, y):  # pragma: no cover - live
     """Click (x, y) the way the FoE canvas needs it: a real mousemove trajectory to set the
     engine's hovered-target state, then press-hold-release. Plain CDP clicks do NOT register."""
@@ -472,6 +499,8 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             page.bring_to_front()
         except Exception:
             pass
+        if farm or enter_gbg:
+            _fit_window(page)                          # narrow a too-wide window so entry works
 
         if grid_only:
             # Just label the current screen — for reading a canvas button's coordinate.
