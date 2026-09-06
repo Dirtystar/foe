@@ -36,8 +36,15 @@ doesn't need names. Replace name-parsing with **geometry**: rank provinces by di
 map centroid (`native_calibrate.centrality`) — central sectors first, straight from `map/data`
 flags. Logs just show `#id`.
 
-### 4. Cíl / Stop leader marks — native after all ✅ (find the field)
-Correction: Stop/Cíl are a **native game feature** — a guild member with the right sets them, but
+### 4. Cíl / Stop leader marks — DONE ✅ (native, no Helper)
+**Found and wired.** The marks live in `getBattleground` (which we already parse) at
+`battlegroundParticipants[<ours>].signals[]` — `{provinceId, signal}` where `signal="focus"` is
+**Cíl/attack** and `"ignore"` is **Stop**. Parsed into `Battleground.focus_ids` / `ignore_ids`
+(preferring our own `currentParticipantId`); `open_targets` now applies **Stop → skip** and
+**Cíl → absolute priority** in *both* the Helper and native paths. `_JS_CIL` deleted. The
+`setSignal` write endpoint is **never** called — read-only.
+
+_How it was found:_ Stop/Cíl are a **native game feature** — a guild member with the right sets them, but
 **every guild member can read them** without FoE Helper. So the marks ride on some `/game/json`
 field; they were simply absent from our one sample (an unmarked map).
 

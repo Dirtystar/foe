@@ -113,6 +113,42 @@ def parse_player_from_game_json(batch) -> PlayerState | None:
     return None
 
 
+def _parse_signals(response_data: dict, me: int | None):
+    """Native guild sector marks from ``battlegroundParticipants[].signals``:
+    ``signal='focus'`` → Cíl/attack, ``'ignore'`` → Stop. Prefer our own guild's marks
+    (participant == ``currentParticipantId``); if none match, fall back to all participants'
+    (marks are guild-shared, so in practice there's one relevant set). Returns (focus, ignore)
+    tuples of province ids."""
+    def _collect(only_me: bool):
+        focus, ignore = [], []
+        for p in (response_data.get("battlegroundParticipants") or []):
+            if not isinstance(p, dict):
+                continue
+            pid = _as_int(p.get("participantId"))
+            if pid is None:
+                pid = _as_int(p.get("id"))
+            if only_me and me is not None and pid != me:
+                continue
+            for s in (p.get("signals") or []):
+                if not isinstance(s, dict):
+                    continue
+                prov = _as_int(s.get("provinceId"))
+                if prov is None:
+                    continue
+                sig = s.get("signal")
+                if sig == "focus":
+                    focus.append(prov)
+                elif sig == "ignore":
+                    ignore.append(prov)
+        return focus, ignore
+
+    focus, ignore = _collect(only_me=True)
+    if not focus and not ignore:
+        focus, ignore = _collect(only_me=False)     # key mismatch / marks under another participant
+    # de-dup, keep order stable
+    return tuple(dict.fromkeys(focus)), tuple(dict.fromkeys(ignore))
+
+
 def parse_battleground(response_data, *, server_time: int | None = None,
                        observed_at: str | None = None) -> Battleground | None:
     """Parse a getBattleground ``responseData`` dict into a :class:`Battleground`.
@@ -131,6 +167,7 @@ def parse_battleground(response_data, *, server_time: int | None = None,
                     participants[part.participant_id] = part
         player = parse_player(response_data.get("currentPlayerParticipant") or {})
         me = _as_int(response_data.get("currentParticipantId"))
+        focus_ids, ignore_ids = _parse_signals(response_data, me)
         if me is not None:
             player = PlayerState(
                 participant_id=me, attrition_level=player.attrition_level,
@@ -148,6 +185,8 @@ def parse_battleground(response_data, *, server_time: int | None = None,
                 x for x in (_as_int(i) for i in (pending.get("provinceIds") or [])) if x is not None),
             server_time=server_time,
             observed_at=observed_at or _now_iso(),
+            focus_ids=focus_ids,
+            ignore_ids=ignore_ids,
         )
     except Exception:  # never crash the reader on a shape we didn't expect
         logger.warning("failed to parse getBattleground payload", exc_info=True)

@@ -89,6 +89,10 @@ class Battleground:
     server_time: int | None = None                  # game's own clock, if the batch carried it
     observed_at: str = ""                            # ISO timestamp we parsed it (freshness)
     raw_source: str = "game_json"
+    # Native guild sector marks (from battlegroundParticipants[].signals) — leader-set, guild-
+    # shared, readable by any member. focus = "Cíl/Útok" (prioritise); ignore = "Stop" (never fight).
+    focus_ids: tuple[int, ...] = ()
+    ignore_ids: tuple[int, ...] = ()
 
     def owner_of(self, province: Province) -> Participant | None:
         if province.owner_id is None:

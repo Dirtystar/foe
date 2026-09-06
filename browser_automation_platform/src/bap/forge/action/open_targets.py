@@ -55,11 +55,8 @@ _JS_NAMES = ("() => { const m = {}; document.querySelectorAll('tr[data-id]').for
              " const b = tr.querySelector('.prov-name b');"
              " if (b) m[tr.getAttribute('data-id')] = b.textContent.trim(); }); return m; }")
 
-
-# Leader "Cíl" (focus target) marks from FoE Helper — those rows carry a .focus-target img.
-_JS_CIL = ("() => Array.from(document.querySelectorAll('tr[data-id]'))"
-           ".filter(tr => tr.querySelector('.focus-target'))"
-           ".map(tr => parseInt(tr.getAttribute('data-id')))")
+# Leader Cíl/Stop marks are now read NATIVELY from getBattleground
+# (battlegroundParticipants[].signals: focus=Cíl, ignore=Stop) — no FoE Helper DOM needed.
 
 
 def _name(names, pid):
@@ -684,16 +681,15 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         # skip-list is keyed by the ROUND (world + endsAt) so it resets when the map changes
         round_key = f"{world}::{reader.snapshot.ends_at if reader.snapshot else '?'}"
         skip.update(_skip_load(round_key))                 # mutate in place (no rebind in closure)
-        targets = [t for t in targets if t.province_id not in skip]  # learned non-fightable
+        # Native leader marks from getBattleground (no FoE Helper): Stop = never fight, Cíl = focus.
+        bg_now = reader.snapshot
+        stop_ids = set(bg_now.ignore_ids) if bg_now else set()
+        cil = set(bg_now.focus_ids) if bg_now else set()
+        if stop_ids:
+            skip.update(stop_ids)                          # leader "Stop" → never fight this round
+            print(f"[stop] leader Stop sectors skipped: {sorted(stop_ids)}", flush=True)
+        targets = [t for t in targets if t.province_id not in skip]  # learned/Stop non-fightable
         # Cíl (leader focus target) overrides the % allowlist and gets absolute priority.
-        # Not available without FoE Helper (no game API exposes the marks) → empty in native mode.
-        if native_calib:
-            cil = set()
-        else:
-            try:
-                cil = {int(i) for i in (page.evaluate(_JS_CIL) or [])}
-            except Exception:
-                cil = set()
         if cil:
             have = {t.province_id for t in targets}
             for t in reader.targets(include_locked=False):       # all %, add Cíl even if % not allowed
