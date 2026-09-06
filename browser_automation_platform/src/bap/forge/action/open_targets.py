@@ -108,29 +108,29 @@ def _centre_button(vw, vh, off):
 
 
 def _fit_window(page, target_w=1500, max_ok=1600):  # pragma: no cover - live
-    """Make the browser window narrow enough that the GBG entrance renders at a clickable size.
-    We connect over CDP, so we can resize the real Chrome window (all tabs share it). Only shrinks
-    when it's too wide; a too-wide window renders the whole city — and the tiny entrance — at once,
-    so the entrance click won't register (scale < ~0.26)."""
+    """Force a clickable-size viewport for the GBG entrance. A too-wide viewport renders the whole
+    city — and the tiny entrance — at once (scale < ~0.26) so the click won't register. Physically
+    resizing the window is unreliable (OS/DPR clamps it), so instead override the CSS viewport via
+    CDP ``Emulation.setDeviceMetricsOverride`` (per tab): innerWidth → ~1500 and deviceScaleFactor
+    → 1 (screenshots then map 1:1 to clicks). No window is physically resized."""
     try:
         vw = page.evaluate("() => window.innerWidth") or 0
+        vh = int(page.evaluate("() => window.innerHeight") or 900)
     except Exception:
         return
     if not vw or vw <= max_ok:
         return
     try:
         cdp = page.context.new_cdp_session(page)
-        info = cdp.send("Browser.getWindowForTarget")
-        wid, bounds = info["windowId"], info.get("bounds", {})
-        h = bounds.get("height") or 900
-        cdp.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}})
-        cdp.send("Browser.setWindowBounds",
-                 {"windowId": wid, "bounds": {"width": target_w, "height": h}})
-        page.wait_for_timeout(700)
+        cdp.send("Emulation.setDeviceMetricsOverride",
+                 {"width": target_w, "height": vh, "deviceScaleFactor": 1, "mobile": False,
+                  "screenWidth": target_w, "screenHeight": vh})
+        page.wait_for_timeout(900)
         nvw = page.evaluate("() => window.innerWidth")
-        print(f"[window] resized {vw}→{nvw}px wide so the GBG entrance is clickable.", flush=True)
+        print(f"[window] viewport override {vw}→{nvw}px wide (dpr 1) so the entrance is clickable.",
+              flush=True)
     except Exception as exc:  # noqa: BLE001
-        print(f"[window] couldn't auto-resize ({exc}) — narrow the window to ~1500px manually.",
+        print(f"[window] couldn't set viewport ({exc}) — narrow the window to ~1500px manually.",
               flush=True)
 
 
