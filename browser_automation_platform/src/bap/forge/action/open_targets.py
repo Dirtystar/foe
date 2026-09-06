@@ -499,8 +499,9 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             page.bring_to_front()
         except Exception:
             pass
-        if farm or enter_gbg:
-            _fit_window(page)                          # narrow a too-wide window so entry works
+        # NOTE: auto-sizing the viewport via CDP (window resize / Emulation override) proved
+        # unreliable on a live attached Chrome, so the deterministic fix is the launcher's
+        # fixed-size window (--window-size 1536). _fit_window kept for reference, not called.
 
         if grid_only:
             # Just label the current screen — for reading a canvas button's coordinate.
