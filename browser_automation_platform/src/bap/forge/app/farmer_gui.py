@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSlider,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -36,12 +37,14 @@ from PySide6.QtWidgets import (
 )
 
 from bap.forge import licensing
+from bap.forge import safety as _safety
 
 WORLDS = ["cz1", "cz2", "cz3", "cz4", "cz5", "cz6", "cz7", "cz8"]
 PCTS = [20, 40, 60, 80, 100]
 LICENSE_FILE = "license.key"
 EMAIL_FILE = "license.email"
 CONFIG_FILE = "worlds_farm.json"
+SAFETY_FILE = "safety.level"
 ACCEPT_FILE = os.path.join(os.path.expanduser("~"), ".forge_gbg_farmer_accepted")
 
 FOOTER_DISCLAIMER = (
@@ -69,6 +72,13 @@ def _read_file(path: str) -> str:
             return fh.read().strip()
     except OSError:
         return ""
+
+
+def _read_int(path: str, default: int) -> int:
+    try:
+        return int(_read_file(path))
+    except (TypeError, ValueError):
+        return default
 
 
 def _load_license_key() -> str:
@@ -126,6 +136,24 @@ class FarmerWindow(QWidget):
         lic_box.addWidget(self.lic_label, 2, 0, 1, 3)
         root.addLayout(lic_box)
 
+        # --- safety / stealth slider --------------------------------------
+        saf = QHBoxLayout()
+        saf.addWidget(QLabel("Safety:"))
+        self.safety_slider = QSlider(Qt.Horizontal)
+        self.safety_slider.setMinimum(0)
+        self.safety_slider.setMaximum(len(_safety.LEVELS) - 1)
+        self.safety_slider.setValue(_read_int(SAFETY_FILE, _safety.DEFAULT_LEVEL))
+        self.safety_slider.setTickPosition(QSlider.TicksBelow)
+        self.safety_slider.setTickInterval(1)
+        saf.addWidget(QLabel("Fastest / riskiest"))
+        saf.addWidget(self.safety_slider, 1)
+        saf.addWidget(QLabel("Safest"))
+        root.addLayout(saf)
+        self.safety_label = QLabel()
+        self.safety_label.setWordWrap(True)
+        root.addWidget(self.safety_label)
+        self.safety_slider.valueChanged.connect(self._refresh_safety)
+
         # --- worlds table --------------------------------------------------
         cols = ["Farm", "World", "Browser tab", "Attrition limit"] + [f"{p}%" for p in PCTS]
         self.table = QTableWidget(len(WORLDS), len(cols))
@@ -175,6 +203,19 @@ class FarmerWindow(QWidget):
         self._timer.timeout.connect(self._poll_proc)
         self._timer.start()
         self._refresh_license()
+        self._refresh_safety()
+
+    def _refresh_safety(self, *_):
+        lvl = _safety.get(self.safety_slider.value())
+        risky = lvl.idx <= 1
+        colour = "#c0392b" if risky else ("#b8860b" if lvl.idx == 2 else "#2e7d32")
+        self.safety_label.setText(f"<b>{lvl.label}</b> — {lvl.description}<br>"
+                                  f"<span style='color:{colour}'>⚠ {lvl.warning}</span>")
+        try:
+            with open(SAFETY_FILE, "w", encoding="utf-8") as fh:
+                fh.write(str(lvl.idx))
+        except OSError:
+            pass
 
     def _plan_line(self, lic) -> str:
         """Tier + price, plus a one-line upsell to the next tier up."""
@@ -264,7 +305,7 @@ class FarmerWindow(QWidget):
         with open(CONFIG_FILE, "w", encoding="utf-8") as fh:
             json.dump(cfg, fh, indent=2)
         cmd = [sys.executable, "-m", "bap.forge.action.open_targets",
-               "--worlds", CONFIG_FILE]
+               "--worlds", CONFIG_FILE, "--safety", str(self.safety_slider.value())]
         if self._current_key():
             cmd += ["--license", self._current_key()]
         if self.email_edit.text().strip():

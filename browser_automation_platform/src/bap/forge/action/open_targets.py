@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import json
 import os
+import random as _random
 import re
 import time
+
+from bap.forge import safety as _safety
 
 _SKIP_FILE = "gbg_skip.json"
 
@@ -41,6 +44,29 @@ def _skip_save(round_key, s):
         json.dump(d, open(_SKIP_FILE, "w", encoding="utf-8"))
     except Exception:
         pass
+
+
+_DAILY_FILE = "gbg_daily.json"
+
+
+def _daily_load():
+    """Per-world, per-local-day fight counts for the safety daily cap."""
+    try:
+        return json.load(open(_DAILY_FILE, encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _daily_add(world, n):
+    """Add ``n`` fights to today's counter for ``world`` and persist. Returns the new total."""
+    d = _daily_load()
+    key = _safety.daily_key(str(world))
+    d[key] = int(d.get(key, 0)) + int(n)
+    try:
+        json.dump(d, open(_DAILY_FILE, "w", encoding="utf-8"))
+    except Exception:
+        pass
+    return d[key]
 
 from bap.forge.action.locate import clear_marker, locate_province
 from bap.forge.action.native_calibrate import centrality as _centrality
@@ -224,11 +250,14 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
 
 
 def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
-                    inter_ms, reload_every, stall_stop=12):  # pragma: no cover - live
+                    inter_ms, reload_every, stall_stop=12, safety=None,
+                    day_room=None):  # pragma: no cover - live
     """Fight the province currently on the army screen: click Automatická bitva each iteration,
-    press R (Reload units) every ``reload_every`` fights, stop at the attrition ``limit`` or
-    after ``stall_stop`` consecutive non-starting clicks (province conquered / screen changed).
-    Returns "limit" if the attrition limit was reached, else "done"."""
+    press R (Reload units) every ``reload_every`` fights, stop at the attrition ``limit``, the
+    per-world daily cap (``day_room`` fights left today), or after ``stall_stop`` consecutive
+    non-starting clicks. With a ``safety`` level, the cadence is jittered and occasional harmless
+    idle "mistakes" are added (never anything that can desync). Returns "limit"/"left"/"done";
+    stashes the battle count in ``latest['fought']``."""
     abx, aby = autobattle
     # Set hover once (the canvas needs a real mousemove), then rapid down/up at the same point —
     # like the manual F10 cadence (click + R every N), instead of a full trajectory per fight.
@@ -240,8 +269,11 @@ def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
     except Exception:
         pass
     latest["methods"] = []
+    latest["fought"] = 0
     misses = 0
     started_total = 0
+    next_reload = (_safety.jittered_reload(safety) if safety else reload_every)
+    since_reload = 0
     for i in range(repeat):
         if i % 8 == 0:                                     # periodic safety checks (kept cheap)
             if not _in_gbg(page):
@@ -251,18 +283,28 @@ def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
             if limit is not None and lvl is not None and lvl >= limit:
                 print(f"  attrition {lvl} ≥ limit {limit} — STOP.", flush=True)
                 return "limit"
+        if day_room is not None and started_total >= day_room:
+            print(f"  daily cap reached (+{started_total} today) — stopping this world.", flush=True)
+            latest["fought"] = started_total
+            return "limit"
         seen = len(latest["methods"])
         try:
             page.mouse.down()                              # click at the hovered auto-battle button
             page.mouse.up()
         except Exception:
             pass
-        if reload_every and (i + 1) % reload_every == 0:
+        since_reload += 1
+        if next_reload and since_reload >= next_reload:
             try:
                 clicker.press("r")                         # replenish attacking units
             except Exception:
                 pass
-        page.wait_for_timeout(inter_ms)
+            since_reload = 0
+            next_reload = (_safety.jittered_reload(safety) if safety else reload_every)
+        # human-noise "mistake": a harmless extra idle (can't desync — it's just a pause)
+        if safety is not None and _safety.roll_mistake(safety):
+            page.wait_for_timeout(_random.randint(400, 1600))
+        page.wait_for_timeout(_safety.jittered_inter(safety) if safety else inter_ms)
         if any("startByBattleType" in m for m in latest["methods"][seen:]):
             started_total += 1
             misses = 0
@@ -274,6 +316,7 @@ def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
             break
     else:
         print(f"  ~{started_total} fought, attrition {reader.attrition_level}.", flush=True)
+    latest["fought"] = started_total
     return "done"
 
 
@@ -404,7 +447,8 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
              click_here=False, repeat=1, limit=None, inter_ms=150, reload_every=5,
              watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1390, 250),
              farm=False, pcts=None, skip=None, find_gbg=False, utok=None, autobattle=None,
-             native_calib=False, connect=None):  # pragma: no cover - live
+             native_calib=False, safety_level=_safety.DEFAULT_LEVEL,
+             connect=None):  # pragma: no cover - live
     skip = skip if skip is not None else set()             # provinceIds that never reach a fight
     from bap.forge.action.calibrate import _fetch_map_layout
     from bap.forge.action.cdp_click import CdpClicker, _select_page
@@ -513,6 +557,30 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
             print("[find-gbg] if any is a clickable icon/button for GBG, we click it by selector "
                   "→ resolution-independent entry.", flush=True)
             return 0
+
+        lvl = _safety.get(safety_level)
+        day_room = None
+        if farm:
+            print(f"[safety] level {lvl.idx} — {lvl.label}. {lvl.warning}", flush=True)
+            # Not 24/7: outside the level's active hours, nap instead of farming.
+            wait = _safety.seconds_until_active(lvl)
+            if wait > 0:
+                nap = min(wait, 900)
+                print(f"[safety] outside active hours — sleeping {nap}s "
+                      f"(next window in ~{wait // 60} min).", flush=True)
+                time.sleep(nap)
+                return 0
+            # Daily cap: how many fights this world may still do today.
+            day_room = None
+            if lvl.daily_cap is not None:
+                dkey = _safety.daily_key(str(world))
+                done_today = _daily_load().get(dkey, 0)
+                day_room = max(0, lvl.daily_cap - done_today)
+                print(f"[safety] daily cap {lvl.daily_cap}/world — {done_today} done today, "
+                      f"{day_room} left.", flush=True)
+                if day_room <= 0:
+                    print("[safety] daily cap reached for this world — done for today.", flush=True)
+                    return 0
 
         if enter_gbg or farm:
             print(f"[enter] opening GBG — vision-locating the entrance (fallback {gbg_pos})…",
@@ -784,11 +852,20 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                               f"limit={limit}…", flush=True)
                         status = _run_fight_loop(page, clicker, reader, latest, autobattle_xy,
                                                  repeat=repeat, limit=limit, inter_ms=inter_ms,
-                                                 reload_every=reload_every)
+                                                 reload_every=reload_every,
+                                                 safety=(lvl if farm else None), day_room=day_room)
                         _escape_to_map(page)
                         if farm:
+                            got = latest.get("fought", 0)
+                            if got:
+                                _daily_add(world, got)      # persist today's count for the cap
+                                if day_room is not None:
+                                    day_room = max(0, day_room - got)
                             if status in ("limit", "left"):
                                 break                       # limit hit, or we left the GBG map
+                            if day_room is not None and day_room <= 0:
+                                print(f"  daily cap reached — {world} done for today.", flush=True)
+                                break
                             continue                        # province done → next target
                     else:
                         _escape_to_map(page)                # back out, commit nothing
@@ -1050,6 +1127,9 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--native-calib", action="store_true", dest="native_calib",
                     help="calibrate the map WITHOUT FoE Helper (probe clicks → provinceId); "
                          "drops name/ring/Cíl too. Experimental — see docs/DEHELPER_PLAN.md")
+    ap.add_argument("--safety", type=int, default=_safety.DEFAULT_LEVEL,
+                    help="stealth level 0=turbo/riskiest … 4=stealth/safest (jitter, daily caps, "
+                         "active hours). See bap.forge.safety")
     args = ap.parse_args(argv)
 
     if args.worlds:                                        # PARALLEL farming: one process per world
@@ -1090,9 +1170,10 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                 cmd += ["--pcts", ",".join(str(x) for x in w["pcts"])]
             if args.native_calib:
                 cmd += ["--native-calib"]
+            cmd += ["--safety", str(args.safety)]
             print(f"[parallel] → {w['world']}", flush=True)
             procs.append((w["world"], subprocess.Popen(cmd)))
-            time.sleep(2)                                   # stagger CDP connects / GBG entries
+            time.sleep(_safety.jittered_stagger(_safety.get(args.safety)))  # not lockstep
         try:
             for _, p in procs:
                 p.wait()
@@ -1120,6 +1201,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                         reload_first=args.reload_first, enter_gbg=args.enter_gbg,
                         gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts, skip=_skip,
                         find_gbg=args.find_gbg, native_calib=args.native_calib,
+                        safety_level=args.safety,
                         utok=((args.ux, args.uy) if args.ux and args.uy else None),
                         autobattle=((args.abx, args.aby) if args.abx and args.aby else None))
 
@@ -1134,7 +1216,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
         except Exception as exc:  # noqa: BLE001
             print(f"[watchdog] pass {i + 1} failed: {exc} — restarting from scratch.", flush=True)
         if passes > 1 and i + 1 < passes:
-            time.sleep(4)
+            time.sleep(_safety.jittered_pass_gap(_safety.get(args.safety)))  # irregular, per level
     return 0
 
 

@@ -74,6 +74,30 @@ a new key — paste it in and **Save**.
 
 ---
 
+## Safety / stealth — reduce the ban risk
+
+Automating the game is against its Terms, and there's **no way to be 100% safe**. The **Safety
+slider** trades speed for a smaller footprint. Slide right for safer:
+
+| Level | Behaviour | Daily cap/world | Hours |
+|---|---|---|---|
+| 0 Turbo | Fast, perfectly precise, all worlds, 24/7 | none | 24/7 |
+| 1 Fast | Lightly randomised | 800 | 06–24 |
+| 2 Balanced *(default)* | Human-ish, midday break | 400 | ~14 h |
+| 3 Careful | Slower, more varied, breaks | 250 | ~10 h |
+| 4 Stealth | Slow, irregular, lots of breaks | 150 | ~6 h |
+
+Higher levels add **timing jitter**, occasional **harmless pauses** ("mistakes"), a **daily cap**
+per world, and **active-hour windows** so it isn't running 24/7 — and it staggers worlds instead of
+moving them in lockstep. The bot stays robust: pauses and misses always self-recover, it never gets
+stuck.
+
+**Rules of thumb (from real play):** running **24/7 is the most dangerous** thing you can do. A few
+hundred fights/day/world is unremarkable; **thousands/day on one world** stands out. Handling
+**many worlds at once** is itself unusual. Be conservative, especially on accounts you care about.
+
+> This only lowers the risk — it does not remove it. You are responsible for your account.
+
 ## Troubleshooting
 
 - **"Too many worlds selected."** You enabled more than your plan allows — untick some, or
