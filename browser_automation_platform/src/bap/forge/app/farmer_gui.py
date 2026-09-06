@@ -21,6 +21,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -98,11 +99,16 @@ class WorldRow:
         self.pcts = {p: QCheckBox(f"{p}") for p in PCTS}
         for p in (20, 40, 60):
             self.pcts[p].setChecked(True)
+        self.safety = QComboBox()                       # per-world stealth level
+        for lvl in _safety.LEVELS:
+            self.safety.addItem(f"{lvl.idx} · {lvl.name}", lvl.idx)
+        self.safety.setCurrentIndex(_safety.DEFAULT_LEVEL)
 
     def config(self) -> dict:
         chosen = [p for p in PCTS if self.pcts[p].isChecked()]
         return {"world": self.world, "tab": self.tab.text().strip() or self.world,
-                "limit": self.limit.value(), "pcts": chosen}
+                "limit": self.limit.value(), "pcts": chosen,
+                "safety": self.safety.currentIndex()}
 
 
 class FarmerWindow(QWidget):
@@ -136,18 +142,22 @@ class FarmerWindow(QWidget):
         lic_box.addWidget(self.lic_label, 2, 0, 1, 3)
         root.addLayout(lic_box)
 
-        # --- safety / stealth slider --------------------------------------
+        # --- safety / stealth: a global default you can apply to all worlds; each world's
+        #     own level (the Safety column in the table) is what actually runs.
         saf = QHBoxLayout()
-        saf.addWidget(QLabel("Safety:"))
+        saf.addWidget(QLabel("Safety default:"))
+        saf.addWidget(QLabel("Fastest / riskiest"))
         self.safety_slider = QSlider(Qt.Horizontal)
         self.safety_slider.setMinimum(0)
         self.safety_slider.setMaximum(len(_safety.LEVELS) - 1)
         self.safety_slider.setValue(_read_int(SAFETY_FILE, _safety.DEFAULT_LEVEL))
         self.safety_slider.setTickPosition(QSlider.TicksBelow)
         self.safety_slider.setTickInterval(1)
-        saf.addWidget(QLabel("Fastest / riskiest"))
         saf.addWidget(self.safety_slider, 1)
         saf.addWidget(QLabel("Safest"))
+        self.apply_all_btn = QPushButton("Apply to all worlds")
+        self.apply_all_btn.clicked.connect(self._apply_safety_all)
+        saf.addWidget(self.apply_all_btn)
         root.addLayout(saf)
         self.safety_label = QLabel()
         self.safety_label.setWordWrap(True)
@@ -155,7 +165,9 @@ class FarmerWindow(QWidget):
         self.safety_slider.valueChanged.connect(self._refresh_safety)
 
         # --- worlds table --------------------------------------------------
-        cols = ["Farm", "World", "Browser tab", "Attrition limit"] + [f"{p}%" for p in PCTS]
+        cols = (["Farm", "World", "Browser tab", "Attrition limit"]
+                + [f"{p}%" for p in PCTS] + ["Safety"])
+        self._safety_col = len(cols) - 1
         self.table = QTableWidget(len(WORLDS), len(cols))
         self.table.setHorizontalHeaderLabels(cols)
         self.table.verticalHeader().setVisible(False)
@@ -169,6 +181,7 @@ class FarmerWindow(QWidget):
             self.table.setCellWidget(i, 3, row.limit)
             for j, p in enumerate(PCTS):
                 self.table.setCellWidget(i, 4 + j, _centre(row.pcts[p]))
+            self.table.setCellWidget(i, self._safety_col, row.safety)
             row.enable.stateChanged.connect(self._refresh_license)
         self.table.resizeColumnsToContents()
         root.addWidget(self.table)
@@ -202,6 +215,7 @@ class FarmerWindow(QWidget):
         self._timer.setInterval(1500)
         self._timer.timeout.connect(self._poll_proc)
         self._timer.start()
+        self._apply_safety_all()          # start every world at the saved default level
         self._refresh_license()
         self._refresh_safety()
 
@@ -209,13 +223,22 @@ class FarmerWindow(QWidget):
         lvl = _safety.get(self.safety_slider.value())
         risky = lvl.idx <= 1
         colour = "#c0392b" if risky else ("#b8860b" if lvl.idx == 2 else "#2e7d32")
-        self.safety_label.setText(f"<b>{lvl.label}</b> — {lvl.description}<br>"
-                                  f"<span style='color:{colour}'>⚠ {lvl.warning}</span>")
+        self.safety_label.setText(
+            f"Default <b>{lvl.label}</b> — {lvl.description}<br>"
+            f"<span style='color:{colour}'>⚠ {lvl.warning}</span><br>"
+            "<i>Each world uses its own level in the Safety column; “Apply to all” sets them "
+            "from this default.</i>")
         try:
             with open(SAFETY_FILE, "w", encoding="utf-8") as fh:
                 fh.write(str(lvl.idx))
         except OSError:
             pass
+
+    def _apply_safety_all(self, *_):
+        idx = self.safety_slider.value()
+        for row in self.rows:
+            row.safety.setCurrentIndex(idx)
+        self.status.setText(f"Safety {idx} applied to all worlds.")
 
     def _plan_line(self, lic) -> str:
         """Tier + price, plus a one-line upsell to the next tier up."""

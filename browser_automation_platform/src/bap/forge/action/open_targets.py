@@ -1170,7 +1170,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                 cmd += ["--pcts", ",".join(str(x) for x in w["pcts"])]
             if args.native_calib:
                 cmd += ["--native-calib"]
-            cmd += ["--safety", str(args.safety)]
+            cmd += ["--safety", str(w.get("safety", args.safety))]   # per-world override
             print(f"[parallel] → {w['world']}", flush=True)
             procs.append((w["world"], subprocess.Popen(cmd)))
             time.sleep(_safety.jittered_stagger(_safety.get(args.safety)))  # not lockstep
