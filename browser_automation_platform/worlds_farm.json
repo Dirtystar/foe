@@ -1,7 +1,7 @@
 {
   "gbg": { "x": 1390, "y": 250 },
   "worlds": [
-    { "world": "cz1", "tab": "cz1", "limit": 9999, "pcts": [20, 40, 60, 80, 100], "safety": 1 },
+    { "world": "cz1", "tab": "cz1", "limit": 9999, "pcts": [20, 40, 60, 80, 100], "safety": 1, "close_margin": 3 },
     { "world": "cz2", "tab": "cz2", "limit": 150, "pcts": [20], "safety": 3 },
     { "world": "cz3", "tab": "cz3", "limit": 150, "pcts": [20], "safety": 3 },
     { "world": "cz4", "tab": "cz4", "limit": 150, "pcts": [20], "safety": 3 },

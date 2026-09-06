@@ -73,6 +73,7 @@ from bap.forge.action.native_calibrate import centrality as _centrality
 from bap.forge.action.native_calibrate import native_solve as _native_solve
 from bap.forge.action.navigate import _escape_to_map, _r, _viewport, open_province
 from bap.forge.action.solve import _JS_MARKER_IDS
+from bap.forge.gbg_data import closing as _closing
 from bap.forge.gbg_data.calibration import CalibrationSample, residual, save_calibration, solve_uniform
 from bap.forge.gbg_data.map_layout import MapTransform
 from bap.forge.gbg_data.navigator import MapNavigator
@@ -251,13 +252,14 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
 
 def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
                     inter_ms, reload_every, stall_stop=12, safety=None,
-                    day_room=None):  # pragma: no cover - live
+                    day_room=None, province_cap=None):  # pragma: no cover - live
     """Fight the province currently on the army screen: click Automatická bitva each iteration,
     press R (Reload units) every ``reload_every`` fights, stop at the attrition ``limit``, the
-    per-world daily cap (``day_room`` fights left today), or after ``stall_stop`` consecutive
-    non-starting clicks. With a ``safety`` level, the cadence is jittered and occasional harmless
-    idle "mistakes" are added (never anything that can desync). Returns "limit"/"left"/"done";
-    stashes the battle count in ``latest['fought']``."""
+    per-world daily cap (``day_room`` → "limit", stops the world), this province's "leave for
+    commander" cap (``province_cap`` → "capped", move to the next province), or after
+    ``stall_stop`` non-starting clicks. With a ``safety`` level the cadence is jittered and
+    occasional harmless idle "mistakes" are added (never anything that can desync). Returns
+    "limit"/"left"/"capped"/"done"; stashes the battle count in ``latest['fought']``."""
     abx, aby = autobattle
     # Set hover once (the canvas needs a real mousemove), then rapid down/up at the same point —
     # like the manual F10 cadence (click + R every N), instead of a full trajectory per fight.
@@ -287,6 +289,10 @@ def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
             print(f"  daily cap reached (+{started_total} today) — stopping this world.", flush=True)
             latest["fought"] = started_total
             return "limit"
+        if province_cap is not None and started_total >= province_cap:
+            print(f"  leave-for-commander cap ({province_cap}) reached — next province.", flush=True)
+            latest["fought"] = started_total
+            return "capped"
         seen = len(latest["methods"])
         try:
             page.mouse.down()                              # click at the hovered auto-battle button
@@ -447,7 +453,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
              click_here=False, repeat=1, limit=None, inter_ms=150, reload_every=5,
              watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1390, 250),
              farm=False, pcts=None, skip=None, find_gbg=False, utok=None, autobattle=None,
-             native_calib=False, safety_level=_safety.DEFAULT_LEVEL,
+             native_calib=False, safety_level=_safety.DEFAULT_LEVEL, close_margin=0,
              connect=None):  # pragma: no cover - live
     skip = skip if skip is not None else set()             # provinceIds that never reach a fight
     from bap.forge.action.calibrate import _fetch_map_layout
@@ -756,7 +762,16 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         if stop_ids:
             skip.update(stop_ids)                          # leader "Stop" → never fight this round
             print(f"[stop] leader Stop sectors skipped: {sorted(stop_ids)}", flush=True)
-        targets = [t for t in targets if t.province_id not in skip]  # learned/Stop non-fightable
+        # "Leave for commander": don't touch provinces our guild is about to close (within margin).
+        prov_by_id = {p.id: p for p in bg_now.provinces} if bg_now else {}
+        if close_margin > 0 and bg_now:
+            leave = {pid for pid, p in prov_by_id.items()
+                     if _closing.should_leave(bg_now, p, close_margin)}
+            if leave:
+                skip.update(leave)
+                print(f"[leave] within {close_margin} of closing — left for commander: "
+                      f"{sorted(leave)}", flush=True)
+        targets = [t for t in targets if t.province_id not in skip]  # learned/Stop/leave non-fightable
         # Cíl (leader focus target) overrides the % allowlist and gets absolute priority.
         if cil:
             have = {t.province_id for t in targets}
@@ -848,12 +863,24 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                           f"screen — getArmyPreview provinceId={latest['pid']}", flush=True)
                     reached = t.province_id
                     if fight:
+                        # "Leave for commander": cap THIS province's fights to the room before it
+                        # closes, so we never deliver the last blows (the daily cap is separate).
+                        province_cap = None
+                        if close_margin > 0 and bg_now:
+                            p_obj = prov_by_id.get(t.province_id)
+                            province_cap = (_closing.fight_cap(bg_now, p_obj, close_margin)
+                                            if p_obj else None)
+                            if province_cap is not None:
+                                print(f"  [leave] capping {_name(names, t.province_id)} to "
+                                      f"{province_cap} fights (leave {close_margin} for commander).",
+                                      flush=True)
                         print(f"  [fight] farming {_name(names, t.province_id)} to attrition "
                               f"limit={limit}…", flush=True)
                         status = _run_fight_loop(page, clicker, reader, latest, autobattle_xy,
                                                  repeat=repeat, limit=limit, inter_ms=inter_ms,
                                                  reload_every=reload_every,
-                                                 safety=(lvl if farm else None), day_room=day_room)
+                                                 safety=(lvl if farm else None), day_room=day_room,
+                                                 province_cap=province_cap)
                         _escape_to_map(page)
                         if farm:
                             got = latest.get("fought", 0)
@@ -862,7 +889,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                                 if day_room is not None:
                                     day_room = max(0, day_room - got)
                             if status in ("limit", "left"):
-                                break                       # limit hit, or we left the GBG map
+                                break                       # daily cap / attrition / left GBG
                             if day_room is not None and day_room <= 0:
                                 print(f"  daily cap reached — {world} done for today.", flush=True)
                                 break
@@ -1130,6 +1157,9 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--safety", type=int, default=_safety.DEFAULT_LEVEL,
                     help="stealth level 0=turbo/riskiest … 4=stealth/safest (jitter, daily caps, "
                          "active hours). See bap.forge.safety")
+    ap.add_argument("--close-margin", type=int, default=0, dest="close_margin",
+                    help="'leave for commander': stop N fights before a province our guild is "
+                         "taking would close (0 = off). Reads native conquestProgress")
     args = ap.parse_args(argv)
 
     if args.worlds:                                        # PARALLEL farming: one process per world
@@ -1171,6 +1201,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
             if args.native_calib:
                 cmd += ["--native-calib"]
             cmd += ["--safety", str(w.get("safety", args.safety))]   # per-world override
+            cmd += ["--close-margin", str(w.get("close_margin", args.close_margin))]
             print(f"[parallel] → {w['world']}", flush=True)
             procs.append((w["world"], subprocess.Popen(cmd)))
             time.sleep(_safety.jittered_stagger(_safety.get(args.safety)))  # not lockstep
@@ -1201,7 +1232,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                         reload_first=args.reload_first, enter_gbg=args.enter_gbg,
                         gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts, skip=_skip,
                         find_gbg=args.find_gbg, native_calib=args.native_calib,
-                        safety_level=args.safety,
+                        safety_level=args.safety, close_margin=args.close_margin,
                         utok=((args.ux, args.uy) if args.ux and args.uy else None),
                         autobattle=((args.abx, args.aby) if args.abx and args.aby else None))
 

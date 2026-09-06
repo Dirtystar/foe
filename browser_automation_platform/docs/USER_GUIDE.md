@@ -74,6 +74,14 @@ a new key — paste it in and **Save**.
 
 ---
 
+## Leave for commander (don't close focus provinces)
+
+Set **Leave** (per world) to stop a few fights before a province your guild is taking would
+**close**, so the guild leader can time the final blows. Example: a province needs 132 to close;
+with Leave = 3 the bot stops once your guild's progress reaches 129 and moves on. It reads the
+game's own conquest progress (not your click count — many players hit the same province), so it
+respects the real state. 0 = off.
+
 ## Safety / stealth — reduce the ban risk
 
 Automating the game is against its Terms, and there's **no way to be 100% safe**. The **Safety

@@ -103,12 +103,17 @@ class WorldRow:
         for lvl in _safety.LEVELS:
             self.safety.addItem(f"{lvl.idx} · {lvl.name}", lvl.idx)
         self.safety.setCurrentIndex(_safety.DEFAULT_LEVEL)
+        self.leave = QSpinBox()                          # "leave N for commander" (0 = off)
+        self.leave.setRange(0, 20)
+        self.leave.setValue(0)
+        self.leave.setToolTip("Leave for commander: stop this many fights before a province "
+                              "your guild is taking would close (0 = off).")
 
     def config(self) -> dict:
         chosen = [p for p in PCTS if self.pcts[p].isChecked()]
         return {"world": self.world, "tab": self.tab.text().strip() or self.world,
                 "limit": self.limit.value(), "pcts": chosen,
-                "safety": self.safety.currentIndex()}
+                "safety": self.safety.currentIndex(), "close_margin": self.leave.value()}
 
 
 class FarmerWindow(QWidget):
@@ -166,8 +171,9 @@ class FarmerWindow(QWidget):
 
         # --- worlds table --------------------------------------------------
         cols = (["Farm", "World", "Browser tab", "Attrition limit"]
-                + [f"{p}%" for p in PCTS] + ["Safety"])
-        self._safety_col = len(cols) - 1
+                + [f"{p}%" for p in PCTS] + ["Safety", "Leave"])
+        self._safety_col = len(cols) - 2
+        self._leave_col = len(cols) - 1
         self.table = QTableWidget(len(WORLDS), len(cols))
         self.table.setHorizontalHeaderLabels(cols)
         self.table.verticalHeader().setVisible(False)
@@ -182,6 +188,7 @@ class FarmerWindow(QWidget):
             for j, p in enumerate(PCTS):
                 self.table.setCellWidget(i, 4 + j, _centre(row.pcts[p]))
             self.table.setCellWidget(i, self._safety_col, row.safety)
+            self.table.setCellWidget(i, self._leave_col, row.leave)
             row.enable.stateChanged.connect(self._refresh_license)
         self.table.resizeColumnsToContents()
         root.addWidget(self.table)
