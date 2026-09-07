@@ -166,6 +166,27 @@ def cmd_run(args, ap) -> int:  # pragma: no cover - needs a live browser
                      on_status=_status)
 
 
+# --------------------------------------------------------------------------- ui
+
+def cmd_ui(args, ap) -> int:
+    """The local control panel: message format, labels, credentials, log."""
+    from bap.alerting.webui import LogBuffer, UiState, serve
+
+    buf = LogBuffer().attach()
+    state = UiState(args.config, sample=args.sample or None,
+                    map_data=args.map_data or None, log=buf)
+    _, url = serve(state, port=args.port, open_browser=not args.no_browser)
+    print(f"FoE Alerting panel: {url}\n"
+          "The token in that URL is what authorises the page — treat it like a password.\n"
+          "Ctrl-C to stop.")
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        print()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="bap-alert",
                                  description="FoE Alerting — announce GBG province openings.")
@@ -204,6 +225,15 @@ def build_parser() -> argparse.ArgumentParser:
                    help="reload the tab this often when nothing else refreshes GBG")
     p.add_argument("--verbose", action="store_true")
     p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("ui", help="local control panel: format, labels, credentials, log")
+    p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
+    p.add_argument("--sample", default="dataset/api_samples/getBattleground.sample.json",
+                   help="captured snapshot the format preview renders against")
+    p.add_argument("--map-data", default="", help="map asset JSON (for the labels table)")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--no-browser", action="store_true", help="do not open a browser window")
+    p.set_defaults(func=cmd_ui)
     return ap
 
 

@@ -18,3 +18,9 @@ tests/forge_assets/**/.cache/
 
 # Live-collection smoke-test artifacts written to the repo root by run_gui tests.
 /LIVE_COLLECTION_SESSION_*.md
+
+# FoE Alerting — local runtime files, never commit (alerting.secrets.json holds credentials)
+alerting.json
+alerting.secrets.json
+alert_state.json
+province_labels.*.json

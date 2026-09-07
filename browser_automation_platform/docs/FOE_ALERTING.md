@@ -29,7 +29,7 @@ game sends whenever GBG is opened or refreshed:
 | Line of the message | Where it comes from | Status |
 |---|---|---|
 | **time it opens** | `province.lockedUntil` — unix second when the cooldown ends | ✅ already parsed; corrected against the server clock (`TimeService`) so a wrong PC time can't shift it |
-| **attack / defence** | `province.isAttackBattleType` — a per-province flag, independent of who owns it | ⚠️ the field exists and fits (38 attack / 22 defence in the capture, matching the ≈2:1 red/blue ratio in the group's own messages), but its meaning is **not confirmed live** — see §8. `side_rule` switches back to the ownership rule |
+| **attack / defence** | `province.isAttackBattleType` — a per-province flag, independent of who owns it | ⚠️ the field exists and fits (38 attack / 22 defence in the capture, matching the ≈2:1 red/blue ratio in the group's own messages), but its meaning is **not confirmed live** — see §9. `side_rule` switches back to the ownership rule |
 | **coordinate** | — | ⚠️ **the game has no province names.** A province is an id (0…59) plus a flag position in the static map asset. `A1X` is a *guild* convention, so it has to be mapped once (see §4) |
 | **attrition %** | `province.gainAttritionChance` | ✅ values in the capture are exactly {20, 40, 60, 100} — the same set the group writes. Absent on every province we own (22 of 22), and an absent value prints **no bracket**, never `0%` |
 
@@ -40,8 +40,8 @@ mean "our province".
 Two more things the payload gives us for free, and we use them:
 
 - **commander marks** (`battlegroundParticipants[].signals`): `focus` = "Cíl/Útok",
-  `ignore` = "Stop". A province the commander marked Stop is never announced as an attack
-  (it is still announced as a defence — a Stop mark doesn't mean we let it fall).
+  `ignore` = "Stop". A Stop mark silences a province we do *not* own — we are told not to fight
+  there — and never one of ours, whichever colour it is shown in.
 - **conquest progress**: whether our guild is already sieging a province — used to decide what
   is worth announcing at all.
 
@@ -105,6 +105,10 @@ Check it before pointing it at the guild:
 bap-alert check --config alerting.json                 # is the instance authorized?
 bap-alert check --config alerting.json --send "test"   # does the group receive it?
 ```
+
+Or do the whole thing in the panel (`bap-alert ui`, §8): paste the credentials, press *Ověřit
+instanci*, then *Poslat testovací zprávu*. The panel can also keep them for you without putting
+them in `alerting.json`.
 
 ---
 
@@ -223,7 +227,7 @@ bap-alert preview dataset/api_samples/getBattleground.sample.json --at capture \
 ## 7. Still to confirm live (next season)
 
 Everything above is built and unit-tested against a real captured payload, but four things can
-only be settled against a live map. **Do not guess these — run §8 and bring the findings back.**
+only be settled against a live map. **Do not guess these — run §9 and bring the findings back.**
 
 1. **The colour rule.** Does `isAttackBattleType` really correspond to what the guild calls
    attack vs defence? The evidence for it is circumstantial (ratio, and the fact that the
@@ -242,7 +246,39 @@ Until #1 is settled, `side_rule` in `alerting.json` switches between the two can
 
 ---
 
-## 8. The live verification prompt
+## 8. The control panel (`bap-alert ui`)
+
+```bash
+bap-alert ui --map-data dataset/api_samples/map_data.volcano_archipelago.sample.json
+```
+
+A local page on `127.0.0.1` — the four things the command line is bad at:
+
+* **message format** — a template (`{time} {emoji} {label} {pct}`, plus `{pct_num}`, `{side}`,
+  `{id}`) previewed live against a captured snapshot, so a new layout is tried before it ever
+  reaches the group;
+* **labels** — all 60 provinces in a table, generated 4×4 grid position beside each, type the
+  guild's name and save;
+* **Green API** — paste `idInstance` / `apiTokenInstance` / group `chatId`, check the instance
+  is authorised, and send one test message;
+* **log** — what was decided and sent, refreshed every 5 s.
+
+It is a web page rather than a desktop window because this subproject deliberately has no
+dependencies beyond the standard library, and the scheduler half is meant to run on a headless
+box where there is no desktop at all.
+
+**It holds credentials, so it is locked down**: it binds loopback only, every request needs the
+random token in the URL printed at startup (this is what stops any other page in your browser
+POSTing to it), and the `Host` header must be loopback so DNS rebinding cannot reach it. Treat
+that URL like a password — it is not written to the log panel for that reason.
+
+Credentials typed into the page stay **in memory** until you press *Uložit na disk*, which
+writes them to `alerting.secrets.json` (mode 600) — never into `alerting.json`, and both files
+are gitignored.
+
+---
+
+## 9. The live verification prompt
 
 GBG reopens around 2026-09-11. Paste the block below to an AI that has Chrome MCP access, with
 GBG open on the watched world. It is **read-only**: it observes traffic and the screen, sends

@@ -102,7 +102,8 @@ class AlertEngine:
             self.sent.record([e.key for e in events], now=now)
             return []
         text = format_message(events, header=self.cfg.header,
-                              show_attrition=self.cfg.show_attrition)
+                              show_attrition=self.cfg.show_attrition,
+                              template=self.cfg.message_template)
         if not self.notifier.send(text):
             logger.warning("send failed — will retry the same openings next tick")
             self._window_end = None         # not recorded → re-planned while still fresh

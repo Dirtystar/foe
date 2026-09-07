@@ -74,7 +74,7 @@ even after batching.
    Obrana, tak jsou ty provincie rozdělené — nevím jaký je v tom pattern", so he cannot settle
    it either. The farmer's `gbg_data/model.py` annotates the same field as "attack vs
    negotiate" — a different reading. Only the live map decides. Prompt is ready in
-   `docs/FOE_ALERTING.md` §8.
+   `docs/FOE_ALERTING.md` §9.
 2. **Deployment split.** Decided in principle (see below), not built yet.
 
 ## Standing rules from the owner
@@ -88,7 +88,7 @@ even after batching.
 
 ## State: built and unit-tested, never run against a live map
 
-`src/bap/alerting/` (90 tests, all browser-free):
+`src/bap/alerting/` (104 tests, all browser-free):
 
 | module | job |
 |---|---|
@@ -101,9 +101,10 @@ even after batching.
 | `config.py` | `alerting.json` + secrets from env |
 | `engine.py` | snapshot in → messages out (no browser) |
 | `watcher.py` | the only browser glue: CDP, one tab, listen |
+| `webui.py` | `bap-alert ui` — the local control panel (format, labels, credentials, log) |
 
 ```bash
-PYTHONPATH=src python3 -m pytest tests/unit/alerting -q          # 90 passed
+PYTHONPATH=src python3 -m pytest tests/unit/alerting -q          # 104 passed
 PYTHONPATH=src python3 -m bap.alerting preview \
     dataset/api_samples/getBattleground.sample.json --at capture \
     --map-data dataset/api_samples/map_data.volcano_archipelago.sample.json
@@ -133,7 +134,7 @@ send stale times. **Not implemented yet** — this is the next piece of work.
 
 ## Next steps
 
-1. **Live confirmation** — GBG reopens ~2026-09-11. Run the §8 prompt in
+1. **Live confirmation** — GBG reopens ~2026-09-11. Run the §9 prompt in
    `docs/FOE_ALERTING.md` and bring the findings back. It settles `side_rule`, the `[20%]`
    source, `lockedUntil`, and the map/id range. Don't test blind.
 2. **Labels** — fill `province_labels.cz8.json` from the live map, switch `scope` to `labeled`.

@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from bap.alerting.notifiers import GREEN_API_BASE
+from bap.alerting.render import DEFAULT_TEMPLATE
 from bap.alerting.schedule import SCOPES, SIDE_RULES
 
 DEFAULT_CONFIG_PATH = "alerting.json"
@@ -60,6 +61,7 @@ class AlertConfig:
     window_minutes: float = 30.0           # …and then list everything opening within this
     side_rule: str = "battle_type"         # battle_type | owner — see schedule.side_of
     show_attrition: bool = True            # append the map's "[20%]" badge
+    message_template: str = DEFAULT_TEMPLATE   # one line's layout; see render.PLACEHOLDERS
     stale_minutes: float = 5.0             # never announce an opening older than this
     poll_seconds: float = 30.0             # how often the engine re-checks the schedule
     horizon_hours: float = 12.0            # ignore openings further out than this
@@ -124,6 +126,7 @@ class AlertConfig:
             window_minutes=_num("window_minutes", cls.window_minutes),
             side_rule=side_rule,
             show_attrition=bool(d.get("show_attrition", cls.show_attrition)),
+            message_template=str(d.get("message_template") or cls.message_template),
             stale_minutes=_num("stale_minutes", cls.stale_minutes),
             poll_seconds=_num("poll_seconds", cls.poll_seconds),
             horizon_hours=_num("horizon_hours", cls.horizon_hours),
