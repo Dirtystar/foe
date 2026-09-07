@@ -1,4 +1,4 @@
-"""End-to-end without a browser: snapshot in → exactly one message per opening, out."""
+"""End-to-end without a browser: snapshot in → one batched message per window, out."""
 
 from __future__ import annotations
 
@@ -24,7 +24,10 @@ class FlakyNotifier(NullNotifier):
 
 
 def _engine(tmp_path, *, notifier=None, labels=None, **cfg_kw):
-    cfg = AlertConfig.from_dict({"lead_minutes": 10, "stale_minutes": 5, **cfg_kw})
+    # side_rule="owner" keeps these cases about scheduling; the colour rule has its own
+    # tests in test_schedule.py.
+    cfg = AlertConfig.from_dict({"trigger_lead_minutes": 10, "window_minutes": 30,
+                                 "stale_minutes": 5, "side_rule": "owner", **cfg_kw})
     notifier = notifier or NullNotifier()
     engine = AlertEngine(cfg, notifier, SentLog(tmp_path / "state.json"),
                          labels or LabelBook(overrides={1: "A1X"}, auto={}))
@@ -57,10 +60,45 @@ def test_waits_until_the_lead_window(tmp_path, now):
 def test_several_openings_share_one_message(tmp_path, now):
     engine, notifier = _engine(tmp_path)
     engine.on_snapshot(battleground([province(1, owner=ME, opens_in=300),
-                                     province(2, owner=ENEMY, opens_in=310, siege_by=ME)]),
+                                     province(2, owner=ENEMY, opens_in=310, siege_by=ME,
+                                              attrition=20)]),
                        now=now)
     assert len(engine.tick(now)) == 2
-    assert notifier.sent == ["16:05 🔵 A1X\n16:05 🔴 #2"]
+    assert notifier.sent == ["16:05 🔵 A1X\n16:05 🔴 #2 [20%]"]
+
+
+def test_one_trigger_pulls_in_the_whole_window(tmp_path, now):
+    """The soonest opening is what makes us speak, but the message carries the window —
+    that is what turns ~350 messages a day into a few dozen."""
+    engine, notifier = _engine(tmp_path)
+    engine.on_snapshot(battleground([province(1, owner=ME, opens_in=300),      # trigger
+                                     province(2, owner=ME, opens_in=1500),     # inside window
+                                     province(3, owner=ME, opens_in=4 * 3600)]),  # far out
+                       now=now)
+    assert [e.province_id for e in engine.tick(now)] == [1, 2]
+    assert notifier.sent == ["16:05 🔵 A1X\n16:25 🔵 #2"]
+
+
+def test_an_opening_seen_later_repeats_the_window(tmp_path, now):
+    """A newcomer inside an announced window re-sends the whole window, the way the guild
+    re-posts an updated list, so the newest message is always the full picture."""
+    engine, notifier = _engine(tmp_path)
+    engine.on_snapshot(battleground([province(1, owner=ME, opens_in=300)]), now=now)
+    engine.tick(now)
+    engine.on_snapshot(battleground([province(1, owner=ME, opens_in=300),
+                                     province(2, owner=ME, opens_in=900)]), now=now + 60)
+    assert [e.province_id for e in engine.tick(now + 60)] == [1, 2]
+    assert notifier.sent[-1] == "16:05 🔵 A1X\n16:15 🔵 #2"
+
+
+def test_a_later_opening_outside_the_window_does_not_repeat_it(tmp_path, now):
+    engine, notifier = _engine(tmp_path)
+    engine.on_snapshot(battleground([province(1, owner=ME, opens_in=300)]), now=now)
+    engine.tick(now)
+    engine.on_snapshot(battleground([province(1, owner=ME, opens_in=300),
+                                     province(2, owner=ME, opens_in=3 * 3600)]), now=now + 60)
+    assert engine.tick(now + 60) == []
+    assert len(notifier.sent) == 1
 
 
 def test_dedupe_survives_a_restart(tmp_path, now):

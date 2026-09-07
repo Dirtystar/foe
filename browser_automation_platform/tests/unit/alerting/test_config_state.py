@@ -12,16 +12,29 @@ def test_defaults_are_usable_without_a_file(tmp_path):
     cfg = AlertConfig.load(tmp_path / "missing.json")
     assert cfg.world == "cz8" and cfg.scope == "relevant"
     assert cfg.tab_match == "cz8.forgeofempires"
-    assert cfg.lead_seconds == 600 and cfg.notifier == "console"
+    assert cfg.trigger_lead_seconds == 240 and cfg.window_seconds == 1800
+    assert cfg.side_rule == "battle_type" and cfg.notifier == "console"
 
 
 def test_file_values_are_read(tmp_path):
     path = tmp_path / "alerting.json"
-    path.write_text(json.dumps({"world": "cz1", "scope": "labeled", "lead_minutes": 3,
+    path.write_text(json.dumps({"world": "cz1", "scope": "labeled",
+                                "trigger_lead_minutes": 3, "window_minutes": 45,
                                 "quiet_hours": [23, 7], "header": "GBG"}), encoding="utf-8")
     cfg = AlertConfig.load(path)
-    assert (cfg.world, cfg.scope, cfg.lead_seconds, cfg.header) == ("cz1", "labeled", 180, "GBG")
+    assert (cfg.world, cfg.scope, cfg.header) == ("cz1", "labeled", "GBG")
+    assert (cfg.trigger_lead_seconds, cfg.window_seconds) == (180, 2700)
     assert cfg.quiet_hours == (23, 7)
+
+
+def test_the_old_lead_minutes_name_still_sets_the_trigger_lead():
+    """``lead_minutes`` was the knob before batching existed; an existing config file
+    should not silently fall back to the default."""
+    assert AlertConfig.from_dict({"lead_minutes": 7}).trigger_lead_seconds == 420
+
+
+def test_unknown_side_rule_is_rejected():
+    assert AlertConfig.from_dict({"side_rule": "vibes"}).side_rule == "battle_type"
 
 
 def test_broken_file_falls_back_to_defaults(tmp_path):

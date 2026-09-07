@@ -1,4 +1,4 @@
-"""The message is the product: `16:25 🔵 A1X`, nothing more."""
+"""The message is the product: `21:34 🔴 D4A [20%]`, nothing more."""
 
 from __future__ import annotations
 
@@ -11,19 +11,30 @@ from bap.alerting.schedule import unlock_events
 
 def _events(now, labels=None, **kw):
     bg = battleground([province(1, owner=ME, opens_in=1500, **kw),
-                       province(2, opens_in=3000, siege_by=ME)])
-    return unlock_events(bg, labels=labels, now=now)
+                       province(2, opens_in=3000, siege_by=ME, attrition=20)])
+    return unlock_events(bg, labels=labels, now=now, side_rule="owner")
 
 
-def test_line_is_time_emoji_label(now):
+def test_line_is_time_emoji_label_and_attrition(now):
     labels = LabelBook(overrides={1: "A1X"}, auto={})
     defence, attack = _events(now, labels)
     assert format_line(defence) == "16:25 🔵 A1X"       # NOW is 16:00 Prague + 25 min
-    assert format_line(attack) == "16:50 🔴 #2"
+    assert format_line(attack) == "16:50 🔴 #2 [20%]"
+
+
+def test_the_attrition_badge_can_be_switched_off(now):
+    _, attack = _events(now)
+    assert format_line(attack, show_attrition=False) == "16:50 🔴 #2"
+
+
+def test_a_missing_attrition_badge_is_left_out_not_zero_filled(now):
+    """The game omits the field on provinces we own — that is not "0%"."""
+    defence, _ = _events(now)
+    assert defence.attrition_pct is None and "%" not in format_line(defence)
 
 
 def test_message_is_one_line_per_opening(now):
-    assert format_message(_events(now)) == "16:25 🔵 #1\n16:50 🔴 #2"
+    assert format_message(_events(now)) == "16:25 🔵 #1\n16:50 🔴 #2 [20%]"
 
 
 def test_header_is_opt_in(now):

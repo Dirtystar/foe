@@ -3,7 +3,8 @@
     {
       "world": "cz8",
       "scope": "relevant",
-      "lead_minutes": 10,
+      "trigger_lead_minutes": 4,
+      "window_minutes": 30,
       "labels_file": "province_labels.cz8.json",
       "notifier": "green_api",
       "green_api": {"chat_id": "120363000000000000@g.us"},
@@ -23,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from bap.alerting.notifiers import GREEN_API_BASE
-from bap.alerting.schedule import SCOPES
+from bap.alerting.schedule import SCOPES, SIDE_RULES
 
 DEFAULT_CONFIG_PATH = "alerting.json"
 
@@ -55,7 +56,10 @@ class AlertConfig:
     tab: str = ""                          # tab match; defaults to "<world>.forgeofempires"
     cdp: str = ""                          # Chrome CDP endpoint; "" → the app default
     scope: str = "relevant"                # labeled | relevant | mine | all
-    lead_minutes: float = 10.0             # announce this long before the province opens
+    trigger_lead_minutes: float = 4.0      # speak when the soonest opening is this close
+    window_minutes: float = 30.0           # …and then list everything opening within this
+    side_rule: str = "battle_type"         # battle_type | owner — see schedule.side_of
+    show_attrition: bool = True            # append the map's "[20%]" badge
     stale_minutes: float = 5.0             # never announce an opening older than this
     poll_seconds: float = 30.0             # how often the engine re-checks the schedule
     horizon_hours: float = 12.0            # ignore openings further out than this
@@ -72,8 +76,12 @@ class AlertConfig:
         return self.tab or f"{self.world}.forgeofempires"
 
     @property
-    def lead_seconds(self) -> int:
-        return int(self.lead_minutes * 60)
+    def trigger_lead_seconds(self) -> int:
+        return int(self.trigger_lead_minutes * 60)
+
+    @property
+    def window_seconds(self) -> int:
+        return int(self.window_minutes * 60)
 
     @property
     def stale_seconds(self) -> int:
@@ -97,17 +105,25 @@ class AlertConfig:
         scope = str(d.get("scope") or cls.scope)
         if scope not in SCOPES:
             scope = cls.scope
+        side_rule = str(d.get("side_rule") or cls.side_rule)
+        if side_rule not in SIDE_RULES:
+            side_rule = cls.side_rule
         def _num(key, default):
             try:
                 return float(d[key])
             except (KeyError, TypeError, ValueError):
                 return default
+        # "lead_minutes" was the pre-batching name for the trigger lead; still accepted.
+        lead = _num("trigger_lead_minutes", _num("lead_minutes", cls.trigger_lead_minutes))
         return cls(
             world=str(d.get("world") or cls.world),
             tab=str(d.get("tab") or ""),
             cdp=str(d.get("cdp") or ""),
             scope=scope,
-            lead_minutes=_num("lead_minutes", cls.lead_minutes),
+            trigger_lead_minutes=lead,
+            window_minutes=_num("window_minutes", cls.window_minutes),
+            side_rule=side_rule,
+            show_attrition=bool(d.get("show_attrition", cls.show_attrition)),
             stale_minutes=_num("stale_minutes", cls.stale_minutes),
             poll_seconds=_num("poll_seconds", cls.poll_seconds),
             horizon_hours=_num("horizon_hours", cls.horizon_hours),

@@ -71,11 +71,13 @@ def cmd_preview(args, ap) -> int:
     print(f"{len(events)} upcoming opening(s) in the next {args.horizon:g} h:")
     print(format_schedule(events, limit=args.limit))
     if events:
-        print("\nWhatsApp message for the next opening(s):")
-        first = [e for e in events if e.opens_at == events[0].opens_at]
-        print("-" * 24)
-        print(format_message(first))
-        print("-" * 24)
+        window = int(args.window * 60)
+        batch = [e for e in events if e.opens_at <= events[0].opens_at + window]
+        print(f"\nWhatsApp message for the first batch ({args.window:g} min window, "
+              f"{len(batch)} of {len(events)} openings):")
+        print("-" * 28)
+        print(format_message(batch))
+        print("-" * 28)
     return 0
 
 
@@ -110,8 +112,9 @@ def cmd_labels(args, ap) -> int:
 
 def cmd_check(args, ap) -> int:
     cfg = AlertConfig.load(args.config)
-    print(f"world={cfg.world}  scope={cfg.scope}  lead={cfg.lead_minutes:g} min  "
-          f"notifier={cfg.notifier}")
+    print(f"world={cfg.world}  scope={cfg.scope}  "
+          f"batch={cfg.trigger_lead_minutes:g} min lead / {cfg.window_minutes:g} min window  "
+          f"side={cfg.side_rule}  notifier={cfg.notifier}")
     if cfg.notifier.startswith("green"):
         g = cfg.green_api
         missing = [n for n, v in (("id_instance", g.id_instance), ("api_token", g.api_token),
@@ -146,8 +149,9 @@ def cmd_run(args, ap) -> int:  # pragma: no cover - needs a live browser
     notifier = NullNotifier() if args.dry_run else build_notifier(cfg)
     engine = AlertEngine(cfg, notifier, SentLog(cfg.state_file),
                          _labels_for(cfg.labels_file))
-    print(f"FoE Alerting — world {cfg.world}, scope {cfg.scope}, "
-          f"{cfg.lead_minutes:g} min lead, via {getattr(notifier, 'name', '?')}"
+    print(f"FoE Alerting — world {cfg.world}, scope {cfg.scope}, batch "
+          f"{cfg.trigger_lead_minutes:g}/{cfg.window_minutes:g} min, "
+          f"via {getattr(notifier, 'name', '?')}"
           f"{'  [dry run]' if args.dry_run else ''}")
     print("Open Guild Battlegrounds on that world; every entry refreshes the schedule.\n"
           "Ctrl-C to stop.")
@@ -174,6 +178,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--map-data", default="", help="map asset JSON (for generated grid labels)")
     p.add_argument("--at", default="", help="unix time to evaluate at, or 'capture'")
     p.add_argument("--horizon", type=float, default=12.0, help="hours ahead to list")
+    p.add_argument("--window", type=float, default=30.0,
+                   help="batch window in minutes for the sample message")
     p.add_argument("--limit", type=int, default=30)
     p.set_defaults(func=cmd_preview)
 

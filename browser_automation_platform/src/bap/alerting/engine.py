@@ -5,8 +5,13 @@ is exercised by unit tests, and :mod:`bap.alerting.watcher` only has to shovel g
 into :meth:`AlertEngine.on_snapshot` and call :meth:`AlertEngine.tick` on a timer.
 
 Why a timer at all, when one snapshot already lists hours of openings? Because we announce a
-few minutes *before* each opening, not when we learn about it — the group wants "16:25 🔵 A1X"
-to land while it is still actionable.
+few minutes *before* the opening, not when we learn about it. Three hours of notice and
+people ignore the message; the guild's own rule of thumb is two to five minutes, which is
+just enough time to gather.
+
+Messages are **batched**: the engine stays silent until the soonest unannounced opening is
+``trigger_lead`` away, then sends every opening inside ``window`` in one message. See
+:func:`bap.alerting.schedule.plan_batch`.
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ import time
 from bap.alerting import clock
 from bap.alerting.labels import LabelBook
 from bap.alerting.render import format_line, format_message
-from bap.alerting.schedule import due_events, unlock_events
+from bap.alerting.schedule import plan_batch, unlock_events
 
 logger = logging.getLogger("bap.alerting")
 
@@ -32,6 +37,7 @@ class AlertEngine:
         self.labels = labels or LabelBook(overrides={}, auto={})
         self._bg = None
         self._snapshot_at: float | None = None
+        self._window_end: float | None = None   # game clock; end of the announced window
         self.messages_sent = 0
 
     # ------------------------------------------------------------------ input
@@ -66,12 +72,13 @@ class AlertEngine:
         now = time.time() if now is None else now
         return unlock_events(self._bg, labels=self.labels, scope=self.cfg.scope,
                              now=clock.game_now(self._bg, now),
-                             horizon_seconds=self.cfg.horizon_seconds)
+                             horizon_seconds=self.cfg.horizon_seconds,
+                             side_rule=self.cfg.side_rule)
 
     # ---------------------------------------------------------------- output
 
     def tick(self, now: float | None = None):
-        """Send anything that just became due. Returns the events announced (possibly none).
+        """Send the batch that just became due. Returns the events announced (possibly none).
 
         Quiet hours suppress the *message*, not the bookkeeping: the openings are marked as
         handled so the group doesn't get a pile of stale lines the moment the window ends.
@@ -80,23 +87,30 @@ class AlertEngine:
             return []
         now = time.time() if now is None else now
         game_now = clock.game_now(self._bg, now)
-        due = due_events(self.upcoming(now), now=game_now,
-                         lead_seconds=self.cfg.lead_seconds,
-                         stale_seconds=self.cfg.stale_seconds,
-                         already_sent=self.sent.keys)
-        if not due:
+        batch = plan_batch(self.upcoming(now), now=game_now,
+                           trigger_lead_seconds=self.cfg.trigger_lead_seconds,
+                           window_seconds=self.cfg.window_seconds,
+                           stale_seconds=self.cfg.stale_seconds,
+                           already_sent=self.sent.keys,
+                           window_end=self._window_end)
+        self._window_end = batch.window_end
+        if not batch:
             return []
+        events = list(batch.events)
         if self.cfg.in_quiet_hours(clock.prague_hour(int(game_now))):
-            logger.info("quiet hours — suppressing %d opening(s)", len(due))
-            self.sent.record([e.key for e in due], now=now)
+            logger.info("quiet hours — suppressing %d opening(s)", len(events))
+            self.sent.record([e.key for e in events], now=now)
             return []
-        text = format_message(due, header=self.cfg.header)
+        text = format_message(events, header=self.cfg.header,
+                              show_attrition=self.cfg.show_attrition)
         if not self.notifier.send(text):
             logger.warning("send failed — will retry the same openings next tick")
-            return []                       # not recorded → retried while still fresh
-        self.sent.record([e.key for e in due], now=now)
+            self._window_end = None         # not recorded → re-planned while still fresh
+            return []
+        self.sent.record([e.key for e in events], now=now)
         self.messages_sent += 1
-        return due
+        logger.info("sent %d opening(s)%s", len(events), " (re-send)" if batch.resend else "")
+        return events
 
     # ----------------------------------------------------------------- status
 

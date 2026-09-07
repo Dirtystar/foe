@@ -28,7 +28,8 @@ class FakeResponse:
 
 
 def _engine(tmp_path):
-    return AlertEngine(AlertConfig.from_dict({}), NullNotifier(), SentLog(tmp_path / "s.json"),
+    cfg = AlertConfig.from_dict({"trigger_lead_minutes": 10})   # the sample opens in 5 min
+    return AlertEngine(cfg, NullNotifier(), SentLog(tmp_path / "s.json"),
                        LabelBook(overrides={}, auto={}))
 
 

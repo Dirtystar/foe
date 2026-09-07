@@ -8,14 +8,16 @@ the context a fresh session cannot read out of the code.
 
 ## What this is
 
-Guild Battlegrounds alerting for **one world (cz8) only**. It posts one line per province
-opening into the guild's WhatsApp group:
+Guild Battlegrounds alerting for **one world (cz8) only**. It posts batched province openings
+into the guild's WhatsApp group, in the format the guild already types by hand:
 
 ```
-16:25 🔵 A1X
+21:34 🔴 D4A [20%]
+21:48 🔴 B4H [20%]
+21:52 🔵 C2S [20%]
 ```
 
-`<time it opens, Prague> <🔴 attack | 🔵 defence> <the guild's coordinate>`
+`<time it opens, Prague> <🔴 attack | 🔵 defence> <the guild's coordinate> [<attrition %>]`
 
 It is read-only. It never clicks, never sends a request to the game, and shares no code path
 with the farmer's clicking. It only listens to `/game/json` responses the browser already
@@ -32,23 +34,48 @@ receives on the cz8 tab, and posts text to a messaging gateway.
 - **Green API** is the transport: Meta's official Cloud API and Twilio cannot post to a group
   at all. It sits behind a one-method port (`send(text) -> bool`), so a webhook or a
   self-hosted bridge is a config change.
-- **Attack vs defence** = `province.ownerId` vs `currentParticipantId`. Ours → they will siege
-  it when it opens (defence 🔵); theirs → we can (attack 🔴).
-- **Commander marks are honoured**: `ignore` ("Stop") suppresses an *attack* announcement but
-  never a defence; `focus` widens the default scope. Marks are read-only — the `setSignal`
+- **Attack vs defence** = `province.isAttackBattleType`, a per-province flag independent of
+  ownership (`side_rule: battle_type`, the default). The old ownership rule is **ruled out by
+  the owner's own screenshots**: their blue lines carry a `[20%]`, and `gainAttritionChance` is
+  absent on every province we own (22 of 22 in the capture), so blue cannot mean "ours". The
+  flag's meaning is still unconfirmed live — `side_rule: owner` switches back.
+- **`[20%]` = `province.gainAttritionChance`**, straight from the payload. Values in the
+  capture are exactly {20, 40, 60, 100}, the same set the guild writes. No OCR: the farmer's
+  vision-based `weakening.py` reads the *player's own* attrition on the battle screen, which is
+  a different number — nothing was ported from that branch.
+- **Batching, not one message per opening.** The map unlocks ~14.6 provinces/hour (measured),
+  so per-opening messages are ~350/day. The engine waits until the soonest unannounced opening
+  is `trigger_lead_minutes` away, then sends the whole `window_minutes` in one message —
+  4/30 min by default, ~52 messages/day, 6.5 lines each. A newcomer landing inside an already
+  announced window re-sends that whole window (the owner asked for re-send, not a delta).
+- **Commander marks are honoured**: `ignore` ("Stop") suppresses a province we do *not* own —
+  we are told not to fight there — and never one of ours, whatever colour it is shown in.
+  (This is now tied to ownership, not to the displayed colour, because the colour no longer
+  implies ownership.) `focus` widens the default scope. Marks are read-only — the `setSignal`
   write endpoint must never be called.
-- **Each opening is announced exactly once**, keyed `provinceId:lockedUntil`, remembered in
-  `alert_state.json` across restarts.
+- **Each opening triggers exactly once**, keyed `provinceId:lockedUntil`, remembered in
+  `alert_state.json` across restarts. It can still be *listed again* in a re-sent window.
 
-## The one open question
+## Naming — settled
 
-**The game ships no province names.** A province is an id (0…59) plus a flag position in the
-static map asset, so `A1X` is a guild convention that has to be mapped once per map
-(`province_labels.<world>.json`). Until a province is named it falls back to a generated grid
-position (`F7`) and then `#14`, so nothing is blocked on the naming.
+`A1X` is **the guild's own notation; the game ships no province names.** Confirmed from the
+owner's screenshots of the group. The shape is `[A–D][1–4][letter]` — a 4×4 sector grid with a
+per-province letter (`D4A`, `C3Y`, `B4H`, and plain `C1` when it is alone in its cell), so
+`auto_labels` now generates a 4×4 grid with an uppercase suffix. A generated label lands in the
+right sector and usually only the trailing letter needs correcting by hand.
 
-Ask the owner: *is `A1X` your guild's own notation, or is it written somewhere in the game / a
-tool?* If the game shows it, read it from there instead of maintaining a file.
+Still to do: fill `province_labels.cz8.json` against the live map and switch `scope` to
+`labeled`. Without it `relevant` announces ~195 openings/day, which is too much for the group
+even after batching.
+
+## The open questions
+
+1. **Does `isAttackBattleType` really mean attack vs defence?** The owner's answer was "Útok a
+   Obrana, tak jsou ty provincie rozdělené — nevím jaký je v tom pattern", so he cannot settle
+   it either. The farmer's `gbg_data/model.py` annotates the same field as "attack vs
+   negotiate" — a different reading. Only the live map decides. Prompt is ready in
+   `docs/FOE_ALERTING.md` §8.
+2. **Deployment split.** Decided in principle (see below), not built yet.
 
 ## Standing rules from the owner
 
@@ -61,13 +88,13 @@ tool?* If the game shows it, read it from there instead of maintaining a file.
 
 ## State: built and unit-tested, never run against a live map
 
-`src/bap/alerting/` (73 tests, all browser-free):
+`src/bap/alerting/` (90 tests, all browser-free):
 
 | module | job |
 |---|---|
 | `clock.py` | server-clock drift + Prague `HH:MM` (works without `tzdata`; EU DST rule tested against the tz database at both switches) |
-| `labels.py` | province id → the guild's coordinate (file → generated grid → `#id`) |
-| `schedule.py` | snapshot → `UnlockEvent`s; scopes `labeled`/`relevant`/`mine`/`all`; due-window logic |
+| `labels.py` | province id → the guild's coordinate (file → generated 4×4 grid → `#id`) |
+| `schedule.py` | snapshot → `UnlockEvent`s; scopes; the two colour rules; `plan_batch` (the batching window) |
 | `render.py` | the message text |
 | `notifiers.py` | Green API / webhook / console / null |
 | `state.py` | the "already announced" log |
@@ -76,20 +103,43 @@ tool?* If the game shows it, read it from there instead of maintaining a file.
 | `watcher.py` | the only browser glue: CDP, one tab, listen |
 
 ```bash
-PYTHONPATH=src python3 -m pytest tests/unit/alerting -q          # 73 passed
+PYTHONPATH=src python3 -m pytest tests/unit/alerting -q          # 90 passed
 PYTHONPATH=src python3 -m bap.alerting preview \
     dataset/api_samples/getBattleground.sample.json --at capture \
     --map-data dataset/api_samples/map_data.volcano_archipelago.sample.json
 ```
 
+## Deployment — decided, not built
+
+The owner will **not** buy a separate machine and has a **~$10/month** budget. The job splits
+cleanly, and only the cheap half needs to be always-on:
+
+- **Collector** — needs the game, a browser and an account. Does *not* need to run 24/7: one
+  snapshot covers ~3.7 h ahead, so it only has to refresh every couple of hours. Runs on
+  whatever machine is playing; the farmer on cz8 refreshes GBG for free.
+- **Scheduler + sender** — needs a clock and internet, nothing else. No game credentials, so a
+  compromise there cannot reach the account. This is the piece that belongs on a small VPS
+  (~$0–6/month, inside budget).
+
+A headless-Chrome collector in the cloud was **rejected**: a WebGL client on a GPU-less VPS
+blows the budget on its own, and it would need a second in-guild game account, which is against
+InnoGames' terms and puts the guild at risk. The owner was told this plainly and chose the
+split; his fallback is "runs when my PC runs, someone else covers the rest", which the split
+supports — several designated collectors, not random members (he explicitly rejected relying on
+whoever happens to open GBG).
+
+If the last snapshot is older than ~3.7 h the scheduler must go quiet and say so rather than
+send stale times. **Not implemented yet** — this is the next piece of work.
+
 ## Next steps
 
-1. **Naming** — settle what `A1X` is (above), then generate/fill `province_labels.cz8.json`
-   and switch `scope` to `labeled`.
-2. **Green API** — the owner creates the instance and links a phone (use a spare number, not
-   the main one). Then `bap-alert check --send "test"`.
-3. **Live confirmation** — GBG was closed for ~4 days from 2026-09-07. When it reopens, confirm
-   (a) `lockedUntil` really is "opens at" for provinces we don't own, and (b) the map asset's
-   province ids match the season's map. The verification prompt is in
-   `docs/FOE_ALERTING.md` §7; run it as a Chrome-MCP prompt, don't test blind.
-4. Only after a clean `--dry-run` day should it post to the real group.
+1. **Live confirmation** — GBG reopens ~2026-09-11. Run the §8 prompt in
+   `docs/FOE_ALERTING.md` and bring the findings back. It settles `side_rule`, the `[20%]`
+   source, `lockedUntil`, and the map/id range. Don't test blind.
+2. **Labels** — fill `province_labels.cz8.json` from the live map, switch `scope` to `labeled`.
+3. **Split collector from scheduler** (above), including the stale-snapshot cutoff.
+4. **Green API** — the owner creates the instance and links a phone (use a spare number, not
+   the main one). Then `bap-alert check --send "test"`. Free Developer tier: unlimited
+   messages, but only **3 chats per calendar month** and 1 instance — the group is one chat, so
+   disable incoming webhooks so a stray inbound chat cannot burn a slot.
+5. Only after a clean `--dry-run` day should it post to the real group.

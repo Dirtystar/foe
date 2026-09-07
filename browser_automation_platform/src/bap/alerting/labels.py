@@ -66,16 +66,20 @@ def _column_name(i: int) -> str:
     return name
 
 
-def auto_labels(layout, *, columns: int = 12, rows: int = 10) -> dict[int, str]:
-    """Positional grid labels (``A1``, ``F7``, …) from the map asset's flag positions —
+def auto_labels(layout, *, columns: int = 4, rows: int = 4) -> dict[int, str]:
+    """Positional grid labels (``A1``, ``C3``, …) from the map asset's flag positions —
     columns left→right as letters, rows top→bottom as numbers, over the bounding box of the
     flags themselves so the grid is tight on the actual map.
 
-    The GBG flags are hand-placed, not a lattice, so this is a *hint*, not a naming standard:
-    it exists to make the labels template recognisable and to keep unnamed provinces
-    identifiable. Two provinces sharing a cell get a suffix (``F7``, ``F7b``) so a label is
-    always unique. ``layout`` is a :class:`~bap.forge.gbg_data.map_layout.MapLayout` (or
-    anything with ``flags``); no layout → ``{}``.
+    The 4×4 default mirrors the shape the guild already uses out loud (``A1X``, ``D4A``,
+    ``C3Y``: sector letter, sector number, then a per-province letter), so a generated label
+    lands in the right sector and only the trailing letter is left to fill in by hand.
+
+    The GBG flags are hand-placed, not a lattice, so this is still a *hint*, not a naming
+    standard. Provinces sharing a cell get a distinguishing letter (``C3``, ``C3B``, ``C3C``)
+    so a label is always unique. ``layout`` is a
+    :class:`~bap.forge.gbg_data.map_layout.MapLayout` (or anything with ``flags``); no layout
+    → ``{}``.
     """
     flags = dict(getattr(layout, "flags", None) or {})
     if not flags:
@@ -90,7 +94,7 @@ def auto_labels(layout, *, columns: int = 12, rows: int = 10) -> dict[int, str]:
         base = f"{_column_name(_cell(x, x0, x1, columns))}{_cell(y, y0, y1, rows) + 1}"
         n = used.get(base, 0)
         used[base] = n + 1
-        out[pid] = base if n == 0 else f"{base}{_ALPHABET[min(n, 25)].lower()}"
+        out[pid] = base if n == 0 else f"{base}{_ALPHABET[min(n, 25)]}"
     return out
 
 
