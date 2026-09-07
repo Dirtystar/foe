@@ -3,8 +3,10 @@
 This subproject was split off from the farmer's session on purpose. Everything it needs lives
 on the branch `claude/foe-alerting-cz8`; the farmer lives on
 `claude/browser-automation-architecture-5784h1` and the two must not be mixed. **Read
-`docs/FOE_ALERTING.md` first** — it is the design and the user guide. This file only carries
-the context a fresh session cannot read out of the code.
+`docs/FOE_ALERTING.md` first** — it is the design and the rationale;
+`docs/FOE_ALERTING_SETUP.md` is the step-by-step setup guide (install, panel, Green API,
+troubleshooting). This file only carries the context a fresh session cannot read out of the
+code.
 
 ## What this is
 
@@ -102,6 +104,10 @@ even after batching.
 | `engine.py` | snapshot in → messages out (no browser) |
 | `watcher.py` | the only browser glue: CDP, one tab, listen |
 | `webui.py` | `bap-alert ui` — the local control panel (format, labels, credentials, log) |
+
+Launchers `foe-alerting.sh` / `foe-alerting.bat` start the panel with no install step (the
+alerter has zero third-party imports — verified, not assumed). **The `.bat` has never been
+run on Windows** — no Windows in the build environment — so treat its first run as untested.
 
 ```bash
 PYTHONPATH=src python3 -m pytest tests/unit/alerting -q          # 104 passed

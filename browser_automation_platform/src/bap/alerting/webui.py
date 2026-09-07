@@ -161,7 +161,10 @@ class UiState:
     def save_labels(self, mapping: dict) -> str:
         path = self.cfg.labels_file or f"province_labels.{self.cfg.world}.json"
         clean = {str(int(k)): str(v).strip() for k, v in mapping.items() if str(v).strip()}
-        body = {"map_id": getattr(self._layout, "map_id", "") or "", "labels": clean}
+        body = {"labels": clean}
+        map_id = getattr(self._layout, "map_id", "") or ""
+        if map_id:                             # the asset body often carries no id at all
+            body = {"map_id": map_id, "labels": clean}
         Path(path).write_text(json.dumps(body, indent=1, ensure_ascii=False), encoding="utf-8")
         self.labels = LabelBook.build(path=path, layout=self._layout)
         logger.info("labels: saved %d name(s) to %s", len(clean), path)
@@ -402,13 +405,11 @@ PAGE = """<!doctype html>
  .msg{white-space:pre-wrap}
  .hint{font-size:12px;color:var(--dim);margin-top:8px}
  .hint code{color:var(--acc)}
- table{width:100%;border-collapse:collapse;font-size:13px}
- th{text-align:left;font-weight:500;color:var(--dim);font-size:11px;
-    text-transform:uppercase;letter-spacing:.05em;padding:4px 8px 8px}
- td{padding:2px 8px}
- td:first-child,th:first-child{width:60px;color:var(--dim)}
- td:nth-child(2){width:90px;color:var(--dim);font-family:ui-monospace,monospace}
- .scroll{max-height:320px;overflow:auto}
+ .lrow{display:flex;gap:8px;margin-bottom:6px;align-items:center}
+ .lrow select{width:170px;font-family:ui-monospace,Menlo,Consolas,monospace}
+ .lrow input{flex:1}
+ .lrow button{padding:7px 10px;color:var(--dim)}
+ .lrow button:hover{color:var(--bad);border-color:var(--bad)}
  .flash{font-size:12px;padding:6px 0}
  .flash.ok{color:var(--ok)} .flash.bad{color:var(--bad)}
  .logbox{max-height:260px;min-height:64px}
@@ -448,11 +449,12 @@ PAGE = """<!doctype html>
 </section>
 
 <section><h2>Labely provincií</h2>
-  <div class="hint">Vygenerovaná mřížka je jen nápověda k pozici. Přepiš ji tím, čemu
-    provincii říká gilda; prázdné pole = použije se vygenerovaný label.</div>
-  <div class="scroll"><table><thead><tr><th>id</th><th>mřížka</th><th>název gildy</th></tr>
-    </thead><tbody id="labels"></tbody></table></div>
-  <div class="bar"><button class="primary" onclick="saveLabels()">Uložit labely</button>
+  <div class="hint">Pojmenuj jen ty provincie, které gilda opravdu řeší — nepojmenované se
+    ohlásí vygenerovanou pozicí v mřížce (v závorce u čísla). Přidávej si řádky podle
+    potřeby; se scope <code>labeled</code> se hlásí právě jen ty pojmenované.</div>
+  <div id="labels"></div>
+  <div class="bar"><button onclick="addLabelRow()">+ Přidat</button>
+    <button class="primary" onclick="saveLabels()">Uložit labely</button>
     <span class="flash" id="f-lab"></span></div>
 </section>
 
@@ -519,11 +521,7 @@ async function load() {
   $("gid").value = ST.creds.id_instance;
   $("gchat").value = ST.creds.chat_id;
   if (!ST.creds.has_token) $("gtok").placeholder = "(nevyplněno)";
-  const rows = ST.labels.map(r =>
-    `<tr><td>${r.id}</td><td>${r.generated}</td>` +
-    `<td><input data-id="${r.id}" value="${r.name.replace(/"/g, "&quot;")}"></td></tr>`);
-  $("labels").innerHTML = rows.join("") ||
-    "<tr><td colspan=3 style='color:var(--dim)'>Žádná data mapy — spusť s --map-data.</td></tr>";
+  drawLabels();
   $("log").textContent = ST.log.join("\\n") || "(zatím nic)";
   preview();
 }
@@ -545,11 +543,63 @@ async function saveCfg() {
   preview(); loadLog();
 }
 
+// The map has 60 provinces and the guild names a handful, so the panel is a short list you
+// add to — not a 60-row table to scroll past every time.
+function labelRow(pid, name) {
+  const row = document.createElement("div");
+  row.className = "lrow";
+  const sel = document.createElement("select");
+  for (const r of ST.labels) {
+    const o = document.createElement("option");
+    o.value = r.id;
+    o.textContent = "#" + r.id + (r.generated ? "  (" + r.generated + ")" : "");
+    if (r.id === pid) o.selected = true;
+    sel.appendChild(o);
+  }
+  const inp = document.createElement("input");
+  inp.value = name || "";
+  inp.placeholder = "název gildy, např. A1X";
+  const del = document.createElement("button");
+  del.textContent = "✕"; del.title = "odebrat řádek";
+  del.onclick = () => { row.remove(); if (!$("labels").children.length) addLabelRow(); };
+  row.append(sel, inp, del);
+  return row;
+}
+
+function firstUnusedProvince() {
+  const used = new Set([...document.querySelectorAll(".lrow select")].map(s => +s.value));
+  const free = ST.labels.find(r => !used.has(r.id));
+  return free ? free.id : (ST.labels[0] ? ST.labels[0].id : 0);
+}
+
+function addLabelRow() {
+  if (!ST.labels.length) return;
+  $("labels").appendChild(labelRow(firstUnusedProvince(), ""));
+}
+
+function drawLabels() {
+  const box = $("labels");
+  box.innerHTML = "";
+  if (!ST.labels.length) {
+    box.innerHTML = "<div class='hint'>Žádná data mapy — spusť s <code>--map-data</code>.</div>";
+    return;
+  }
+  const named = ST.labels.filter(r => r.name);
+  if (named.length) named.forEach(r => box.appendChild(labelRow(r.id, r.name)));
+  else addLabelRow();                       // a fresh setup starts with one empty row
+}
+
 async function saveLabels() {
   const out = {};
-  document.querySelectorAll("#labels input").forEach(i => { out[i.dataset.id] = i.value; });
+  document.querySelectorAll(".lrow").forEach(row => {
+    const pid = row.querySelector("select").value;
+    const name = row.querySelector("input").value.trim();
+    if (name) out[pid] = name;
+  });
   const r = await api("/api/labels", {labels: out});
   flash("f-lab", r.ok, r.detail);
+  ST = await api("/api/state");
+  drawLabels();
   preview(); loadLog();
 }
 

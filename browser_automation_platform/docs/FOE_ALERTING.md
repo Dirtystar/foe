@@ -80,10 +80,17 @@ Telegram relay), `console`, or `null`.
 
 ## 3. Setup
 
+**Step-by-step, including Green API and the launchers: [`FOE_ALERTING_SETUP.md`](FOE_ALERTING_SETUP.md).**
+The short version — the alerter imports nothing outside the standard library, so there is
+nothing to install:
+
 ```bash
-pip install -e .            # bap-alert is installed as a console script
-cp alerting.example.json alerting.json
+cd browser_automation_platform
+./foe-alerting.sh           # Windows: double-click foe-alerting.bat
 ```
+
+`pip install -e .` also works and puts `bap-alert` on PATH, but it drags in the farmer's
+dependencies (playwright, pydantic) that the alerter never uses.
 
 **Green API** (~5 minutes): create an account, create an instance, scan the QR with the phone
 that will send the messages, then note *idInstance* and *apiTokenInstance*.

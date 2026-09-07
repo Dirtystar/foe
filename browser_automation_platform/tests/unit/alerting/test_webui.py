@@ -115,6 +115,37 @@ def test_saving_labels_feeds_straight_back_into_the_preview(panel, tmp_path, mon
     assert state.labels.label(first) == "ZZ9"
 
 
+def test_naming_a_few_provinces_leaves_the_rest_on_generated_labels(panel, tmp_path,
+                                                                    monkeypatch):
+    """The panel names a handful, not all 60 — the rest must stay announceable."""
+    state, base, token = panel
+    monkeypatch.chdir(tmp_path)
+    rows = json.loads(_get(base, "/api/state", token)[1])["labels"]
+    _post(base, "/api/labels", token, {"labels": {str(rows[0]["id"]): "A1X"}})
+    assert state.labels.label(rows[0]["id"]) == "A1X"
+    assert state.labels.label(rows[1]["id"]) == rows[1]["generated"]
+    assert state.labels.named_ids() == {rows[0]["id"]}      # scope=labeled sees only that one
+
+
+def test_removing_a_name_drops_it_from_the_file(panel, tmp_path, monkeypatch):
+    """Deleting a row in the panel has to actually unname the province, not leave a ghost."""
+    state, base, token = panel
+    monkeypatch.chdir(tmp_path)
+    rows = json.loads(_get(base, "/api/state", token)[1])["labels"]
+    a, b = rows[0]["id"], rows[1]["id"]
+    _post(base, "/api/labels", token, {"labels": {str(a): "A1X", str(b): "B2"}})
+    _post(base, "/api/labels", token, {"labels": {str(a): "A1X"}})
+    assert state.labels.named_ids() == {a}
+
+
+def test_an_empty_map_id_is_left_out_of_the_labels_file(panel, tmp_path, monkeypatch):
+    state, base, token = panel
+    monkeypatch.chdir(tmp_path)
+    _post(base, "/api/labels", token, {"labels": {"0": "A1X"}})
+    written = json.loads((tmp_path / "province_labels.cz8.json").read_text(encoding="utf-8"))
+    assert "map_id" not in written and written["labels"] == {"0": "A1X"}
+
+
 def test_config_is_saved_without_the_credentials(panel, tmp_path):
     state, base, token = panel
     _post(base, "/api/credentials", token,
