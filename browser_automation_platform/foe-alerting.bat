@@ -10,6 +10,28 @@ rem See docs\FOE_ALERTING_SETUP.md.
 setlocal
 cd /d "%~dp0"
 
+rem Double-clicking a .bat straight out of a ZIP runs it from a temp folder that Windows
+rem deletes: the panel starts, the settings appear to save, and everything vanishes. Catch it
+rem here rather than let someone lose an evening's labels.
+echo "%~dp0" | find /i "\Temp\" >nul
+if not errorlevel 1 goto :not_extracted
+echo "%~dp0" | find /i "\AppData\Local\Temp" >nul
+if not errorlevel 1 goto :not_extracted
+goto :extracted
+
+:not_extracted
+echo.
+echo   Vypada to, ze je tahle slozka jen rozbalena v ZIPu.
+echo   Windows ji smaze a prijdes o nastaveni i o labely.
+echo.
+echo   Rozbal cely ZIP nekam k sobe (napr. na Plochu nebo do Dokumentu)
+echo   a spust SPUSTIT.bat az z te rozbalene slozky.
+echo.
+pause
+exit /b 1
+
+:extracted
+
 rem The py launcher ships with the python.org installer and picks the right version; plain
 rem "python" is the fallback for installs that skipped it (Microsoft Store, conda).
 set "PY="

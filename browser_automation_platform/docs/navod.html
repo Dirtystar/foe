@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="cs"><head><meta charset="utf-8">
+<title>FoE Alerting — návod</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+ :root{--bg:#14161a;--panel:#1c1f26;--line:#2b3038;--ink:#e6e8ec;--dim:#98a0ad;
+       --acc:#5b9dd9;--ok:#4a9d6b;--warn:#c9a227;--bad:#c25a5a}
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--bg);color:var(--ink);
+      font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif}
+ main{max-width:760px;margin:0 auto;padding:32px 22px 80px}
+ h1{font-size:26px;margin:0 0 6px}
+ .lead{color:var(--dim);margin:0 0 28px}
+ h2{font-size:19px;margin:38px 0 10px;padding-top:18px;border-top:1px solid var(--line)}
+ h3{font-size:16px;margin:22px 0 6px}
+ p,li{margin:8px 0}
+ code{background:#0e1014;border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+      font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
+ pre{background:#0e1014;border:1px solid var(--line);border-radius:6px;padding:12px 14px;
+     overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
+ pre code{background:none;border:none;padding:0}
+ .box{border-left:3px solid var(--acc);background:var(--panel);padding:12px 16px;
+      border-radius:0 6px 6px 0;margin:16px 0}
+ .box.warn{border-color:var(--warn)}
+ .box.bad{border-color:var(--bad)}
+ .box h3{margin-top:0}
+ table{width:100%;border-collapse:collapse;margin:14px 0;font-size:15px}
+ th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+ th{color:var(--dim);font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+ ol li{margin:10px 0}
+ .step{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+       padding:4px 20px 14px;margin:14px 0}
+ a{color:var(--acc)}
+ .msg{background:#0e1014;border:1px solid var(--line);border-radius:6px;padding:12px 14px;
+      font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;line-height:1.8}
+ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);
+        color:var(--dim);font-size:14px}
+</style></head><body><main>
+
+<h1>FoE Alerting</h1>
+<p class="lead">Hlásí do skupiny na WhatsAppu, kdy se otevře provincie v Bojišti gild —
+a jestli je to útok nebo obrana.</p>
+
+<div class="msg">
+21:34 🔴 D4A [20%]<br>
+21:48 🔴 B4H [20%]<br>
+21:52 🔵 C2S [20%]
+</div>
+
+<p><strong>Čas otevření (pražský) · 🔴 útok / 🔵 obrana · název provincie · oslabení.</strong>
+Zprávy se posílají po dávkách — pár minut před nejbližším otevřením přijde jedna zpráva se
+vším, co se otevře v následoucí půlhodině. Ne zvlášť za každou provincii.</p>
+
+<div class="box bad">
+<h3>Nejdřív to nejdůležitější</h3>
+<p><strong>V jednu chvíli to smí posílat jen jeden člověk.</strong> Aplikace neví o ostatních
+kopiích. Když ji pustí tři lidi zároveň, skupina dostane každou zprávu třikrát. Domluvte se,
+kdo ji má puštěnou, a předávejte si to.</p>
+</div>
+
+<h2>Co k tomu potřebuješ</h2>
+<table>
+<tr><th>Co</th><th>Poznámka</th></tr>
+<tr><td><strong>Windows</strong></td><td>Funguje i Linux a Mac, ale návod je psaný pro
+Windows.</td></tr>
+<tr><td><strong>Python 3.11 nebo novější</strong></td><td>Jediná věc, co se instaluje. Nic
+dalšího — žádné knihovny, žádné příkazy.</td></tr>
+<tr><td><strong>Prohlížeč s puštěnou hrou</strong></td><td>Aplikace jen čte data, která hra
+sama pošle do prohlížeče.</td></tr>
+</table>
+
+<h2>Instalace, krok za krokem</h2>
+
+<div class="step">
+<h3>1. Rozbal ZIP</h3>
+<p>Ulož si přiložený ZIP a <strong>rozbal ho</strong> někam k sobě — na Plochu nebo do
+Dokumentů. Klikni na něj pravým a dej <em>Extrahovat vše…</em></p>
+<div class="box warn"><p>Nespouštěj nic přímo z okna ZIPu. Windows to rozbalí do dočasné
+složky, kterou pak smaže, a přijdeš o všechno nastavení. Aplikace tě na to upozorní, ale
+lepší je udělat to hned správně.</p></div>
+</div>
+
+<div class="step">
+<h3>2. Nainstaluj Python (jen poprvé)</h3>
+<p>Stáhni ho z <a href="https://www.python.org/downloads/">python.org/downloads</a> a spusť
+instalátor.</p>
+<div class="box warn"><p><strong>Hned na první obrazovce zaškrtni „Add python.exe to PATH“</strong>
+(dole). Bez toho aplikace Python nenajde. Když to zapomeneš, spusť instalátor znovu, dej
+<em>Modify</em> a zaškrtni to.</p></div>
+<p>Pak dej <em>Install Now</em> a nech to doběhnout. Restart počítače není potřeba.</p>
+</div>
+
+<div class="step">
+<h3>3. Spusť aplikaci</h3>
+<p>V rozbalené složce dvojklik na <code>SPUSTIT.bat</code>.</p>
+<p>Otevře se černé okno a v prohlížeči se objeví ovládací panel. <strong>To černé okno nezavírej</strong>
+— dokud běží, běží i aplikace. Zavřením ho vypneš.</p>
+<div class="box"><p>Když Windows hlásí „Systém Windows ochránil váš počítač“, klikni na
+<em>Další informace</em> → <em>Přesto spustit</em>. Je to proto, že soubor přišel z internetu,
+ne proto, že by byl závadný.</p></div>
+</div>
+
+<h2>Panel, po částech</h2>
+
+<h3>Formát zprávy</h3>
+<p>Jak vypadá jeden řádek. Výchozí <code>{time} {emoji} {label} {pct}</code> dělá přesně to,
+co píšeme ručně. Náhled pod tím počítá na skutečných datech, takže hned vidíš výsledek.</p>
+<table>
+<tr><th>Značka</th><th>Vypíše</th></tr>
+<tr><td><code>{time}</code></td><td>čas otevření, pražský — <code>21:34</code></td></tr>
+<tr><td><code>{emoji}</code></td><td>🔴 útok / 🔵 obrana</td></tr>
+<tr><td><code>{label}</code></td><td>název provincie — <code>D4A</code></td></tr>
+<tr><td><code>{pct}</code></td><td>oslabení — <code>[20%]</code>, u některých provincií hra
+žádné nehlásí a pak se nevypíše nic</td></tr>
+</table>
+
+<h3>Dávkování a rozsah</h3>
+<table>
+<tr><th>Nastavení</th><th>Co dělá</th></tr>
+<tr><td><strong>Předstih</strong></td><td>Kolik minut před nejbližším otevřením se ozve.
+Výchozí <strong>4</strong>.</td></tr>
+<tr><td><strong>Okno</strong></td><td>Když se ozve, vypíše všechno, co se otevře do tolika
+minut. Výchozí <strong>30</strong>.</td></tr>
+<tr><td><strong>Rozsah</strong></td><td>Které provincie vůbec hlásit — viz níž.</td></tr>
+<tr><td><strong>Pravidlo barev</strong></td><td>Nech na <code>battle_type</code>. Ještě není
+ověřené proti živé mapě, tohle je zatím ta lepší varianta.</td></tr>
+</table>
+<p>Rozsah <code>relevant</code> hlásí naše provincie, cíle označené velitelem a to, co zrovna
+obléháme. <code>labeled</code> hlásí <em>jen</em> provincie, které jste pojmenovali — to je
+nakonec ta nejlepší volba. <code>all</code> hlásí všech 60 a je to nepoužitelný šum.</p>
+
+<h3>Labely provincií</h3>
+<p>Hra provincie nijak nepojmenovává — pro ni je to jen číslo a vlaječka na mapě.
+<code>D4A</code> je naše značení, takže se musí jednou vyplnit.</p>
+<p>Panel začíná s jedním řádkem. V rozbalovátku vybereš provincii — píše se tam třeba
+<code>#14 (C1C)</code>, kde <code>C1C</code> je <em>odhadnutá</em> pozice v mřížce 4×4.
+Vedle napíšeš skutečný název a <strong>+ Přidat</strong> přidá další řádek. <strong>✕</strong>
+řádek smaže.</p>
+<p>Nemusíš vyplnit všech 60. Co nepojmenuješ, ohlásí se tou odhadnutou pozicí — funguje to
+od první minuty a názvy se dají doplňovat postupně.</p>
+
+<h3>WhatsApp</h3>
+<p>Sem patří přístupové údaje k bráně. <strong>Pokud ti je nikdo nedal, nech to prázdné</strong>
+— aplikace pak jen počítá a nic neposílá, což je přesně to, co má dělat záložní kopie.</p>
+
+<h3>Log</h3>
+<p>Co aplikace rozhodla a co poslala. Tohle je první místo, kam se podívat, když něco nesedí —
+a je bezpečné ho vyfotit a poslat, přístupové údaje v něm nejsou.</p>
+
+<h2>Když něco nefunguje</h2>
+<table>
+<tr><th>Co se děje</th><th>Čím to je</th></tr>
+<tr><td>Černé okno bliknutím zmizí</td><td>Není nainstalovaný Python, nebo se při instalaci
+nezaškrtlo „Add python.exe to PATH“.</td></tr>
+<tr><td>Hlásí to, že je složka jen v ZIPu</td><td>Přesně to. Rozbal ZIP a spusť to znovu
+z rozbalené složky.</td></tr>
+<tr><td>Stránka píše <strong>403 Forbidden</strong></td><td>Z adresy se ztratil kus za
+<code>?t=</code>. Zkopíruj celou adresu z černého okna.</td></tr>
+<tr><td>„Port already in use“</td><td>Aplikace už jednou běží. Najdi její černé okno, nebo
+restartuj počítač.</td></tr>
+<tr><td>Aplikace mlčí, i když je Bojiště otevřené</td><td>Nic není v <strong>rozsahu</strong>.
+Zkus přepnout na <code>relevant</code> nebo <code>all</code> a koukni, jestli se něco objeví.</td></tr>
+<tr><td>Skupina dostává všechno dvakrát</td><td>Běží to dvěma lidem naráz. Viz úplně nahoře.</td></tr>
+</table>
+
+<div class="box">
+<h3>Adresa panelu je heslo</h3>
+<p>V adrese je za <code>?t=</code> náhodný klíč. Je to jediné, co brání jiné stránce v tvém
+prohlížeči, aby panelu poslala příkaz — a panel umí posílat zprávy do skupiny. Neposílej tu
+adresu nikomu a nedávej ji do screenshotu. Panel je dostupný jen z tvého počítače, zvenku se
+k němu nikdo nedostane.</p>
+</div>
+
+<h2>Co aplikace nikdy nedělá</h2>
+<p>Vůči hře je <strong>jen ke čtení</strong>. Nikam neklikne, hře nepošle jediný požadavek a
+nesahá na značky velitele. Čte jenom odpovědi, které prohlížeč stejně dostal, a posílá text
+do WhatsAppu. Není to bot, nic za tebe nehraje.</p>
+
+<footer>
+Podrobnosti a technické pozadí jsou v repozitáři v <code>docs/FOE_ALERTING.md</code> a
+<code>docs/FOE_ALERTING_SETUP.md</code>. Když něco nefunguje, pošli screenshot panelu
+i s logem.
+</footer>
+</main></body></html>
