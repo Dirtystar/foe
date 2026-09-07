@@ -63,6 +63,7 @@ class AlertConfig:
     show_attrition: bool = True            # append the map's "[20%]" badge
     message_template: str = DEFAULT_TEMPLATE   # one line's layout; see render.PLACEHOLDERS
     stale_minutes: float = 5.0             # never announce an opening older than this
+    max_snapshot_age_minutes: float = 210.0  # go quiet rather than trust an old snapshot
     poll_seconds: float = 30.0             # how often the engine re-checks the schedule
     horizon_hours: float = 12.0            # ignore openings further out than this
     quiet_hours: tuple[int, int] | None = None   # e.g. (23, 7) Prague — stay silent overnight
@@ -88,6 +89,12 @@ class AlertConfig:
     @property
     def stale_seconds(self) -> int:
         return int(self.stale_minutes * 60)
+
+    @property
+    def max_snapshot_age_seconds(self) -> int:
+        """One snapshot describes ~3.7 h of openings, so beyond that we are extrapolating
+        from data the game has long since changed. Default 3.5 h, just inside it."""
+        return int(self.max_snapshot_age_minutes * 60)
 
     @property
     def horizon_seconds(self) -> int:
@@ -128,6 +135,8 @@ class AlertConfig:
             show_attrition=bool(d.get("show_attrition", cls.show_attrition)),
             message_template=str(d.get("message_template") or cls.message_template),
             stale_minutes=_num("stale_minutes", cls.stale_minutes),
+            max_snapshot_age_minutes=_num("max_snapshot_age_minutes",
+                                          cls.max_snapshot_age_minutes),
             poll_seconds=_num("poll_seconds", cls.poll_seconds),
             horizon_hours=_num("horizon_hours", cls.horizon_hours),
             quiet_hours=quiet,

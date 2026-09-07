@@ -166,6 +166,60 @@ def cmd_run(args, ap) -> int:  # pragma: no cover - needs a live browser
                      on_status=_status)
 
 
+# ------------------------------------------------------------ collect / serve
+
+def cmd_collect(args, ap) -> int:  # pragma: no cover - needs a live browser
+    """Watch the world's tab and forward snapshots to a scheduler. Decides nothing itself."""
+    from bap.alerting.relay import RelayClient, make_relay_handler, secret_from_env
+    from bap.alerting.watcher import run_watch
+    from bap.forge.gbg_data.live import LiveGbgReader
+
+    cfg = AlertConfig.load(args.config)
+    secret = secret_from_env(args.secret)
+    if not secret:
+        ap.error("no shared secret — set ALERT_RELAY_SECRET (same value as the scheduler)")
+    client = RelayClient(args.to, secret, world=cfg.world)
+    handler = make_relay_handler(LiveGbgReader(), client)
+    print(f"FoE Alerting collector — world {cfg.world} → {client.url}")
+    print("Open Guild Battlegrounds on that world. Nothing is sent to the group from here.\n"
+          "Ctrl-C to stop.")
+
+    def _status(_engine, _sent):
+        if args.verbose:
+            print(f"[{time.strftime('%H:%M:%S')}] forwarded {client.sent}, "
+                  f"failed {client.failed}", flush=True)
+
+    return run_watch(cfg, None, handler=handler, endpoint=args.cdp,
+                     refresh_minutes=args.refresh_minutes, on_status=_status)
+
+
+def cmd_serve(args, ap) -> int:  # pragma: no cover - a long-running server
+    """Hold the newest snapshot, decide, and send. The half that needs no game."""
+    from bap.alerting.relay import SnapshotReceiver, secret_from_env, serve_relay
+
+    cfg = AlertConfig.load(args.config)
+    notifier = NullNotifier() if args.dry_run else build_notifier(cfg)
+    engine = AlertEngine(cfg, notifier, SentLog(cfg.state_file), _labels_for(cfg.labels_file))
+    receiver = SnapshotReceiver(engine)
+    serve_relay(receiver, secret=secret_from_env(args.secret), port=args.port, host=args.host)
+    print(f"FoE Alerting scheduler — world {cfg.world}, scope {cfg.scope}, "
+          f"via {getattr(notifier, 'name', '?')}"
+          f"{'  [dry run]' if args.dry_run else ''}")
+    print("Waiting for collectors. Ctrl-C to stop.")
+    try:
+        while True:
+            sent = engine.tick()
+            if sent:
+                print(f"[{time.strftime('%H:%M:%S')}] sent:\n{format_message(sent)}",
+                      flush=True)
+            elif args.verbose:
+                print(f"[{time.strftime('%H:%M:%S')}] {engine.status_line()}", flush=True)
+            time.sleep(cfg.poll_seconds)
+    except KeyboardInterrupt:
+        print()
+    return 0
+
+
 # --------------------------------------------------------------------------- ui
 
 def cmd_ui(args, ap) -> int:
@@ -225,6 +279,25 @@ def build_parser() -> argparse.ArgumentParser:
                    help="reload the tab this often when nothing else refreshes GBG")
     p.add_argument("--verbose", action="store_true")
     p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("collect", help="forward this world's snapshots to a scheduler")
+    p.add_argument("--to", required=True, help="scheduler base URL, e.g. http://1.2.3.4:8770")
+    p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
+    p.add_argument("--cdp", default="", help="Chrome CDP endpoint (default: the app's)")
+    p.add_argument("--secret", default="", help="shared secret (default: $ALERT_RELAY_SECRET)")
+    p.add_argument("--refresh-minutes", type=float, default=0.0,
+                   help="reload the tab this often when nothing else refreshes GBG")
+    p.add_argument("--verbose", action="store_true")
+    p.set_defaults(func=cmd_collect)
+
+    p = sub.add_parser("serve", help="receive snapshots, decide, and post to the group")
+    p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
+    p.add_argument("--port", type=int, default=8770)
+    p.add_argument("--host", default="0.0.0.0", help="bind address")
+    p.add_argument("--secret", default="", help="shared secret (default: $ALERT_RELAY_SECRET)")
+    p.add_argument("--dry-run", action="store_true", help="decide everything, send nothing")
+    p.add_argument("--verbose", action="store_true")
+    p.set_defaults(func=cmd_serve)
 
     p = sub.add_parser("ui", help="local control panel: format, labels, credentials, log")
     p.add_argument("--config", default=DEFAULT_CONFIG_PATH)

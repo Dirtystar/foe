@@ -54,12 +54,18 @@ def _select_world_page(browser, match: str):  # pragma: no cover - live glue
     return hits[0]
 
 
-def run_watch(cfg, engine: AlertEngine, *, connect=None, endpoint: str = "",
-              refresh_minutes: float = 0.0, once: bool = False,
+def run_watch(cfg, engine: AlertEngine | None, *, connect=None, endpoint: str = "",
+              refresh_minutes: float = 0.0, once: bool = False, handler=None,
               on_status=None) -> int:  # pragma: no cover - needs a live browser
-    """Attach to Chrome, watch the world's tab, and tick the engine forever (Ctrl-C to stop)."""
+    """Attach to Chrome, watch the world's tab, and tick the engine forever (Ctrl-C to stop).
+
+    ``handler`` overrides what happens to each response, and ``engine`` may then be ``None``:
+    that is how ``bap-alert collect`` reuses this loop to forward snapshots to a scheduler
+    instead of deciding anything itself.
+    """
     reader = LiveGbgReader()
-    handler = make_handler(reader, engine)
+    if handler is None:
+        handler = make_handler(reader, engine)
     endpoint = endpoint or cfg.cdp
     if not endpoint:
         from bap.forge.browser_settings import DEFAULT_CDP_ENDPOINT
@@ -73,7 +79,7 @@ def run_watch(cfg, engine: AlertEngine, *, connect=None, endpoint: str = "",
         next_refresh = time.time() + refresh_minutes * 60 if refresh_minutes else None
         try:
             while True:
-                sent = engine.tick()
+                sent = engine.tick() if engine is not None else []
                 if on_status is not None:
                     on_status(engine, sent)
                 if once:

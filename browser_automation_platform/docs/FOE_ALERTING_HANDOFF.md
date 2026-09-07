@@ -76,8 +76,9 @@ even after batching.
    Obrana, tak jsou ty provincie rozdělené — nevím jaký je v tom pattern", so he cannot settle
    it either. The farmer's `gbg_data/model.py` annotates the same field as "attack vs
    negotiate" — a different reading. Only the live map decides. Prompt is ready in
-   `docs/FOE_ALERTING.md` §9.
-2. **Deployment split.** Decided in principle (see below), not built yet.
+   `docs/FOE_ALERTING.md` §10.
+2. **Where the scheduler runs.** The split is built; no host is chosen or paid for,
+   so nothing is deployed. Budget is ~$10/month and the owner will not buy a machine.
 
 ## Standing rules from the owner
 
@@ -90,7 +91,7 @@ even after batching.
 
 ## State: built and unit-tested, never run against a live map
 
-`src/bap/alerting/` (104 tests, all browser-free):
+`src/bap/alerting/` (119 tests, all browser-free):
 
 | module | job |
 |---|---|
@@ -103,6 +104,7 @@ even after batching.
 | `config.py` | `alerting.json` + secrets from env |
 | `engine.py` | snapshot in → messages out (no browser) |
 | `watcher.py` | the only browser glue: CDP, one tab, listen |
+| `relay.py` | the collector/scheduler split: forward snapshots, receive them, auth |
 | `webui.py` | `bap-alert ui` — the local control panel (format, labels, credentials, log) |
 
 Launchers `foe-alerting.sh` / `foe-alerting.bat` start the panel with no install step (the
@@ -110,13 +112,13 @@ alerter has zero third-party imports — verified, not assumed). **The `.bat` ha
 run on Windows** — no Windows in the build environment — so treat its first run as untested.
 
 ```bash
-PYTHONPATH=src python3 -m pytest tests/unit/alerting -q          # 104 passed
+PYTHONPATH=src python3 -m pytest tests/unit/alerting -q          # 119 passed
 PYTHONPATH=src python3 -m bap.alerting preview \
     dataset/api_samples/getBattleground.sample.json --at capture \
     --map-data dataset/api_samples/map_data.volcano_archipelago.sample.json
 ```
 
-## Deployment — decided, not built
+## Deployment — built
 
 The owner will **not** buy a separate machine and has a **~$10/month** budget. The job splits
 cleanly, and only the cheap half needs to be always-on:
@@ -135,18 +137,29 @@ split; his fallback is "runs when my PC runs, someone else covers the rest", whi
 supports — several designated collectors, not random members (he explicitly rejected relying on
 whoever happens to open GBG).
 
-If the last snapshot is older than ~3.7 h the scheduler must go quiet and say so rather than
-send stale times. **Not implemented yet** — this is the next piece of work.
+Both halves exist now: `bap-alert collect --to <url>` and `bap-alert serve` (`relay.py`,
+`docs/FOE_ALERTING.md` §7). The wire format is the game's raw response body, re-parsed by the
+same reader on the far side, authenticated with a shared secret in `Authorization: Bearer`
+(`ALERT_RELAY_SECRET`); the scheduler refuses to start without one. Several collectors are
+fine — the scheduler keeps the newest snapshot and is the single thing that sends.
+
+The stale cutoff is in too: past `max_snapshot_age_minutes` (default 210) the engine stops
+sending and says so once, then resumes when a collector returns. Old times look plausible while
+being wrong, which is worse than silence.
+
+**Never run against a live game or a real VPS** — verified end to end as two local processes
+against the captured payload.
 
 ## Next steps
 
-1. **Live confirmation** — GBG reopens ~2026-09-11. Run the §9 prompt in
+1. **Live confirmation** — GBG reopens ~2026-09-11. Run the §10 prompt in
    `docs/FOE_ALERTING.md` and bring the findings back. It settles `side_rule`, the `[20%]`
    source, `lockedUntil`, and the map/id range. Don't test blind.
 2. **Labels** — fill `province_labels.cz8.json` from the live map, switch `scope` to `labeled`.
-3. **Split collector from scheduler** (above), including the stale-snapshot cutoff.
-4. **Green API** — the owner creates the instance and links a phone (use a spare number, not
+3. **Green API** — the owner creates the instance and links a phone (use a spare number, not
    the main one). Then `bap-alert check --send "test"`. Free Developer tier: unlimited
    messages, but only **3 chats per calendar month** and 1 instance — the group is one chat, so
    disable incoming webhooks so a stray inbound chat cannot burn a slot.
+4. **Host the scheduler** — the code is ready, nothing is deployed. ~$5/month VPS, no game
+   credentials on it. Until then `bap-alert run` (single process) is still the way.
 5. Only after a clean `--dry-run` day should it post to the real group.

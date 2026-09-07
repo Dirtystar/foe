@@ -29,7 +29,7 @@ game sends whenever GBG is opened or refreshed:
 | Line of the message | Where it comes from | Status |
 |---|---|---|
 | **time it opens** | `province.lockedUntil` — unix second when the cooldown ends | ✅ already parsed; corrected against the server clock (`TimeService`) so a wrong PC time can't shift it |
-| **attack / defence** | `province.isAttackBattleType` — a per-province flag, independent of who owns it | ⚠️ the field exists and fits (38 attack / 22 defence in the capture, matching the ≈2:1 red/blue ratio in the group's own messages), but its meaning is **not confirmed live** — see §9. `side_rule` switches back to the ownership rule |
+| **attack / defence** | `province.isAttackBattleType` — a per-province flag, independent of who owns it | ⚠️ the field exists and fits (38 attack / 22 defence in the capture, matching the ≈2:1 red/blue ratio in the group's own messages), but its meaning is **not confirmed live** — see §10. `side_rule` switches back to the ownership rule |
 | **coordinate** | — | ⚠️ **the game has no province names.** A province is an id (0…59) plus a flag position in the static map asset. `A1X` is a *guild* convention, so it has to be mapped once (see §4) |
 | **attrition %** | `province.gainAttritionChance` | ✅ values in the capture are exactly {20, 40, 60, 100} — the same set the group writes. Absent on every province we own (22 of 22), and an absent value prints **no bracket**, never `0%` |
 
@@ -113,7 +113,7 @@ bap-alert check --config alerting.json                 # is the instance authori
 bap-alert check --config alerting.json --send "test"   # does the group receive it?
 ```
 
-Or do the whole thing in the panel (`bap-alert ui`, §8): paste the credentials, press *Ověřit
+Or do the whole thing in the panel (`bap-alert ui`, §9): paste the credentials, press *Ověřit
 instanci*, then *Poslat testovací zprávu*. The panel can also keep them for you without putting
 them in `alerting.json`.
 
@@ -231,10 +231,63 @@ bap-alert preview dataset/api_samples/getBattleground.sample.json --at capture \
 
 ---
 
-## 7. Still to confirm live (next season)
+## 7. Running it split: collector and scheduler
+
+`bap-alert run` does everything in one process, which means the machine that plays the game is
+also the machine that must be awake when a province opens. Two problems follow: the alerts stop
+when that PC sleeps, and running it on several people's PCs posts every message once per
+person.
+
+So the job splits along its natural seam:
+
+```
+  someone's browser                        a small always-on box
+  ┌────────────────────┐   snapshot   ┌──────────────────────────┐
+  │ bap-alert collect  │ ───────────► │ bap-alert serve          │ ──► WhatsApp
+  │ needs the game     │   HTTP+token │ needs a clock            │
+  └────────────────────┘              └──────────────────────────┘
+   several of these, whoever is           exactly one of these
+   online; duplicates are harmless        — that is what makes the
+                                          message arrive once
+```
+
+**The collector** watches one world's tab exactly like `run` does, but decides nothing: it
+forwards the game's own response body verbatim. It holds no WhatsApp credential, so handing it
+to guild members costs nothing if one of them is careless.
+
+**The scheduler** keeps the newest snapshot, runs the engine, and posts. It never sees a game
+account. It is the piece that fits a ~$5/month VPS: no browser, no GPU, a few hundred MB.
+
+```bash
+# on the always-on box
+export ALERT_RELAY_SECRET="something long and random"
+bap-alert serve --config alerting.json --port 8770
+
+# on any machine that plays cz8
+export ALERT_RELAY_SECRET="the same value"
+bap-alert collect --to http://<the box>:8770 --config alerting.json
+```
+
+The wire format is the game's raw body, re-parsed on the far side by the same reader, so the
+two halves cannot disagree about what the game said. The shared secret goes in
+`Authorization: Bearer`; the scheduler refuses to start without one, because an open relay
+would let anyone drive the guild's alerts. `GET /health` needs no secret, so a host checker can
+watch the process without holding a credential.
+
+### The stale-snapshot cutoff
+
+A snapshot describes about 3.7 h of openings. Past that the times still *look* plausible while
+being wrong, which is worse than silence — so beyond `max_snapshot_age_minutes` (default 210,
+i.e. 3.5 h) the scheduler stops sending and says so once, then resumes the moment a collector
+comes back. This matters most in the split setup, where "nobody is playing right now" is a
+normal state rather than a fault.
+
+---
+
+## 8. Still to confirm live (next season)
 
 Everything above is built and unit-tested against a real captured payload, but four things can
-only be settled against a live map. **Do not guess these — run §9 and bring the findings back.**
+only be settled against a live map. **Do not guess these — run §10 and bring the findings back.**
 
 1. **The colour rule.** Does `isAttackBattleType` really correspond to what the guild calls
    attack vs defence? The evidence for it is circumstantial (ratio, and the fact that the
@@ -253,7 +306,7 @@ Until #1 is settled, `side_rule` in `alerting.json` switches between the two can
 
 ---
 
-## 8. The control panel (`bap-alert ui`)
+## 9. The control panel (`bap-alert ui`)
 
 ```bash
 bap-alert ui --map-data dataset/api_samples/map_data.volcano_archipelago.sample.json
@@ -285,7 +338,7 @@ are gitignored.
 
 ---
 
-## 9. The live verification prompt
+## 10. The live verification prompt
 
 GBG reopens around 2026-09-11. Paste the block below to an AI that has Chrome MCP access, with
 GBG open on the watched world. It is **read-only**: it observes traffic and the screen, sends

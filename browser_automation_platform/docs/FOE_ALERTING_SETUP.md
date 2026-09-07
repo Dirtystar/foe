@@ -1,7 +1,7 @@
 # FoE Alerting — setup guide
 
 Getting from a fresh clone to "the group is getting alerts". Follow it top to bottom; every
-step is checkable before the next one, and nothing is posted to a real group until §6.
+step is checkable before the next one, and nothing is posted to a real group until §7.
 
 For *why* it works the way it does — where the data comes from, why messages are batched, why
 Green API — read `FOE_ALERTING.md`. This file is the how.
@@ -111,7 +111,7 @@ A province the game reports no percentage for prints no bracket at all — never
 | **Předstih** | how many minutes before the *soonest* opening the alerter speaks. Default **4** |
 | **Okno** | having spoken, it lists everything opening within this many minutes. Default **30** |
 | **Rozsah** | which provinces count at all — see below |
-| **Pravidlo barev** | how 🔴/🔵 is decided. Leave on `battle_type` until the live check in `FOE_ALERTING.md` §9 says otherwise |
+| **Pravidlo barev** | how 🔴/🔵 is decided. Leave on `battle_type` until the live check in `FOE_ALERTING.md` §10 says otherwise |
 
 Batching is the difference between ~52 messages a day and ~350. Widen the window and you get
 fewer messages but longer notice, which is exactly when people stop reading them.
@@ -232,7 +232,24 @@ volume is bearable. If it is noisy, narrow the scope — not the batching.
 
 ---
 
-## 6. Going live
+## 6. Optional: split it in two
+
+If the sending should survive your PC being off, run the two halves separately — the collector
+where the game is, the scheduler on a small always-on box. `FOE_ALERTING.md` §7 has the detail;
+the short version:
+
+```bash
+export ALERT_RELAY_SECRET="something long and random"   # same value on both sides
+bap-alert serve   --config alerting.json --port 8770    # the always-on box
+bap-alert collect --to http://<the box>:8770            # any machine playing cz8
+```
+
+Several people can run a collector. Only ever run **one** scheduler — it is the thing that
+sends, and two of them means the group hears everything twice.
+
+---
+
+## 7. Going live
 
 ```bash
 PYTHONPATH=src python3 -m bap.alerting run --config alerting.json
@@ -243,7 +260,7 @@ sending to a real group should be a deliberate edit).
 
 ---
 
-## 7. When something is wrong
+## 8. When something is wrong
 
 | symptom | cause |
 |---|---|
@@ -253,12 +270,15 @@ sending to a real group should be a deliberate edit).
 | **Ověřit instanci** returns `notAuthorized` | the phone is not linked — rescan the QR in the Green API console |
 | Test message says sent, group gets nothing | the `chatId` is wrong, or the linked account is not in that group |
 | HTTP `466` / `QUOTE_EXCEEDED` | the 3-chats-a-month tariff limit (§4.5) |
+| Scheduler says the snapshot is **TOO OLD** | no collector has fed it for 3.5 h — open GBG somewhere, or start a collector |
+| `refusing to start without a shared secret` | set `ALERT_RELAY_SECRET` on the scheduler and every collector |
+| Collector logs `HTTP 401 — check ALERT_RELAY_SECRET` | the two sides have different secrets |
 | Alerter is silent while GBG is open | nothing is *in scope* — check **Rozsah**, and that the world matches `world` in the config |
 | Times look shifted | the alerter corrects against the game's own clock; if they are still off, say so — do not "fix" it by changing your PC clock |
 
 ---
 
-## 8. What it will never do
+## 9. What it will never do
 
 Worth knowing, because it is enforced in the code and not just policy: the alerter is
 **read-only towards the game**. It never clicks, never sends a request to the game, and never

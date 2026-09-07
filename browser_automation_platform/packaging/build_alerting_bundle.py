@@ -35,6 +35,7 @@ MODULES = [
     "bap/alerting/engine.py",
     "bap/alerting/labels.py",
     "bap/alerting/notifiers.py",
+    "bap/alerting/relay.py",
     "bap/alerting/render.py",
     "bap/alerting/schedule.py",
     "bap/alerting/state.py",

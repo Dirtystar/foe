@@ -38,6 +38,7 @@ class AlertEngine:
         self._bg = None
         self._snapshot_at: float | None = None
         self._window_end: float | None = None   # game clock; end of the announced window
+        self._stale_logged = False
         self.messages_sent = 0
 
     # ------------------------------------------------------------------ input
@@ -63,6 +64,15 @@ class AlertEngine:
             return None
         return (time.time() if now is None else now) - self._snapshot_at
 
+    def snapshot_is_stale(self, now: float | None = None) -> bool:
+        """Old data is worse than no data here: the times would still look plausible while
+        being wrong, and the group would act on them. Better to say nothing."""
+        limit = getattr(self.cfg, "max_snapshot_age_seconds", 0)
+        if not limit:
+            return False
+        age = self.snapshot_age(now)
+        return age is not None and age > limit
+
     # ------------------------------------------------------------- scheduling
 
     def upcoming(self, now: float | None = None):
@@ -86,6 +96,14 @@ class AlertEngine:
         if self._bg is None:
             return []
         now = time.time() if now is None else now
+        if self.snapshot_is_stale(now):
+            if not self._stale_logged:      # once per gap, not once per tick
+                logger.warning("snapshot is %.0f min old — staying quiet until a fresh one "
+                               "arrives (nobody is feeding this world)",
+                               (self.snapshot_age(now) or 0) / 60)
+                self._stale_logged = True
+            return []
+        self._stale_logged = False
         game_now = clock.game_now(self._bg, now)
         batch = plan_batch(self.upcoming(now), now=game_now,
                            trigger_lead_seconds=self.cfg.trigger_lead_seconds,
@@ -121,6 +139,8 @@ class AlertEngine:
         age = self.snapshot_age(now)
         nxt = self.upcoming(now)
         head = (f"snapshot {int(age)}s old" if age is not None else "snapshot ready")
+        if self.snapshot_is_stale(now):
+            return f"{head} — TOO OLD, staying quiet; open GBG on {self.cfg.world}"
         if not nxt:
             return f"{head}; no openings in scope"
         return f"{head}; {len(nxt)} upcoming, next {format_line(nxt[0])}"
