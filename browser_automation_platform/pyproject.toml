@@ -40,6 +40,7 @@ bap-forge-open = "bap.forge.action.open_targets:main"
 bap-forge-launch = "bap.forge.action.launcher:main"
 bap-forge-farmer = "bap.forge.app.farmer_gui:main"
 bap-forge-license = "bap.forge.licensing:main"
+bap-alert = "bap.alerting.__main__:main"
 
 [project.optional-dependencies]
 # Real vision analyzers (OCR + template matching).

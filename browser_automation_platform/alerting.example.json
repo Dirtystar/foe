@@ -1,0 +1,19 @@
+{
+  "_comment": "FoE Alerting — copy to alerting.json and edit. Secrets are better in env vars: GREEN_API_ID_INSTANCE / GREEN_API_TOKEN / GREEN_API_CHAT_ID.",
+  "world": "cz8",
+  "scope": "relevant",
+  "lead_minutes": 10,
+  "stale_minutes": 5,
+  "poll_seconds": 30,
+  "horizon_hours": 12,
+  "quiet_hours": [23, 7],
+  "header": "",
+  "labels_file": "province_labels.cz8.json",
+  "state_file": "alert_state.json",
+  "notifier": "green_api",
+  "green_api": {
+    "id_instance": "",
+    "api_token": "",
+    "chat_id": "120363000000000000@g.us"
+  }
+}

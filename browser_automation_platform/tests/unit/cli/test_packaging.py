@@ -26,7 +26,7 @@ def test_console_scripts_declared(project):
         "bap-forge-collect", "bap-gbg", "bap-gbg-live", "bap-forge-click",
         "bap-forge-autoplay", "bap-forge-farm", "bap-forge-calibrate",
         "bap-forge-verify", "bap-forge-open", "bap-forge-launch",
-        "bap-forge-farmer", "bap-forge-license",
+        "bap-forge-farmer", "bap-forge-license", "bap-alert",
     }
 
 
@@ -50,6 +50,7 @@ def test_console_scripts_declared(project):
         ("bap-forge-launch", "bap.forge.action.launcher:main"),
         ("bap-forge-farmer", "bap.forge.app.farmer_gui:main"),
         ("bap-forge-license", "bap.forge.licensing:main"),
+        ("bap-alert", "bap.alerting.__main__:main"),
     ],
 )
 def test_console_script_targets_resolve(project, name, target):
