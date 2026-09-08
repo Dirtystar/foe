@@ -46,7 +46,9 @@ mix them.
 
 ## 2. Start the control panel
 
-**Windows** — double-click **`foe-alerting.bat`** in `browser_automation_platform\`.
+**Windows** — double-click **`foe-alerting.bat`** in `browser_automation_platform\`. If
+Windows blocks it (see the troubleshooting table), double-click **`foe-alerting.py`** instead —
+same thing, and Smart App Control does not block `.py`.
 
 **Linux / macOS**:
 
@@ -264,6 +266,7 @@ sending to a real group should be a deliberate edit).
 
 | symptom | cause |
 |---|---|
+| **Smart App Control blocked the launcher** (no "run anyway" button) | `.bat`/`.cmd`/`.ps1` carrying the mark of the web are blocked outright. Either run `foe-alerting.py` instead (`.py` is not on that list), or right-click the file → Properties → **Unblock**. Best avoided by unblocking the ZIP *before* extracting |
 | Panel won't open, "port already in use" | another copy is running; close it or use `--port 9000` |
 | Panel says **403 Forbidden** | the URL lost its `?t=…` token. Copy the whole line the terminal printed |
 | Labels table says "Žádná data mapy" | started without `--map-data`. The launchers pass it for you |

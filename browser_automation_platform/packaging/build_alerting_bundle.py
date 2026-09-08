@@ -59,6 +59,9 @@ DATA = [
 #: (source, name inside the bundle). The launcher is renamed so it reads as an instruction.
 EXTRAS = [
     ("foe-alerting.bat", "SPUSTIT.bat"),
+    # Smart App Control blocks .bat outright when it carries the mark of the web, with no
+    # "run anyway"; .py is not on that list, so this is the launcher that always works.
+    ("foe-alerting.py", "SPUSTIT.py"),
     ("foe-alerting.sh", "spustit.sh"),
     ("docs/navod.html", "NAVOD.html"),
 ]
@@ -66,12 +69,18 @@ EXTRAS = [
 README = """FoE Alerting
 ============
 
-1. Rozbal celou tuhle slozku nekam k sobe (Plocha, Dokumenty).
+1. DULEZITE, jeste PRED rozbalenim: klikni na stazeny ZIP pravym -
+   Vlastnosti - dole zaskrtni "Odblokovat" - OK.
+   Bez toho Windows zablokuje SPUSTIT.bat a nepusti te dal.
+
+2. Rozbal celou tuhle slozku nekam k sobe (Plocha, Dokumenty).
    Nespoustej nic primo z okna ZIPu - Windows to smaze.
 
-2. Otevri NAVOD.html (dvojklik, otevre se v prohlizeci) a drz se ho.
+3. Otevri NAVOD.html (dvojklik, otevre se v prohlizeci) a drz se ho.
 
-3. Az budes mit nainstalovany Python: dvojklik na SPUSTIT.bat
+4. Az budes mit nainstalovany Python: dvojklik na SPUSTIT.bat
+   Kdyz ho Windows presto zablokuje, pouzij SPUSTIT.py - dela totez
+   a blokovany neni.
 
 Kdyz neco nefunguje, v navodu je tabulka "Kdyz neco nefunguje".
 """

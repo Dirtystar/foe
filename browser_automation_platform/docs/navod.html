@@ -72,16 +72,27 @@ sama pošle do prohlížeče.</td></tr>
 <h2>Instalace, krok za krokem</h2>
 
 <div class="step">
-<h3>1. Rozbal ZIP</h3>
-<p>Ulož si přiložený ZIP a <strong>rozbal ho</strong> někam k sobě — na Plochu nebo do
-Dokumentů. Klikni na něj pravým a dej <em>Extrahovat vše…</em></p>
+<h3>1. Odblokuj ZIP <em>dřív</em>, než ho rozbalíš</h3>
+<p>Ulož si přiložený ZIP. Pak na něj klikni <strong>pravým tlačítkem → Vlastnosti</strong>,
+dole zaškrtni <strong>„Odblokovat“</strong> a dej OK.</p>
+<div class="box bad"><p>Tenhle krok nepřeskakuj. Windows označí všechno stažené z internetu
+(včetně příloh z WhatsAppu) a <strong>Inteligentní řízení aplikací</strong> pak spouštěcí
+soubor <code>.bat</code> zablokuje — a to <em>bez</em> možnosti „přesto spustit“. Odblokování
+ZIPu tu značku sundá ze všeho, co je uvnitř, takže se to nestane.</p>
+<p>Když ti to hlásí až teď, ničemu se nestalo — viz tabulka dole.</p></div>
+</div>
+
+<div class="step">
+<h3>2. Rozbal ho</h3>
+<p><strong>Rozbal ZIP</strong> někam k sobě — na Plochu nebo do Dokumentů. Klikni pravým a dej
+<em>Extrahovat vše…</em></p>
 <div class="box warn"><p>Nespouštěj nic přímo z okna ZIPu. Windows to rozbalí do dočasné
 složky, kterou pak smaže, a přijdeš o všechno nastavení. Aplikace tě na to upozorní, ale
 lepší je udělat to hned správně.</p></div>
 </div>
 
 <div class="step">
-<h3>2. Nainstaluj Python (jen poprvé)</h3>
+<h3>3. Nainstaluj Python (jen poprvé)</h3>
 <p>Stáhni ho z <a href="https://www.python.org/downloads/">python.org/downloads</a> a spusť
 instalátor.</p>
 <div class="box warn"><p><strong>Hned na první obrazovce zaškrtni „Add python.exe to PATH“</strong>
@@ -91,13 +102,16 @@ instalátor.</p>
 </div>
 
 <div class="step">
-<h3>3. Spusť aplikaci</h3>
+<h3>4. Spusť aplikaci</h3>
 <p>V rozbalené složce dvojklik na <code>SPUSTIT.bat</code>.</p>
 <p>Otevře se černé okno a v prohlížeči se objeví ovládací panel. <strong>To černé okno nezavírej</strong>
 — dokud běží, běží i aplikace. Zavřením ho vypneš.</p>
-<div class="box"><p>Když Windows hlásí „Systém Windows ochránil váš počítač“, klikni na
-<em>Další informace</em> → <em>Přesto spustit</em>. Je to proto, že soubor přišel z internetu,
-ne proto, že by byl závadný.</p></div>
+<div class="box"><p><strong>Když se <code>SPUSTIT.bat</code> nepustí</strong> (Windows hlásí, že
+soubor zablokovalo), použij místo něj <code>SPUSTIT.py</code> — dvojklik na něj. Dělá přesně
+totéž, ale Windows ho neblokuje, protože spouští přímo Python. Vyžaduje krok 3.</p></div>
+<div class="box"><p>Když Windows hlásí „Systém Windows ochránil váš počítač“ s tlačítkem
+<em>Další informace</em>, klikni na něj a pak na <em>Přesto spustit</em>. To je jiné, mírnější
+hlášení než to v kroku 1 — tohle jde odklepnout.</p></div>
 </div>
 
 <h2>Panel, po částech</h2>
@@ -150,8 +164,15 @@ a je bezpečné ho vyfotit a poslat, přístupové údaje v něm nejsou.</p>
 <h2>Když něco nefunguje</h2>
 <table>
 <tr><th>Co se děje</th><th>Čím to je</th></tr>
+<tr><td><strong>„Inteligentní řízení aplikací zablokovalo soubor“</strong> a jde jen dát
+OK</td><td>Windows blokuje <code>.bat</code> stažený z internetu a nedá se to odklepnout.
+Dvě cesty, obě fungují: buď dvojklik na <strong><code>SPUSTIT.py</code></strong> místo
+<code>.bat</code> (ten blokovaný není), nebo klikni pravým na <code>SPUSTIT.bat</code> →
+<em>Vlastnosti</em> → zaškrtni <strong>„Odblokovat“</strong> → OK. Napříště odblokuj rovnou
+celý ZIP ještě před rozbalením (krok 1).</td></tr>
 <tr><td>Černé okno bliknutím zmizí</td><td>Není nainstalovaný Python, nebo se při instalaci
-nezaškrtlo „Add python.exe to PATH“.</td></tr>
+nezaškrtlo „Add python.exe to PATH“. Zkus <code>SPUSTIT.py</code> — ten napíše, co je
+špatně, a počká.</td></tr>
 <tr><td>Hlásí to, že je složka jen v ZIPu</td><td>Přesně to. Rozbal ZIP a spusť to znovu
 z rozbalené složky.</td></tr>
 <tr><td>Stránka píše <strong>403 Forbidden</strong></td><td>Z adresy se ztratil kus za
