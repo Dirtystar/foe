@@ -37,7 +37,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from bap.alerting.config import DEFAULT_CONFIG_PATH, AlertConfig
-from bap.alerting.labels import LabelBook, auto_labels
+from bap.alerting.labels import LabelBook, _best_auto_labels
 from bap.alerting.notifiers import GreenApiNotifier
 from bap.alerting.render import PLACEHOLDERS, format_message
 from bap.alerting.schedule import SCOPES, SIDE_RULES, unlock_events
@@ -165,9 +165,10 @@ class UiState:
         }
 
     def label_rows(self) -> list[dict]:
-        """One row per province the map asset knows about: the generated grid position and
-        whatever the guild has named it."""
-        generated = auto_labels(self._layout) if self._layout is not None else {}
+        """One row per province the map asset knows about: the computed positional code (ring
+        + sector on a hex map, the grid guess otherwise) and whatever the guild has named."""
+        generated = (_best_auto_labels(self._layout, self.labels.overrides)
+                    if self._layout is not None else {})
         ids = sorted(set(generated) | set(self.labels.overrides))
         return [{"id": pid, "generated": generated.get(pid, ""),
                  "name": self.labels.overrides.get(pid, "")} for pid in ids]
@@ -475,9 +476,10 @@ PAGE = """<!doctype html>
 </section>
 
 <section><h2>Labely provincií</h2>
-  <div class="hint">Pojmenuj jen ty provincie, které gilda opravdu řeší — nepojmenované se
-    ohlásí vygenerovanou pozicí v mřížce (v závorce u čísla). Přidávej si řádky podle
-    potřeby; se scope <code>labeled</code> se hlásí právě jen ty pojmenované.</div>
+  <div class="hint">Kód v závorce u čísla je dopočítaný ze hry (prstenec + sektor) — u téhle
+    mapy odpovídá tomu, co ukazuje hra sama. Pojmenuj jen provincie, kterým chce gilda říkat
+    jinak; přidávej řádky podle potřeby. Se scope <code>labeled</code> se hlásí jen ty
+    pojmenované.</div>
   <div id="mapwrap"><svg id="map"></svg></div>
   <div class="hint" id="maphint" style="margin-top:-6px"></div>
   <div id="labels"></div>

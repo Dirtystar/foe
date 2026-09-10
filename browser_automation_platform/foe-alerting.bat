@@ -54,7 +54,7 @@ if not defined PY (
     exit /b 1
 )
 
-set "MAPDATA=dataset\api_samples\map_data.volcano_archipelago.sample.json"
+set "MAPDATA=dataset\api_samples\map_data.waterfall_archipelago.sample.json"
 set "MAPARG="
 if exist "%MAPDATA%" set "MAPARG=--map-data %MAPDATA%"
 

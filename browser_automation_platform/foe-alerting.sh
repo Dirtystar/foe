@@ -28,7 +28,7 @@ if [ -z "$PY" ]; then
     exit 1
 fi
 
-MAP_DATA="dataset/api_samples/map_data.volcano_archipelago.sample.json"
+MAP_DATA="dataset/api_samples/map_data.waterfall_archipelago.sample.json"
 MAP_ARG=""
 if [ -f "$MAP_DATA" ]; then
     # Gives the labels list its province dropdown; harmless when the file is absent.

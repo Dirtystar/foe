@@ -1,16 +1,23 @@
-"""Province id → the coordinate the guild actually says out loud ("A1X").
+"""Province id → the coordinate the guild actually says out loud ("A3A").
 
 The game's own data carries **no province names** — a province is just an id (0…59) plus a
-flag position in the static map asset. Every human name for a sector is therefore a guild
-convention, so this module resolves a label in three steps:
+flag position in the static map asset. But the codes players read off the map (``A3A``,
+``F5D``) are not guild folklore either: a GBG map is a **centred hexagon** of provinces, and
+the code is just that geometry in two letters — a compass sector and a ring number out from
+the centre. Confirmed against a live 61-province map: 13 of 14 codes read off the game matched
+a label computed from nothing but the map asset's flag positions (§ ``hex_cells``,
+``ring_labels``, ``fit_ring_labels`` below).
 
-1. an explicit mapping the guild writes once per map (``province_labels.<map>.json``),
-2. otherwise an auto grid label derived from the flag positions (``B3`` — columns left→right
-   as letters, rows top→bottom as numbers), so an unnamed province is still identifiable,
+So a label resolves in three steps:
+
+1. an explicit override the guild writes once per map (``province_labels.<map>.json``),
+2. otherwise the computed ring/sector code — refit against the guild's own named provinces
+   once there are a few, so it only gets more accurate — or, on a map that for some reason
+   isn't a centred hexagon, a plain positional grid (``B3``) as a fallback hint,
 3. otherwise ``#<id>``.
 
-Step 2 also exists to make step 1 cheap: ``bap-alert labels`` prints the whole map as a grid
-so the guild can fill in its own names next to a position it recognises.
+Step 1 is rarely needed at all now: unlike the grid, the ring/sector code usually *is* what
+the game shows, not just a hint next to it.
 """
 
 from __future__ import annotations
@@ -101,19 +108,21 @@ def auto_labels(layout, *, columns: int = 4, rows: int = 4) -> dict[int, str]:
 
 @dataclass
 class LabelBook:
-    """Resolves a province id to the best available label (guild name → grid → ``#id``)."""
+    """Resolves a province id to the best available label (guild name → auto → ``#id``)."""
 
     overrides: dict[int, str]
     auto: dict[int, str]
 
     @classmethod
     def build(cls, *, path=None, layout=None) -> "LabelBook":
-        return cls(overrides=load_label_file(path) if path else {},
-                   auto=auto_labels(layout) if layout is not None else {})
+        overrides = load_label_file(path) if path else {}
+        return cls(overrides=overrides,
+                   auto=_best_auto_labels(layout, overrides) if layout is not None else {})
 
     def with_layout(self, layout) -> "LabelBook":
         """Same overrides, auto labels refreshed from a (newly seen) map layout."""
-        return LabelBook(overrides=dict(self.overrides), auto=auto_labels(layout))
+        return LabelBook(overrides=dict(self.overrides),
+                         auto=_best_auto_labels(layout, self.overrides))
 
     def named_ids(self) -> set[int]:
         """Province ids the guild has explicitly named — the natural 'we care about these'
@@ -137,20 +146,28 @@ def _hex_ring_sizes(count: int) -> list[int] | None:
     while total < count:
         sizes.append(6 * len(sizes))
         total += sizes[-1]
-    return sizes if total == count else None
+    # A lone centre "is" a size-1 hexagon by the formula but there is nothing to compute —
+    # require at least a first ring (7 provinces) before the ring scheme applies at all.
+    return sizes if total == count and len(sizes) >= 2 else None
 
 
-def hex_cells(layout, *, y_scale: float = 1.4, sector_offset: float = 40.0):
+def hex_cells(layout, *, y_scale: float = 1.4, sector_offset: float = 40.0,
+             idx_reverse: bool = False):
     """Decompose a map into ``{province id: (ring, sector, index within the cell)}``.
 
     The game names provinces by **position, not by a grid**: the number is the ring out from
     the centre and the letter is the compass sector — and a GBG map really is a centred
     hexagon, so ring *r* holds exactly *r* provinces in each of the six sectors. Verified
     against a live 61-province map: every one of the 24 (ring, sector) cells came out at
-    exactly the expected size.
+    exactly the expected size, and (ring, sector) alone matched 13 of 14 provinces the guild
+    read straight off the game — the one miss sits on a ring boundary, within the geometry's
+    own margin of error.
 
     ``y_scale`` undoes the isometric squash of the drawn map; ``sector_offset`` rotates the
-    sector boundaries. Returns ``{}`` when the map is not a centred hexagon.
+    sector boundaries; ``idx_reverse`` flips which end of a cell counts as its first province
+    (the ordering *within* a cell is the one thing angle-from-centre alone cannot pin down —
+    :func:`fit_ring_labels` fits it, same as the other three). Returns ``{}`` when the map is
+    not a centred hexagon.
     """
     flags = dict(getattr(layout, "flags", None) or {})
     sizes = _hex_ring_sizes(len(flags)) if flags else None
@@ -178,7 +195,8 @@ def hex_cells(layout, *, y_scale: float = 1.4, sector_offset: float = 40.0):
                 out[pid] = (0, 0, 0)
             continue
         # inside a ring, walk the sectors by angle so the index is stable and positional
-        for pid in sorted(band, key=lambda p: (polar[p][1] - sector_offset) % 360):
+        for pid in sorted(band, key=lambda p: (polar[p][1] - sector_offset) % 360,
+                          reverse=idx_reverse):
             sector = int(((polar[pid][1] - sector_offset) % 360) // 60)
             idx = seen.get((ring, sector), 0)
             seen[(ring, sector)] = idx + 1
@@ -187,7 +205,7 @@ def hex_cells(layout, *, y_scale: float = 1.4, sector_offset: float = 40.0):
 
 
 def ring_labels(layout, *, ring_base: int = 1, sector_origin: int = 0, clockwise: bool = False,
-                centre_label: str = "", **cells_kw) -> dict[int, str]:
+                centre_label: str = "X1", **cells_kw) -> dict[int, str]:
     """Positional labels in the game's own shape — ``F5D``: sector letter, ring number, and a
     letter for which of the cell's provinces it is.
 
@@ -213,23 +231,57 @@ def fit_ring_labels(layout, known: dict[int, str], **cells_kw):
     """Find the knob settings that reproduce ``known`` (province id → the label the guild
     reads off the map), and return ``(labels_for_every_province, settings, matched, total)``.
 
-    A dozen known labels pin the scheme down completely, which is the difference between
-    typing sixty names and typing none.
+    Five knobs, none guessable from geometry alone: where sector A starts, which way the
+    letters run, whether the centre counts as ring 1, which end of a cell is its first
+    province, and what the centre itself is called. A dozen known labels pin all five down —
+    which is the difference between typing sixty names and typing none. A ``known`` label
+    missing its trailing index letter (``"A2"`` rather than ``"A2A"``) still counts — it is
+    matched against the (ring, sector) part alone, which is the part geometry actually proves;
+    the index letter contributes only when it is given.
     """
     known = {int(k): str(v).strip().upper() for k, v in known.items() if str(v).strip()}
     best = None
     for ring_base in (0, 1):
         for origin in range(6):
             for clockwise in (False, True):
-                labels = ring_labels(layout, ring_base=ring_base, sector_origin=origin,
-                                     clockwise=clockwise, **cells_kw)
-                hits = sum(1 for pid, name in known.items() if labels.get(pid) == name)
-                settings = {"ring_base": ring_base, "sector_origin": origin,
-                            "clockwise": clockwise}
-                if best is None or hits > best[2]:
-                    best = (labels, settings, hits)
+                for idx_reverse in (False, True):
+                    labels = ring_labels(layout, ring_base=ring_base, sector_origin=origin,
+                                         clockwise=clockwise, idx_reverse=idx_reverse,
+                                         **cells_kw)
+                    hits = 0
+                    for pid, name in known.items():
+                        got = labels.get(pid, "")
+                        hits += int(got == name or (got and got[:-1] == name))
+                    settings = {"ring_base": ring_base, "sector_origin": origin,
+                                "clockwise": clockwise, "idx_reverse": idx_reverse}
+                    if best is None or hits > best[2]:
+                        best = (labels, settings, hits)
     labels, settings, hits = best
     return labels, settings, hits, len(known)
+
+
+#: The settings fitted against a live 61-province map (waterfall_archipelago) from 14
+#: guild-read labels, 13 of them an exact match. The letter-direction convention is a
+#: game-wide rule ("D = southwest", per the community wiki), not something the map asset
+#: encodes — so it is assumed universal across maps until a second map's labels say
+#: otherwise. If a future season's labels stop matching, that assumption is what to revisit.
+_DEFAULT_RING_SETTINGS = {"ring_base": 1, "sector_origin": 0, "clockwise": True,
+                          "idx_reverse": True}
+_FIT_MIN_KNOWN = 3
+
+
+def _best_auto_labels(layout, overrides: dict[int, str]) -> dict[int, str]:
+    """The generated guess for every unnamed province: the ring/sector scheme once the map
+    is a centred hexagon, refit against the guild's own named provinces as soon as there are
+    a few (so guesses improve as naming grows) — falling back to the settings confirmed live,
+    and to the plain positional grid on a map that isn't a centred hexagon at all."""
+    if not hex_cells(layout):
+        return auto_labels(layout)
+    if len(overrides) >= _FIT_MIN_KNOWN:
+        labels, _settings, hits, total = fit_ring_labels(layout, overrides)
+        if hits >= total - 1:           # allow one transcription slip, as seen live
+            return labels
+    return ring_labels(layout, **_DEFAULT_RING_SETTINGS)
 
 
 __all__ = ["LabelBook", "auto_labels", "load_label_file", "hex_cells",

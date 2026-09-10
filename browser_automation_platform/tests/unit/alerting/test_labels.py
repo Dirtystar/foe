@@ -91,6 +91,15 @@ def _waterfall():
     return parse_map_data(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _known_ring_pairs() -> dict[int, str]:
+    """14 province-id -> code pairs read off the live game (via FoE Helper), matched to their
+    id by unlock time. One (id 22) is a likely transcription slip — see the module docstring
+    on `_DEFAULT_RING_SETTINGS`. No guild or player data, just id -> positional code."""
+    path = Path("dataset/api_samples/labels_check.waterfall_archipelago.sample.json")
+    pairs = json.loads(path.read_text(encoding="utf-8"))["pairs"]
+    return {int(k): v for k, v in pairs.items()}
+
+
 def test_a_real_map_decomposes_into_exact_hex_rings():
     """The naming scheme is positional — number = ring, letter = sector — and that only works
     if the map really is a centred hexagon. On the live map every one of the 24 (ring, sector)
@@ -118,9 +127,11 @@ def test_ring_labels_are_unique_and_shaped_like_the_game_says_them():
     from bap.alerting.labels import ring_labels
 
     labels = ring_labels(_waterfall())
-    assert len(labels) == 60                      # every province but the centre
-    assert len(set(labels.values())) == 60
-    assert all(re.fullmatch(r"[A-F][2-5][A-D]", v) for v in labels.values())
+    assert len(labels) == 61                      # every province, centre included
+    assert len(set(labels.values())) == 61
+    assert labels[0] == "X1"                       # the centre, exactly as the game shows it
+    assert all(re.fullmatch(r"[A-F][2-5][A-D]", v)
+              for pid, v in labels.items() if pid != 0)
 
 
 def test_fitting_recovers_the_settings_from_a_handful_of_known_labels():
@@ -129,9 +140,48 @@ def test_fitting_recovers_the_settings_from_a_handful_of_known_labels():
     from bap.alerting.labels import fit_ring_labels, ring_labels
 
     layout = _waterfall()
-    truth = ring_labels(layout, ring_base=0, sector_origin=3, clockwise=True)
-    known = {pid: truth[pid] for pid in sorted(truth)[:12]}
+    truth = ring_labels(layout, ring_base=0, sector_origin=3, clockwise=True, idx_reverse=True)
+    known = {pid: truth[pid] for pid in sorted(truth)[:12] if pid != 0}
     labels, settings, hits, total = fit_ring_labels(layout, known)
-    assert (hits, total) == (12, 12)
-    assert settings == {"ring_base": 0, "sector_origin": 3, "clockwise": True}
+    assert (hits, total) == (len(known), len(known))
+    assert settings == {"ring_base": 0, "sector_origin": 3, "clockwise": True,
+                        "idx_reverse": True}
     assert labels == truth
+
+
+def test_labelbook_computes_the_ring_scheme_with_no_overrides_at_all():
+    """The whole point: the guild should not have to name a single province to get correct
+    positional codes for the other 59 — the fitted defaults do it out of the box.
+
+    Helper's own transcript is not always the full code (``"A2"`` rather than ``"A2A"`` when
+    the province is the first in its cell) — LabelBook always returns the full code, so a
+    short known code is checked as a prefix match, the same rule `fit_ring_labels` itself uses.
+    """
+    book = LabelBook.build(layout=_waterfall())
+    for pid, code in _known_ring_pairs().items():
+        if pid in (0, 22):              # centre has its own case; id 22 is the known slip
+            continue
+        got = book.label(pid)
+        assert got == code or got[:-1] == code, f"id {pid}: got {got!r}, expected {code!r}"
+
+
+def test_labelbook_self_fits_once_a_few_provinces_are_named():
+    """Naming a handful of provinces should not just label those — it should refit the whole
+    scheme, so the guesses for every other province get at least as good, never worse."""
+    from bap.alerting.labels import _best_auto_labels
+
+    known = _known_ring_pairs()
+    seed = {pid: known[pid] for pid in (1, 3, 7, 10)}
+    auto = _best_auto_labels(_waterfall(), seed)
+    for pid, code in known.items():
+        if pid in seed or pid == 22:      # id 22's own transcription is the one known slip
+            continue
+        assert auto[pid] == code
+
+
+def test_a_named_province_always_wins_over_the_computed_guess():
+    layout = _waterfall()
+    book = LabelBook(overrides={7: "custom name"}, auto={})
+    book = book.with_layout(layout)
+    assert book.label(7) == "custom name"
+    assert book.label(1) == "A2A"          # neighbour still gets the computed code

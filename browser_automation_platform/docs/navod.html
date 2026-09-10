@@ -136,22 +136,25 @@ Výchozí <strong>4</strong>.</td></tr>
 <tr><td><strong>Okno</strong></td><td>Když se ozve, vypíše všechno, co se otevře do tolika
 minut. Výchozí <strong>30</strong>.</td></tr>
 <tr><td><strong>Rozsah</strong></td><td>Které provincie vůbec hlásit — viz níž.</td></tr>
-<tr><td><strong>Pravidlo barev</strong></td><td>Nech na <code>battle_type</code>. Ještě není
-ověřené proti živé mapě, tohle je zatím ta lepší varianta.</td></tr>
+<tr><td><strong>Pravidlo barev</strong></td><td>Nech na <code>battle_type</code> — ověřeno na
+živé mapě (tmavě červený banner = útok, tmavě modrý = obrana).</td></tr>
 </table>
 <p>Rozsah <code>relevant</code> hlásí naše provincie, cíle označené velitelem a to, co zrovna
 obléháme. <code>labeled</code> hlásí <em>jen</em> provincie, které jste pojmenovali — to je
 nakonec ta nejlepší volba. <code>all</code> hlásí všech 60 a je to nepoužitelný šum.</p>
 
 <h3>Labely provincií</h3>
-<p>Hra provincie nijak nepojmenovává — pro ni je to jen číslo a vlaječka na mapě.
-<code>D4A</code> je naše značení, takže se musí jednou vyplnit.</p>
-<p>Panel začíná s jedním řádkem. V rozbalovátku vybereš provincii — píše se tam třeba
-<code>#14 (C1C)</code>, kde <code>C1C</code> je <em>odhadnutá</em> pozice v mřížce 4×4.
-Vedle napíšeš skutečný název a <strong>+ Přidat</strong> přidá další řádek. <strong>✕</strong>
-řádek smaže.</p>
-<p>Nemusíš vyplnit všech 60. Co nepojmenuješ, ohlásí se tou odhadnutou pozicí — funguje to
-od první minuty a názvy se dají doplňovat postupně.</p>
+<p>Hra provincie nijak nepojmenovává, ale kódy, co se čtou z mapy (<code>A3A</code>,
+<code>F5D</code>), nejsou žádná domluva gildy — je to geometrie. Mapa GBG je pravidelný
+šestiúhelník provincií a kód je přesně tahle geometrie: světová strana + kolikátý je to prstenec
+od středu. Panel si to <strong>sám dopočítá</strong> ze stejných dat, která posílá hra — ověřeno
+na živé mapě, 13 ze 14 kódů přečtených ze hry sedělo přesně na to, co panel spočítal.</p>
+<p>Takže většinu provincií vůbec nemusíš psát. Panel má i tak jeden řádek pro případ, že by
+gilda chtěla některé provincii říkat jinak — vybereš ji z rozbalovátka, kde je vidět třeba
+<code>#14 (D2A)</code>, a <code>D2A</code> je ten <em>dopočítaný</em> kód. Vedle napíšeš vlastní
+název a <strong>+ Přidat</strong> přidá další řádek. <strong>✕</strong> řádek smaže.</p>
+<p>Pojmenování pár provincií navíc <strong>zpřesní odhad i pro ostatní</strong> — panel si podle
+zadaných názvů dopočítání znovu doladí.</p>
 
 <h3>WhatsApp</h3>
 <p>Sem patří přístupové údaje k bráně. <strong>Pokud ti je nikdo nedal, nech to prázdné</strong>

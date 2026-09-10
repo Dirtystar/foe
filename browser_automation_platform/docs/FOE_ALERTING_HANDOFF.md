@@ -37,10 +37,11 @@ receives on the cz8 tab, and posts text to a messaging gateway.
   at all. It sits behind a one-method port (`send(text) -> bool`), so a webhook or a
   self-hosted bridge is a config change.
 - **Attack vs defence** = `province.isAttackBattleType`, a per-province flag independent of
-  ownership (`side_rule: battle_type`, the default). The old ownership rule is **ruled out by
-  the owner's own screenshots**: their blue lines carry a `[20%]`, and `gainAttritionChance` is
-  absent on every province we own (22 of 22 in the capture), so blue cannot mean "ours". The
-  flag's meaning is still unconfirmed live — `side_rule: owner` switches back.
+  ownership (`side_rule: battle_type`, the default). Ownership is ruled out (blue lines carry a
+  `[20%]`, absent on everything we own) **and it is now visually confirmed live**: `true` is a
+  maroon province banner, absent is navy, checked on two same-owner-colour pairs specifically
+  to rule out the banner being ownership in disguise. `side_rule: owner` still exists as an
+  escape hatch if a wider check ever disagrees.
 - **`[20%]` = `province.gainAttritionChance`**, straight from the payload. Values in the
   capture are exactly {20, 40, 60, 100}, the same set the guild writes. No OCR: the farmer's
   vision-based `weakening.py` reads the *player's own* attrition on the battle screen, which is
@@ -58,27 +59,48 @@ receives on the cz8 tab, and posts text to a messaging gateway.
 - **Each opening triggers exactly once**, keyed `provinceId:lockedUntil`, remembered in
   `alert_state.json` across restarts. It can still be *listed again* in a re-sent window.
 
-## Naming — settled
+## Naming — solved, computationally
 
-`A1X` is **the guild's own notation; the game ships no province names.** Confirmed from the
-owner's screenshots of the group. The shape is `[A–D][1–4][letter]` — a 4×4 sector grid with a
-per-province letter (`D4A`, `C3Y`, `B4H`, and plain `C1` when it is alone in its cell), so
-`auto_labels` now generates a 4×4 grid with an uppercase suffix. A generated label lands in the
-right sector and usually only the trailing letter needs correcting by hand.
+The codes (`A3A`, `F5D`) are **not guild folklore** — they turned out to be geometry. A GBG
+map is a centred hexagon of provinces (1 + 6 + 12 + 18 + 24 = 61 on `waterfall_archipelago`),
+and the code is exactly that: compass sector + ring number out from the centre, plus a letter
+for which province in that cell. `labels.hex_cells`/`ring_labels` compute it from nothing but
+the map asset's flag positions; `fit_ring_labels` finds the four knobs geometry alone can't
+(where sector A starts, which way it runs, whether the centre is ring 1, which end of a cell
+comes first) against known labels.
 
-Still to do: fill `province_labels.cz8.json` against the live map and switch `scope` to
-`labeled`. Without it `relevant` announces ~195 openings/day, which is too much for the group
-even after batching.
+**Confirmed against a live map**: 14 province-id → code pairs read off the game (via FoE
+Helper, matched to their id by `lockedUntil` timing), 13 matched exactly. The one miss (id 22)
+was one ring off — almost certainly a transcription slip reading the screen, not a scheme
+error. `LabelBook` now defaults to the settings that fit (`_DEFAULT_RING_SETTINGS` in
+`labels.py`) and **refits itself against the guild's own overrides** as soon as there are ≥3 of
+them, so naming five provinces can sharpen the computed guess for the other fifty-five.
+
+The old 4×4-grid guesser (`auto_labels`) is now only the fallback for a map that for some
+reason isn't a centred hexagon — the fixture in `dataset/api_samples/labels_check.
+waterfall_archipelago.sample.json` (id → code pairs only, no guild data) locks the fitted
+defaults in as a regression test.
+
+**Still to do**: pointing `scope` at `labeled` still needs *some* file — either the guild's own
+overrides (now optional, for provinces they want a different word for) or accepting the
+computed code as-is with `scope: relevant`/`all` filtered some other way. Without narrowing,
+`relevant` announces ~195 openings/day, too much even after batching. The naming *problem*
+itself is solved; the *filtering* decision (what subset to announce) is still the owner's call.
 
 ## The open questions
 
-1. **Does `isAttackBattleType` really mean attack vs defence?** The owner's answer was "Útok a
-   Obrana, tak jsou ty provincie rozdělené — nevím jaký je v tom pattern", so he cannot settle
-   it either. The farmer's `gbg_data/model.py` annotates the same field as "attack vs
-   negotiate" — a different reading. Only the live map decides. Prompt is ready in
-   `docs/FOE_ALERTING.md` §10 (parts C1/C2).
+1. **`lockedUntil` really is "opens at"** for a province the guild doesn't own. Neither live
+   capture had a foreign province close enough to unlock to watch it happen — blocked on real
+   timing, not on tooling. Not urgent: the field's shape and the observed spread of openings
+   already fit nothing else.
 2. **Where the scheduler runs.** The split is built; no host is chosen or paid for,
    so nothing is deployed. Budget is ~$10/month and the owner will not buy a machine.
+3. **A detail-panel guild-name field didn't match the province's owner** in the second live
+   capture (showed the owner's *own* guild's name on a foreign province). Not investigated,
+   noted rather than guessed at, and doesn't affect alerting either way.
+
+Full detail on both live-capture rounds — including the confirmed colour rule and what remains
+genuinely open — is in `docs/FOE_ALERTING.md` §8.
 
 ## Standing rules from the owner
 
@@ -89,14 +111,14 @@ even after batching.
   or on the web. No player name, nickname, or account trace. Git identity stays neutral.
 - Commit and push to `claude/foe-alerting-cz8` only.
 
-## State: built and unit-tested, never run against a live map
+## State: built and unit-tested, confirmed against a live map twice
 
-`src/bap/alerting/` (119 tests, all browser-free):
+`src/bap/alerting/` (126 tests, all browser-free):
 
 | module | job |
 |---|---|
 | `clock.py` | server-clock drift + Prague `HH:MM` (works without `tzdata`; EU DST rule tested against the tz database at both switches) |
-| `labels.py` | province id → the guild's coordinate (file → generated 4×4 grid → `#id`) |
+| `labels.py` | province id → the guild's coordinate (file override → computed hex ring/sector code → `#id`) |
 | `schedule.py` | snapshot → `UnlockEvent`s; scopes; the two colour rules; `plan_batch` (the batching window) |
 | `render.py` | the message text |
 | `notifiers.py` | Green API / webhook / console / null |
@@ -112,10 +134,12 @@ alerter has zero third-party imports — verified, not assumed). **The `.bat` ha
 run on Windows** — no Windows in the build environment — so treat its first run as untested.
 
 ```bash
-PYTHONPATH=src python3 -m pytest tests/unit/alerting -q          # 119 passed
+PYTHONPATH=src python3 -m pytest tests/unit/alerting -q          # 126 passed
 PYTHONPATH=src python3 -m bap.alerting preview \
     dataset/api_samples/getBattleground.sample.json --at capture \
     --map-data dataset/api_samples/map_data.volcano_archipelago.sample.json
+PYTHONPATH=src python3 -m bap.alerting labels \
+    dataset/api_samples/map_data.waterfall_archipelago.sample.json   # the live-confirmed map
 ```
 
 ## Deployment — built
@@ -152,16 +176,16 @@ against the captured payload.
 
 ## Next steps
 
-1. **Live capture** — GBG is open. Run the §10 prompt (Chrome MCP, read-only) and bring back
-   the two JSON payloads plus the answers. Part A2 (the `map/data` asset) is the one that
-   unblocks everything: without this season's flag coordinates there is no province mapping,
-   and the bundled sample is a *different map from a different world*. Don't test blind.
-2. **Labels** — drop the new map asset in, then name provinces by clicking flags on the panel's
-   map (`webui.drawMap`), and switch `scope` to `labeled`.
-3. **Green API** — the owner creates the instance and links a phone (use a spare number, not
+1. **Decide the scope/filtering question** left open above — `labeled` needs a subset of 61
+   provinces to actually be worth naming as the front line (the codes themselves no longer
+   need typing). The panel's map (`webui.drawMap`) is ready for whichever provinces the owner
+   picks.
+2. **Green API** — the owner creates the instance and links a phone (use a spare number, not
    the main one). Then `bap-alert check --send "test"`. Free Developer tier: unlimited
    messages, but only **3 chats per calendar month** and 1 instance — the group is one chat, so
    disable incoming webhooks so a stray inbound chat cannot burn a slot.
-4. **Host the scheduler** — the code is ready, nothing is deployed. ~$5/month VPS, no game
+3. **Host the scheduler** — the code is ready, nothing is deployed. ~$5/month VPS, no game
    credentials on it. Until then `bap-alert run` (single process) is still the way.
+4. **`lockedUntil` "opens at"** still wants one real observation — not urgent, see the open
+   questions above.
 5. Only after a clean `--dry-run` day should it post to the real group.

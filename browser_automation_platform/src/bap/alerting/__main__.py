@@ -20,7 +20,7 @@ from pathlib import Path
 
 from bap.alerting.config import DEFAULT_CONFIG_PATH, AlertConfig
 from bap.alerting.engine import AlertEngine
-from bap.alerting.labels import LabelBook, auto_labels
+from bap.alerting.labels import LabelBook, _best_auto_labels
 from bap.alerting.notifiers import GreenApiNotifier, NullNotifier, build_notifier
 from bap.alerting.render import format_message, format_schedule
 from bap.alerting.schedule import SCOPES, unlock_events
@@ -89,18 +89,19 @@ def cmd_labels(args, ap) -> int:
     if layout is None:
         print("That file is not a GBG map asset (expected the map/data/<mapId> body).")
         return 1
-    auto = auto_labels(layout)
     existing = LabelBook.build(path=args.labels or None).overrides
+    auto = _best_auto_labels(layout, existing)
     print(f"map {layout.map_id or '?'}  {len(auto)} provinces  ({layout.width}x{layout.height})")
     for pid in sorted(auto):
         x, y = layout.flags[pid]
         mine = existing.get(pid, "")
-        print(f"  province {pid:<3} grid {auto[pid]:<4} flag ({int(x):>4},{int(y):>4})"
+        print(f"  province {pid:<3} code {auto[pid]:<4} flag ({int(x):>4},{int(y):>4})"
               f"{'   guild name: ' + mine if mine else ''}")
     if args.write:
         out = {"map_id": layout.map_id,
                "_comment": "province id -> the name your guild uses (e.g. \"A1X\"). "
-                           "Values are pre-filled with a generated grid label; overwrite them.",
+                           "Values are pre-filled with the computed ring/sector code; "
+                           "overwrite them where the guild says something different.",
                "labels": {str(pid): existing.get(pid, auto[pid]) for pid in sorted(auto)}}
         Path(args.write).write_text(json.dumps(out, indent=1, ensure_ascii=False),
                                     encoding="utf-8")

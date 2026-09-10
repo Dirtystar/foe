@@ -29,8 +29,8 @@ game sends whenever GBG is opened or refreshed:
 | Line of the message | Where it comes from | Status |
 |---|---|---|
 | **time it opens** | `province.lockedUntil` — unix second when the cooldown ends | ✅ already parsed; corrected against the server clock (`TimeService`) so a wrong PC time can't shift it |
-| **attack / defence** | `province.isAttackBattleType` — a per-province flag, independent of who owns it | ⚠️ the field exists and fits (38 attack / 22 defence in the capture, matching the ≈2:1 red/blue ratio in the group's own messages), but its meaning is **not confirmed live** — see §10. `side_rule` switches back to the ownership rule |
-| **coordinate** | — | ⚠️ **the game has no province names.** A province is an id (0…59) plus a flag position in the static map asset. `A1X` is a *guild* convention, so it has to be mapped once (see §4) |
+| **attack / defence** | `province.isAttackBattleType` — a per-province flag, independent of who owns it | ✅ **visually confirmed live** — see §8. Two controlled same-owner-colour pairs: `true` is a maroon banner on the province, absent is navy. `side_rule` still switches back to the ownership rule if a wider check ever disagrees |
+| **coordinate** | `province` id + flag position, run through the map's geometry | ✅ **computed, not guessed** — see §4. A GBG map is a centred hexagon of provinces; the code is the compass sector and the ring out from the centre. 13 of 14 codes read live off the game matched one computed from nothing but the map asset |
 | **attrition %** | `province.gainAttritionChance` | ✅ values in the capture are exactly {20, 40, 60, 100} — the same set the group writes. Absent on every province we own (22 of 22), and an absent value prints **no bracket**, never `0%` |
 
 The percentage is also why the colour cannot be the ownership rule: the group's *blue* lines
@@ -136,15 +136,23 @@ bap-alert labels map_data.json --write province_labels.cz8.json
 }
 ```
 
-The generator uses a **4×4 grid**, because that is the shape the guild says out loud: a sector
-letter `A`–`D`, a sector number `1`–`4`, then a per-province letter (`D4A`, `C3Y`, `B4H`, and
-plain `C1` when it is the only one in its cell). So a generated label already lands in the
-right sector and usually only the trailing letter has to be corrected by hand.
+The generator **computes the real code, not a guess**: a GBG map is a centred hexagon of
+provinces — one centre, then rings of 6, 12, 18, 24 — and the code the game shows is exactly
+that geometry: a compass sector (`A`–`F`) and how many rings out from the centre (`2`–`5`),
+plus a letter for which province in that cell. Confirmed against a live 61-province map: 13 of
+14 codes read off the game matched what `hex_cells`/`ring_labels` compute from nothing but the
+map asset's flag positions — the one miss was one ring off, most likely a transcription slip
+reading the screen, not a scheme error.
 
-Until a province is named, it is announced by its generated grid position (`C3B`) and, failing
-that, `#14` — the alert is never blocked on the naming being finished. The generated grid is a
-*positional hint*, not a standard: GBG flags are hand-placed, not a lattice, so the sector a
-flag falls into near a boundary may not be the one the guild calls it.
+So most provinces need **no typing at all**. `LabelBook` uses the settings confirmed live by
+default, and refits itself against whatever the guild *has* named as soon as there are a few —
+so naming five provinces can improve the computed guess for the other fifty-five, not just
+those five. Naming stays necessary only for a season whose map isn't a centred hexagon (then
+it falls back to a positional grid hint) or when the guild simply prefers a different word for
+a province than the code the game shows.
+
+Until a province is named, it is announced by its computed code (`C3B`) and, failing that,
+`#14` — the alert is never blocked on the naming being finished.
 
 **Which map?** Each GBG season can use a different map, and province ids belong to that map.
 Keep one labels file per map and switch `labels_file` when the map changes (the `labels`
@@ -284,25 +292,48 @@ normal state rather than a fault.
 
 ---
 
-## 8. Still to confirm live (next season)
+## 8. Confirmed live, and what's still open
 
-Everything above is built and unit-tested against a real captured payload, but four things can
-only be settled against a live map. **Do not guess these — run §10 and bring the findings back.**
+Two rounds against a live map (`waterfall_archipelago`, 61 provinces, cz8) settled most of
+what could only ever be settled by playing, not testing:
 
-1. **The colour rule.** Does `isAttackBattleType` really correspond to what the guild calls
-   attack vs defence? The evidence for it is circumstantial (ratio, and the fact that the
-   ownership rule is ruled out by blue lines carrying a `[20%]`). The farmer's own model
-   annotates the same field as "attack vs negotiate", which is a *different* reading — so
-   somebody has it wrong and only the live map says who.
-2. **`lockedUntil` really is "opens at"** for provinces we do *not* own (supported by shape and
-   by the ~3.7 h spread in the capture; worth watching one province cross its time).
-3. **`gainAttritionChance` is the badge the guild reads as `[20%]`** — i.e. the number in the
-   message equals the number on the province in the game.
-4. **The map asset's province ids match the season's map** — i.e. the labels file stays valid
-   until the map changes.
+**Confirmed:**
 
-Until #1 is settled, `side_rule` in `alerting.json` switches between the two candidates
-(`battle_type`, the default, and `owner`) without touching code.
+- **The colour rule.** `isAttackBattleType: true` is a maroon province banner; the key absent
+  is navy — checked on two pairs that share an owner colour, specifically to rule out the
+  banner just being ownership in disguise. Small sample (2 pairs), but controlled, so
+  `side_rule: battle_type` stays the default with real evidence behind it now, not just a
+  ratio. The farmer's own model annotates the same field as "attack vs negotiate" — a
+  different reading of the same flag — so treat that comment as outdated, not as a second
+  vote.
+- **The map asset matches the live season.** Both captures agree: `waterfall_archipelago`,
+  61 provinces, ids 0–60 — the labels file and the computed codes are built from the real
+  thing, not a guess from an old sample.
+- **The `[20%]` badge's *source*.** `gainAttritionChance` is absent on every province either
+  capture's own guild owned — 96 provinces across two maps and two worlds, zero exceptions.
+  What is *not* independently confirmed is that number against a screenshot of the badge as
+  drawn on the map tile itself: the one click-through checked showed a different pair of
+  numbers (50%/50%, next to *Negotiate*/*Defend* — a different game mechanic, not this one).
+  The omission pattern is strong enough on its own to keep trusting the field; a screenshot of
+  the on-map badge next to its JSON value would close the loop completely.
+- **Province naming.** See §4 — computed from geometry, not guild folklore. (One curiosity
+  from the live check, not a blocker: clicking a province opens a detail panel that *does*
+  show a name — `A3A: Micianary` — not present in either JSON payload captured. Whether that
+  prefix is the game's own or FoE Helper injecting into the native panel is unresolved; it
+  doesn't matter for alerting either way, since the ring/sector code is what gets used.)
+
+**Still open:**
+
+- **`lockedUntil` really is "opens at"** for a province we do not own. Nothing in either
+  capture had a foreign province within watching distance of unlocking — this is blocked on
+  real timing, not on tooling, and isn't urgent: the field's shape and the ~3.7 h spread of
+  openings already fit "opens at" and nothing else makes sense of the data.
+- **A guild-name field on the detail panel didn't match the province's owner** in the second
+  capture (it showed *our* guild's name on a province owned by someone else). Not investigated
+  — noted rather than guessed at, and not something alerting depends on.
+
+If a wider check of the colour rule ever disagrees, `side_rule` in `alerting.json` switches to
+the ownership rule (`owner`) without touching code.
 
 ---
 
@@ -317,8 +348,8 @@ A local page on `127.0.0.1` — the four things the command line is bad at:
 * **message format** — a template (`{time} {emoji} {label} {pct}`, plus `{pct_num}`, `{side}`,
   `{id}`) previewed live against a captured snapshot, so a new layout is tried before it ever
   reaches the group;
-* **labels** — all 60 provinces in a table, generated 4×4 grid position beside each, type the
-  guild's name and save;
+* **labels** — a row per province, the computed ring/sector code beside each (usually
+  already what the game shows), type an override only where the guild wants a different word;
 * **Green API** — paste `idInstance` / `apiTokenInstance` / group `chatId`, check the instance
   is authorised, and send one test message;
 * **log** — what was decided and sent, refreshed every 5 s.
@@ -339,6 +370,9 @@ are gitignored.
 ---
 
 ## 10. The live capture prompt
+
+**Already run twice; results are folded into §8.** Kept here as a record and for the next
+season's map (province ids and the geometry both need re-confirming whenever the map changes).
 
 For an AI with **Chrome MCP** access, with GBG open on the watched world. It collects the
 mapping data (§4) and settles the open questions (§8) in one pass. It is **read-only**:
@@ -412,7 +446,7 @@ screenshots. Where something could not be determined, say so instead of guessing
 ```
 
 What each part is for: **A2 + E** make the province mapping possible at all — the flag
-coordinates are what the panel draws and what the 4×4 grid labels are derived from. **A1**
+coordinates are what the panel draws and what the ring/sector codes are computed from. **A1**
 confirms the province ids match this season's map. **B** turns the panel's flag map into
 something you can read next to the game. **C1** decides `side_rule`; **C3** confirms the
 `[20%]` source; **C4** confirms the schedule. **D** decides whether §4 stays manual forever.

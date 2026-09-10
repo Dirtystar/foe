@@ -113,7 +113,7 @@ A province the game reports no percentage for prints no bracket at all — never
 | **Předstih** | how many minutes before the *soonest* opening the alerter speaks. Default **4** |
 | **Okno** | having spoken, it lists everything opening within this many minutes. Default **30** |
 | **Rozsah** | which provinces count at all — see below |
-| **Pravidlo barev** | how 🔴/🔵 is decided. Leave on `battle_type` until the live check in `FOE_ALERTING.md` §10 says otherwise |
+| **Pravidlo barev** | how 🔴/🔵 is decided. `battle_type` is the default and is now confirmed against a live map — see `FOE_ALERTING.md` §8 |
 
 Batching is the difference between ~52 messages a day and ~350. Widen the window and you get
 fewer messages but longer notice, which is exactly when people stop reading them.
@@ -129,17 +129,21 @@ Scope:
 
 ### Labely provincií (province names)
 
-The game has **no province names**: a province is an id (0–59) and a flag on the map. `A1X` is
-your guild's convention, so it has to be typed once.
+The game has **no province names** in its data, but the codes players read off the map
+(`A3A`, `F5D`) aren't guild folklore either — a GBG map is a centred hexagon of provinces, and
+the code is just that geometry (compass sector + ring number). The panel computes it, and it
+usually matches the game exactly out of the box: confirmed against a live map, 13 of 14 codes
+read straight off the game matched what the panel computed from the map asset alone.
 
-The panel starts with one row. Pick a province from the dropdown — it shows `#14 (C1C)`, where
-`C1C` is a *generated* position in a 4×4 grid, matching the `A`–`D` / `1`–`4` shape your guild
-uses. Type the real name next to it and press **+ Přidat** for the next one. **✕** removes a
-row.
+So you mostly won't need to type anything. The panel starts with one row anyway, for the rare
+case the guild wants a different word for a province than the code the game shows — pick a
+province from the dropdown, it shows `#14 (D2A)`, where `D2A` is the *computed* code. Type an
+override next to it and press **+ Přidat** for the next one. **✕** removes a row.
 
-You do **not** have to name all 60. Anything unnamed is announced by its generated position, so
-alerts work from day one and the naming can grow over time. Saving writes
-`province_labels.<world>.json` — that file is gitignored, it is yours.
+Naming a handful of provinces also **improves the guesses for the rest** — the panel refits
+its geometry against whatever you've named, so five overrides can sharpen fifty-five computed
+codes, not just those five. Saving writes `province_labels.<world>.json` — that file is
+gitignored, it is yours.
 
 Once the file covers your front line, switch **Rozsah** to `labeled`.
 

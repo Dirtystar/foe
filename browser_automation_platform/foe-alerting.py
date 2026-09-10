@@ -18,7 +18,7 @@ from pathlib import Path
 
 MIN_PYTHON = (3, 11)
 HERE = Path(__file__).resolve().parent
-MAP_DATA = Path("dataset/api_samples/map_data.volcano_archipelago.sample.json")
+MAP_DATA = Path("dataset/api_samples/map_data.waterfall_archipelago.sample.json")
 
 
 def _stop(message: str) -> int:

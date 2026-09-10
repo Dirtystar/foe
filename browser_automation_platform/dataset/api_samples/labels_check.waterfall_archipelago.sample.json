@@ -1,0 +1,21 @@
+{
+ "_comment": "id -> code the guild reads off the live game (via FoE Helper), used only as a regression fixture for the hex ring label fit. No guild or player data \u2014 just province id to positional code.",
+ "map_id": "waterfall_archipelago",
+ "pairs": {
+  "7": "A3A",
+  "0": "X1",
+  "1": "A2",
+  "3": "C2",
+  "11": "C3A",
+  "19": "A4A",
+  "10": "B3B",
+  "36": "F4C",
+  "26": "C4B",
+  "25": "C4A",
+  "60": "F5D",
+  "23": "B4B",
+  "46": "C5B",
+  "22": "A5B",
+  "45": "C5A"
+ }
+}

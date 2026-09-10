@@ -50,10 +50,16 @@ MODULES = [
     "bap/forge/gbg_data/parser.py",
 ]
 
-#: Captured payloads: the map asset drives the labels dropdown, the battleground the preview.
+#: Captured payloads. The battleground sample + its own map pair up for the offline message
+#: preview (`--sample` / the panel's default before any live data arrives); the second map is
+#: the live-confirmed current season's — the launchers point `--map-data` at it so the labels
+#: panel shows real, current codes even before a collector posts anything. No full battleground
+#: payload for that map is shipped: unlike the map asset (public CDN data), it would carry the
+#: guild's live standing, and this repository is public.
 DATA = [
     "dataset/api_samples/getBattleground.sample.json",
     "dataset/api_samples/map_data.volcano_archipelago.sample.json",
+    "dataset/api_samples/map_data.waterfall_archipelago.sample.json",
 ]
 
 #: (source, name inside the bundle). The launcher is renamed so it reads as an instruction.
