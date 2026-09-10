@@ -1,0 +1,33 @@
+{
+  "snapshot_schema": 1,
+  "world_alias": "H",
+  "url": "",
+  "resolution": [
+    1920,
+    912
+  ],
+  "device_pixel_ratio": null,
+  "viewport": [
+    null,
+    null
+  ],
+  "zoom": null,
+  "browser_mode": null,
+  "browser_name": "Managed Chromium",
+  "cdp_endpoint": null,
+  "timestamp": "2026-08-04T23:28:35",
+  "detector_version": "badge-colorprior+emblem+nms@0.62",
+  "classifier_version": "exemplar-cosine@min_sim=0.70;exemplars=155",
+  "git_commit": "7f47cad",
+  "image_md5": "4b7a18f1288479209fb7d9b62cf01eb8",
+  "decision": "UNKNOWN",
+  "weakening": null,
+  "counts": {
+    "stage1_candidates": 370,
+    "template_confirmed": 0,
+    "rejected": 370,
+    "final_detections": 0,
+    "percentage_classified": 0,
+    "percentage_unknown": 0
+  }
+}

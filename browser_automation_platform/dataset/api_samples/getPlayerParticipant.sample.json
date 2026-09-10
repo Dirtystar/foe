@@ -1,0 +1,10 @@
+{
+  "activeTrial": 30,
+  "attrition": {
+    "level": 1,
+    "negotiationMultiplier": 3,
+    "defendingArmyBonus": 1730,
+    "__class__": "GuildBattlegroundAttrition"
+  },
+  "__class__": "GuildBattlegroundPlayerParticipant"
+}

@@ -1,0 +1,22 @@
+# Cloudflare Worker config for the licence issuer / verifier / reminder cron.
+# Deploy: `npx wrangler deploy`.  Free tier covers all of this.
+
+name = "forge-gbg-keys"
+main = "keygen-worker.js"
+compatibility_date = "2024-11-01"
+
+# Key registry (create with: npx wrangler kv namespace create LICENSES → paste the id here).
+[[kv_namespaces]]
+binding = "LICENSES"
+id = "PUT_YOUR_KV_NAMESPACE_ID_HERE"
+
+# Daily renewal reminders (09:00 UTC). The scheduled() handler emails 7-day / 1-day / expired.
+[triggers]
+crons = ["0 9 * * *"]
+
+# Non-secret vars. Secrets go via `wrangler secret put NAME` (not committed):
+#   LICENSE_SECRET, LS_WEBHOOK_SECRET, RESEND_API_KEY
+[vars]
+FROM_EMAIL = "keys@yourdomain.com"
+RENEW_URL = "https://yourdomain.com/#pricing"
+VARIANT_TIERS = "{\"111\":\"solo\",\"222\":\"duo\",\"333\":\"quad\",\"444\":\"octa\",\"555\":\"unlimited\",\"666\":\"lifetime\"}"

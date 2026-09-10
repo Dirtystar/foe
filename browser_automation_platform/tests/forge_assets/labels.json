@@ -1,0 +1,26 @@
+{
+  "_note": "Ground-truth labels for the Forge screenshot fixtures. Replace the two example entries below with one entry per real PNG in this folder. See README.md. cx/cy are approximate badge centers in ORIGINAL image pixels (±10px tolerance); pct is one of 20/40/60/80/100; badges:[] means a no-badge negative; weakening_number is the top-bar integer or null.",
+  "images": [
+    {
+      "file": "map_01.png",
+      "viewport_w": 1920,
+      "viewport_h": 1080,
+      "browser_zoom_pct": 100,
+      "windows_scaling_pct": 100,
+      "badges": [
+        { "pct": 60, "cx": 812, "cy": 430 },
+        { "pct": 20, "cx": 1040, "cy": 512 }
+      ],
+      "weakening_number": 8
+    },
+    {
+      "file": "empty_01.png",
+      "viewport_w": 1920,
+      "viewport_h": 1080,
+      "browser_zoom_pct": 100,
+      "windows_scaling_pct": 100,
+      "badges": [],
+      "weakening_number": 0
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "config": {
+    "persist": false,
+    "total_ticks": 30
+  },
+  "created_at": "2026-07-15T21:04:03+00:00",
+  "extra": {
+    "throughput_fps": 0.289,
+    "wall_seconds": 103.7608
+  },
+  "frames_used": 66,
+  "git_ref": "3953747",
+  "global": {
+    "count": 30,
+    "fps": 0.289,
+    "mean": 3458.6278,
+    "median": 3637.4239,
+    "min": 888.9059,
+    "p95": 5266.832,
+    "p99": 5318.9607,
+    "stdev": 1306.8089,
+    "total": 103758.8344,
+    "unit": "ms",
+    "worst": 5320.2105
+  },
+  "kind": "stress",
+  "label": "30-ticks",
+  "machine": {
+    "cpu_count": 4,
+    "platform": "Linux-6.18.5-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "python": "3.11.15"
+  },
+  "stage_breakdown": {
+    "capture": {
+      "count": 30,
+      "fps": 894934.671,
+      "mean": 0.0011,
+      "median": 0.0011,
+      "min": 0.0009,
+      "p95": 0.0014,
+      "p99": 0.0016,
+      "stdev": 0.0002,
+      "total": 0.0335,
+      "unit": "ms",
+      "worst": 0.0016
+    },
+    "classification": {
+      "count": 30,
+      "fps": 16.803,
+      "mean": 59.5126,
+      "median": 57.1003,
+      "min": 53.3207,
+      "p95": 71.3197,
+      "p99": 84.5285,
+      "stdev": 6.9943,
+      "total": 1785.3777,
+      "unit": "ms",
+      "worst": 87.6137
+    },
+    "decision": {
+      "count": 30,
+      "fps": 67615.081,
+      "mean": 0.0148,
+      "median": 0.0148,
+      "min": 0.008,
+      "p95": 0.019,
+      "p99": 0.0246,
+      "stdev": 0.0035,
+      "total": 0.4437,
+      "unit": "ms",
+      "worst": 0.0266
+    },
+    "detection": {
+      "count": 30,
+      "fps": 0.303,
+      "mean": 3300.8295,
+      "median": 3486.3843,
+      "min": 746.6448,
+      "p95": 5121.6505,
+      "p99": 5171.2257,
+      "stdev": 1307.0931,
+      "total": 99024.8847,
+      "unit": "ms",
+      "worst": 5172.2367
+    },
+    "weakening_ocr": {
+      "count": 30,
+      "fps": 10.187,
+      "mean": 98.1651,
+      "median": 94.3051,
+      "min": 85.8192,
+      "p95": 121.8492,
+      "p99": 153.1777,
+      "stdev": 14.8913,
+      "total": 2944.9519,
+      "unit": "ms",
+      "worst": 160.0984
+    }
+  },
+  "system": {
+    "avg_cpu_percent": 284.79,
+    "avg_ram_mb": 464.46,
+    "backend": "proc",
+    "cpu_count": 4,
+    "current_ram_mb": 465.54,
+    "peak_cpu_percent": 322.53,
+    "peak_ram_mb": 465.54,
+    "uptime_s": 103.763
+  },
+  "worlds": {}
+}

@@ -1,0 +1,44 @@
+# Development configuration — runs entirely on built-in stubs.
+#
+#   bap validate-config config/development.example.yaml
+#   bap run config/development.example.yaml --seconds 5
+#
+# No browser, no vision libraries, and no network are required: the stub
+# adapters emit deterministic data so you can exercise the full tick loop
+# (capture -> analyze -> rules -> actions -> report) locally. `log` and
+# `stop_session` are stub/dev actions and are not part of the real Playwright
+# handler set — see config/production.example.yaml for a real-stack config.
+version: 1
+
+settings:
+  max_sessions: 4
+  headless: false          # ignored by stubs; documents intent for --real
+  browser_engine: chromium
+  isolate_contexts_per_tab: true
+
+rule_packs:
+  dev:
+    - id: click_when_ready
+      cooldown_ms: 1000
+      condition:
+        type: exists
+        field: screen.ready
+      actions:
+        - type: click
+          params: { selector: "#action" }
+        - type: log
+          params: { message: "ready detected, clicked" }
+
+profiles:
+  - id: dev_session
+    start_url: "https://example.com/"
+    session:
+      interval_ms: 250
+      jitter_ms: 50
+    rule_pack: dev
+    capture_bindings:
+      - name: screen
+        target: full_page
+        analyzers:
+          - type: ocr
+            settings: { emit: { ready: true } }   # stub OCR emits this fact

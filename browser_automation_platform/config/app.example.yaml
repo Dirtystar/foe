@@ -1,0 +1,61 @@
+# Example application configuration for the Browser Automation Platform.
+# Describes intent only; the composition root turns this into runtime objects.
+version: 1
+
+settings:
+  max_sessions: 8
+  headless: false
+  browser_engine: chromium
+  isolate_contexts_per_tab: true
+
+rule_packs:
+  default:
+    - id: click_when_counter_low
+      cooldown_ms: 2000
+      condition:
+        type: all
+        conditions:
+          - type: exists
+            field: header.ocr_text
+          - type: compare
+            field: header.ocr_number
+            op: less_than
+            value: 100
+      actions:
+        - type: click
+          params: { target: main_panel }
+        - type: log
+          params: { message: "counter below threshold, clicked" }
+
+    - id: stop_on_error_banner
+      condition:
+        type: any
+        conditions:
+          - type: compare
+            field: main_panel.template_match
+            op: equals
+            value: error_banner
+      actions:
+        - type: stop_session
+
+profiles:
+  - id: profile_01
+    start_url: "https://example.com/"
+    viewport: { width: 1920, height: 1080 }
+    session:
+      interval_ms: 500
+      jitter_ms: 100
+    rule_pack: default
+    capture_bindings:
+      - name: header
+        target: region
+        region: { x: 0, y: 0, w: 800, h: 120 }
+        analyzers:
+          - type: ocr
+            settings: { lang: eng }
+      - name: main_panel
+        target: selector
+        selector: "#main-panel"
+        analyzers:
+          - type: template_match
+            settings: { template: templates/button_active.png, threshold: 0.82 }

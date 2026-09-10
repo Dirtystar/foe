@@ -1,0 +1,74 @@
+# Production template — attended mode with real vision analyzers.
+#
+# Attended mode: YOU open and log into the pages you want to watch in the
+# browser BAP opens, then assign each open tab to a session in the GUI. BAP
+# never navigates for you, so there are NO hardcoded URLs here.
+#
+# Run it:
+#   1. Install the browser once (GUI: Tools → Install browser).
+#   2. bap-gui config/production.example.yaml
+#   3. Attended panel: Open Browser → open your pages → Scan tabs →
+#      assign a tab to each session → Start.
+#
+# Validate before deploying (types resolve against the built-in dev registry;
+# add --real-vision to check the real OCR/template analyzers + plugins):
+#   bap validate-config config/production.example.yaml
+#
+# The analyzers below (ocr, template_match) need the 'vision' extra
+# (pip install "browser-automation-platform[vision]") plus Tesseract for real
+# runs. Start from config/attended.example.yaml if you just want to see attended
+# mode working with the built-in demo analyzers (no extra libraries).
+version: 1
+
+settings:
+  attended: true
+  max_sessions: 8
+  browser_engine: chromium
+  isolate_contexts_per_tab: true
+
+  # Observational browser resource monitoring (memory/CPU need the 'monitoring'
+  # extra; page/context counts work without it). Exceeding a limit raises
+  # resource pressure (degrade → recover → disable) — it never kills the browser.
+  resource_monitoring:
+    enabled: true
+    collect_every_ticks: 50
+    limits:
+      max_memory_mb: 4096
+      max_pages: 16
+
+rule_packs:
+  monitor:
+    - id: act_when_value_low
+      cooldown_ms: 3000
+      condition:
+        type: all
+        conditions:
+          - type: exists
+            field: panel.number
+          - type: compare
+            field: panel.number
+            op: less_than
+            value: 20
+      actions:
+        - type: click
+          params: { selector: "#primary-action" }
+        - type: wait
+          params: { ms: 500 }
+
+profiles:
+  # One session per page you want to watch. No start_url — you assign a tab.
+  - id: dashboard
+    viewport: { width: 1600, height: 900 }
+    session:
+      interval_ms: 1000
+      jitter_ms: 200
+    rule_pack: monitor
+    capture_bindings:
+      - name: panel
+        target: selector
+        selector: "#status-panel"
+        analyzers:
+          - type: ocr
+            settings: { numeric: true }
+          - type: template_match
+            settings: { template: templates/error_banner.png, threshold: 0.85 }

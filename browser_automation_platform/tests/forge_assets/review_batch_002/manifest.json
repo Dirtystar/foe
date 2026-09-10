@@ -1,0 +1,1621 @@
+{
+  "corpus_frames": 236,
+  "clusters": 66,
+  "requested": 50,
+  "selected": 50,
+  "weights": {
+    "unknown_pct": 3.0,
+    "uncertain": 2.5,
+    "stage_disagree": 2.0,
+    "near_thresh_reject": 1.5,
+    "competing": 1.0,
+    "rejected": 0.6,
+    "candidates": 0.4,
+    "rare_background": 1.5,
+    "rare_scale": 2.0
+  },
+  "method": "read-only pipeline features -> min-max weighted info-gain, perceptual near-duplicate clustering, diversity-capped round-robin selection",
+  "note": "",
+  "frames": [
+    {
+      "file": "frame_000299.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 27,
+      "score": 5.1757,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 277,
+        "template_confirmed": 7,
+        "rejected": 270,
+        "final_detections": 7,
+        "percentage_classified": 0,
+        "percentage_unknown": 7
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 7.0,
+        "candidates": 277.0,
+        "rejected": 270.0,
+        "near_thresh_reject": 14.0,
+        "stage_disagree": 70.0,
+        "rare_background": 3.629,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000390.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 34,
+      "score": 4.7274,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "rare background \u2014 battle-map colour far from the corpus norm"
+      ],
+      "detector": {
+        "stage1_candidates": 190,
+        "template_confirmed": 4,
+        "rejected": 186,
+        "final_detections": 4,
+        "percentage_classified": 0,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 4.0,
+        "candidates": 190.0,
+        "rejected": 186.0,
+        "near_thresh_reject": 16.0,
+        "stage_disagree": 49.0,
+        "rare_background": 18.242,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000523.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 41,
+      "score": 4.6408,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "high rejected-candidate count"
+      ],
+      "detector": {
+        "stage1_candidates": 283,
+        "template_confirmed": 5,
+        "rejected": 280,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 283.0,
+        "rejected": 280.0,
+        "near_thresh_reject": 12.0,
+        "stage_disagree": 72.0,
+        "rare_background": 4.725,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000713.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 62,
+      "score": 4.2201,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 145,
+        "template_confirmed": 6,
+        "rejected": 139,
+        "final_detections": 6,
+        "percentage_classified": 0,
+        "percentage_unknown": 6
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 6.0,
+        "candidates": 145.0,
+        "rejected": 139.0,
+        "near_thresh_reject": 13.0,
+        "stage_disagree": 37.0,
+        "rare_background": 19.977,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000619.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 53,
+      "score": 3.9561,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 170,
+        "template_confirmed": 5,
+        "rejected": 165,
+        "final_detections": 5,
+        "percentage_classified": 0,
+        "percentage_unknown": 5
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 5.0,
+        "candidates": 170.0,
+        "rejected": 165.0,
+        "near_thresh_reject": 13.0,
+        "stage_disagree": 41.0,
+        "rare_background": 12.759,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000608.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 50,
+      "score": 3.8164,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 124,
+        "template_confirmed": 6,
+        "rejected": 118,
+        "final_detections": 6,
+        "percentage_classified": 0,
+        "percentage_unknown": 6
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 6.0,
+        "candidates": 124.0,
+        "rejected": 118.0,
+        "near_thresh_reject": 12.0,
+        "stage_disagree": 29.0,
+        "rare_background": 20.516,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000614.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 51,
+      "score": 3.7919,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "multiple competing accepted candidates",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 159,
+        "template_confirmed": 8,
+        "rejected": 152,
+        "final_detections": 7,
+        "percentage_classified": 0,
+        "percentage_unknown": 7
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 7.0,
+        "candidates": 159.0,
+        "rejected": 152.0,
+        "near_thresh_reject": 11.0,
+        "stage_disagree": 34.0,
+        "rare_background": 13.622,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000133.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 8,
+      "score": 3.7871,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 118,
+        "template_confirmed": 5,
+        "rejected": 114,
+        "final_detections": 4,
+        "percentage_classified": 0,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 4.0,
+        "candidates": 118.0,
+        "rejected": 114.0,
+        "near_thresh_reject": 14.0,
+        "stage_disagree": 30.0,
+        "rare_background": 20.918,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000563.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 46,
+      "score": 3.7474,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 170,
+        "template_confirmed": 4,
+        "rejected": 166,
+        "final_detections": 4,
+        "percentage_classified": 0,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 4.0,
+        "candidates": 170.0,
+        "rejected": 166.0,
+        "near_thresh_reject": 14.0,
+        "stage_disagree": 39.0,
+        "rare_background": 10.475,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000583.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 48,
+      "score": 3.6856,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 118,
+        "template_confirmed": 2,
+        "rejected": 116,
+        "final_detections": 2,
+        "percentage_classified": 0,
+        "percentage_unknown": 2
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 118.0,
+        "rejected": 116.0,
+        "near_thresh_reject": 14.0,
+        "stage_disagree": 32.0,
+        "rare_background": 22.495,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000443.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 39,
+      "score": 3.5533,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm"
+      ],
+      "detector": {
+        "stage1_candidates": 173,
+        "template_confirmed": 2,
+        "rejected": 171,
+        "final_detections": 2,
+        "percentage_classified": 0,
+        "percentage_unknown": 2
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 173.0,
+        "rejected": 171.0,
+        "near_thresh_reject": 9.0,
+        "stage_disagree": 44.0,
+        "rare_background": 17.332,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000809.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 64,
+      "score": 3.4853,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 153,
+        "template_confirmed": 6,
+        "rejected": 148,
+        "final_detections": 5,
+        "percentage_classified": 0,
+        "percentage_unknown": 5
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 5.0,
+        "candidates": 153.0,
+        "rejected": 148.0,
+        "near_thresh_reject": 13.0,
+        "stage_disagree": 38.0,
+        "rare_background": 6.711,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000592.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 49,
+      "score": 3.4386,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm"
+      ],
+      "detector": {
+        "stage1_candidates": 197,
+        "template_confirmed": 3,
+        "rejected": 194,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 197.0,
+        "rejected": 194.0,
+        "near_thresh_reject": 9.0,
+        "stage_disagree": 47.0,
+        "rare_background": 8.93,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000284.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 22,
+      "score": 3.4188,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 154,
+        "template_confirmed": 3,
+        "rejected": 151,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 154.0,
+        "rejected": 151.0,
+        "near_thresh_reject": 8.0,
+        "stage_disagree": 39.0,
+        "rare_background": 18.722,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000393.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 36,
+      "score": 3.4146,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 182,
+        "template_confirmed": 2,
+        "rejected": 180,
+        "final_detections": 2,
+        "percentage_classified": 0,
+        "percentage_unknown": 2
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 182.0,
+        "rejected": 180.0,
+        "near_thresh_reject": 6.0,
+        "stage_disagree": 46.0,
+        "rare_background": 18.182,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000217.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 15,
+      "score": 3.3948,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 136,
+        "template_confirmed": 7,
+        "rejected": 131,
+        "final_detections": 5,
+        "percentage_classified": 0,
+        "percentage_unknown": 5
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 5.0,
+        "candidates": 136.0,
+        "rejected": 131.0,
+        "near_thresh_reject": 3.0,
+        "stage_disagree": 35.0,
+        "rare_background": 26.536,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000330.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 31,
+      "score": 3.3946,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "high rejected-candidate count"
+      ],
+      "detector": {
+        "stage1_candidates": 221,
+        "template_confirmed": 1,
+        "rejected": 220,
+        "final_detections": 1,
+        "percentage_classified": 0,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 1.0,
+        "candidates": 221.0,
+        "rejected": 220.0,
+        "near_thresh_reject": 7.0,
+        "stage_disagree": 56.0,
+        "rare_background": 9.082,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000560.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 44,
+      "score": 3.3816,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 93,
+        "template_confirmed": 3,
+        "rejected": 90,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 93.0,
+        "rejected": 90.0,
+        "near_thresh_reject": 9.0,
+        "stage_disagree": 23.0,
+        "rare_background": 30.881,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000352.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 32,
+      "score": 3.3785,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 148,
+        "template_confirmed": 2,
+        "rejected": 146,
+        "final_detections": 2,
+        "percentage_classified": 0,
+        "percentage_unknown": 2
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 148.0,
+        "rejected": 146.0,
+        "near_thresh_reject": 10.0,
+        "stage_disagree": 35.0,
+        "rare_background": 19.618,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000017.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 0,
+      "score": 3.3776,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 84,
+        "template_confirmed": 3,
+        "rejected": 81,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 84.0,
+        "rejected": 81.0,
+        "near_thresh_reject": 12.0,
+        "stage_disagree": 21.0,
+        "rare_background": 27.229,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000762.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 63,
+      "score": 3.3587,
+      "reasons": [
+        "multiple competing accepted candidates",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 125,
+        "template_confirmed": 9,
+        "rejected": 117,
+        "final_detections": 8,
+        "percentage_classified": 0,
+        "percentage_unknown": 8
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 8.0,
+        "candidates": 125.0,
+        "rejected": 117.0,
+        "near_thresh_reject": 3.0,
+        "stage_disagree": 33.0,
+        "rare_background": 20.709,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000537.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 42,
+      "score": 3.2375,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 122,
+        "template_confirmed": 0,
+        "rejected": 122,
+        "final_detections": 0,
+        "percentage_classified": 0,
+        "percentage_unknown": 0
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 0.0,
+        "candidates": 122.0,
+        "rejected": 122.0,
+        "near_thresh_reject": 12.0,
+        "stage_disagree": 31.0,
+        "rare_background": 22.504,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000181.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 12,
+      "score": 3.2118,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 124,
+        "template_confirmed": 6,
+        "rejected": 120,
+        "final_detections": 4,
+        "percentage_classified": 0,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 4.0,
+        "candidates": 124.0,
+        "rejected": 120.0,
+        "near_thresh_reject": 4.0,
+        "stage_disagree": 31.0,
+        "rare_background": 26.939,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000544.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 43,
+      "score": 3.1921,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 125,
+        "template_confirmed": 3,
+        "rejected": 122,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 125.0,
+        "rejected": 122.0,
+        "near_thresh_reject": 10.0,
+        "stage_disagree": 30.0,
+        "rare_background": 18.46,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000315.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 28,
+      "score": 3.1577,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 122,
+        "template_confirmed": 2,
+        "rejected": 120,
+        "final_detections": 2,
+        "percentage_classified": 0,
+        "percentage_unknown": 2
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 122.0,
+        "rejected": 120.0,
+        "near_thresh_reject": 10.0,
+        "stage_disagree": 30.0,
+        "rare_background": 20.427,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000441.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 38,
+      "score": 3.1243,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "rare background \u2014 battle-map colour far from the corpus norm"
+      ],
+      "detector": {
+        "stage1_candidates": 130,
+        "template_confirmed": 2,
+        "rejected": 128,
+        "final_detections": 2,
+        "percentage_classified": 0,
+        "percentage_unknown": 2
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 130.0,
+        "rejected": 128.0,
+        "near_thresh_reject": 12.0,
+        "stage_disagree": 31.0,
+        "rare_background": 14.843,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000688.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 60,
+      "score": 3.0557,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 105,
+        "template_confirmed": 4,
+        "rejected": 101,
+        "final_detections": 4,
+        "percentage_classified": 0,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 4.0,
+        "candidates": 105.0,
+        "rejected": 101.0,
+        "near_thresh_reject": 7.0,
+        "stage_disagree": 27.0,
+        "rare_background": 22.327,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000019.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 1,
+      "score": 3.0299,
+      "reasons": [
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 116,
+        "template_confirmed": 2,
+        "rejected": 114,
+        "final_detections": 2,
+        "percentage_classified": 0,
+        "percentage_unknown": 2
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 116.0,
+        "rejected": 114.0,
+        "near_thresh_reject": 10.0,
+        "stage_disagree": 30.0,
+        "rare_background": 18.385,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000241.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 18,
+      "score": 2.9796,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 108,
+        "template_confirmed": 3,
+        "rejected": 105,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 108.0,
+        "rejected": 105.0,
+        "near_thresh_reject": 7.0,
+        "stage_disagree": 27.0,
+        "rare_background": 23.006,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000642.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 55,
+      "score": 2.9764,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 126,
+        "template_confirmed": 3,
+        "rejected": 123,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 126.0,
+        "rejected": 123.0,
+        "near_thresh_reject": 7.0,
+        "stage_disagree": 29.0,
+        "rare_background": 20.293,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000282.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 21,
+      "score": 2.9734,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 157,
+        "template_confirmed": 1,
+        "rejected": 156,
+        "final_detections": 1,
+        "percentage_classified": 0,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 1.0,
+        "candidates": 157.0,
+        "rejected": 156.0,
+        "near_thresh_reject": 6.0,
+        "stage_disagree": 39.0,
+        "rare_background": 18.239,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000288.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 24,
+      "score": 2.9364,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 116,
+        "template_confirmed": 4,
+        "rejected": 113,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 116.0,
+        "rejected": 113.0,
+        "near_thresh_reject": 4.0,
+        "stage_disagree": 29.0,
+        "rare_background": 25.811,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000195.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 14,
+      "score": 2.9318,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 109,
+        "template_confirmed": 4,
+        "rejected": 105,
+        "final_detections": 4,
+        "percentage_classified": 0,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 4.0,
+        "candidates": 109.0,
+        "rejected": 105.0,
+        "near_thresh_reject": 7.0,
+        "stage_disagree": 28.0,
+        "rare_background": 18.959,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000303.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 26,
+      "score": 2.9285,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 124,
+        "template_confirmed": 4,
+        "rejected": 121,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 124.0,
+        "rejected": 121.0,
+        "near_thresh_reject": 6.0,
+        "stage_disagree": 31.0,
+        "rare_background": 20.103,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000060.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 4,
+      "score": 2.8949,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 129,
+        "template_confirmed": 6,
+        "rejected": 125,
+        "final_detections": 4,
+        "percentage_classified": 0,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 4.0,
+        "candidates": 129.0,
+        "rejected": 125.0,
+        "near_thresh_reject": 5.0,
+        "stage_disagree": 34.0,
+        "rare_background": 16.617,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000389.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 33,
+      "score": 2.8749,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 135,
+        "template_confirmed": 1,
+        "rejected": 134,
+        "final_detections": 1,
+        "percentage_classified": 0,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 1.0,
+        "candidates": 135.0,
+        "rejected": 134.0,
+        "near_thresh_reject": 6.0,
+        "stage_disagree": 36.0,
+        "rare_background": 19.891,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000777.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 65,
+      "score": 2.8027,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "rare background \u2014 battle-map colour far from the corpus norm"
+      ],
+      "detector": {
+        "stage1_candidates": 160,
+        "template_confirmed": 2,
+        "rejected": 158,
+        "final_detections": 2,
+        "percentage_classified": 0,
+        "percentage_unknown": 2
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 160.0,
+        "rejected": 158.0,
+        "near_thresh_reject": 8.0,
+        "stage_disagree": 39.0,
+        "rare_background": 8.566,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000175.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 11,
+      "score": 2.7762,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 111,
+        "template_confirmed": 5,
+        "rejected": 107,
+        "final_detections": 4,
+        "percentage_classified": 0,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 4.0,
+        "candidates": 111.0,
+        "rejected": 107.0,
+        "near_thresh_reject": 5.0,
+        "stage_disagree": 31.0,
+        "rare_background": 17.559,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000158.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 10,
+      "score": 2.7732,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 110,
+        "template_confirmed": 1,
+        "rejected": 109,
+        "final_detections": 1,
+        "percentage_classified": 0,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 1.0,
+        "candidates": 110.0,
+        "rejected": 109.0,
+        "near_thresh_reject": 6.0,
+        "stage_disagree": 32.0,
+        "rare_background": 22.337,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000074.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 6,
+      "score": 2.6576,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 106,
+        "template_confirmed": 2,
+        "rejected": 104,
+        "final_detections": 2,
+        "percentage_classified": 0,
+        "percentage_unknown": 2
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 106.0,
+        "rejected": 104.0,
+        "near_thresh_reject": 4.0,
+        "stage_disagree": 28.0,
+        "rare_background": 24.147,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000035.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 3,
+      "score": 2.6523,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 108,
+        "template_confirmed": 1,
+        "rejected": 107,
+        "final_detections": 1,
+        "percentage_classified": 0,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 1.0,
+        "candidates": 108.0,
+        "rejected": 107.0,
+        "near_thresh_reject": 5.0,
+        "stage_disagree": 30.0,
+        "rare_background": 23.207,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000083.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 7,
+      "score": 2.6417,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 106,
+        "template_confirmed": 4,
+        "rejected": 102,
+        "final_detections": 4,
+        "percentage_classified": 0,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 4.0,
+        "candidates": 106.0,
+        "rejected": 102.0,
+        "near_thresh_reject": 6.0,
+        "stage_disagree": 27.0,
+        "rare_background": 15.96,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000219.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 16,
+      "score": 2.4757,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 83,
+        "template_confirmed": 3,
+        "rejected": 80,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 83.0,
+        "rejected": 80.0,
+        "near_thresh_reject": 4.0,
+        "stage_disagree": 21.0,
+        "rare_background": 24.323,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000326.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 30,
+      "score": 2.4757,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 115,
+        "template_confirmed": 0,
+        "rejected": 115,
+        "final_detections": 0,
+        "percentage_classified": 0,
+        "percentage_unknown": 0
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 0.0,
+        "candidates": 115.0,
+        "rejected": 115.0,
+        "near_thresh_reject": 5.0,
+        "stage_disagree": 29.0,
+        "rare_background": 22.225,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000287.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 23,
+      "score": 2.2821,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 98,
+        "template_confirmed": 4,
+        "rejected": 95,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 98.0,
+        "rejected": 95.0,
+        "near_thresh_reject": 6.0,
+        "stage_disagree": 24.0,
+        "rare_background": 13.801,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000662.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 59,
+      "score": 2.1145,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "multiple competing accepted candidates",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 79,
+        "template_confirmed": 6,
+        "rejected": 74,
+        "final_detections": 5,
+        "percentage_classified": 0,
+        "percentage_unknown": 5
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 5.0,
+        "candidates": 79.0,
+        "rejected": 74.0,
+        "near_thresh_reject": 0.0,
+        "stage_disagree": 20.0,
+        "rare_background": 20.715,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000238.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 17,
+      "score": 2.1106,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 106,
+        "template_confirmed": 0,
+        "rejected": 106,
+        "final_detections": 0,
+        "percentage_classified": 0,
+        "percentage_unknown": 0
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 0.0,
+        "candidates": 106.0,
+        "rejected": 106.0,
+        "near_thresh_reject": 3.0,
+        "stage_disagree": 27.0,
+        "rare_background": 20.687,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000200.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 13,
+      "score": 2.0577,
+      "reasons": [
+        "multiple competing accepted candidates",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 101,
+        "template_confirmed": 11,
+        "rejected": 94,
+        "final_detections": 7,
+        "percentage_classified": 0,
+        "percentage_unknown": 7
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 7.0,
+        "candidates": 101.0,
+        "rejected": 94.0,
+        "near_thresh_reject": 3.0,
+        "stage_disagree": 25.0,
+        "rare_background": 4.429,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000036.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 2,
+      "score": 1.7841,
+      "reasons": [
+        "multiple competing accepted candidates",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 71,
+        "template_confirmed": 8,
+        "rejected": 64,
+        "final_detections": 7,
+        "percentage_classified": 0,
+        "percentage_unknown": 7
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 7.0,
+        "candidates": 71.0,
+        "rejected": 64.0,
+        "near_thresh_reject": 5.0,
+        "stage_disagree": 18.0,
+        "rare_background": 2.08,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000070.png",
+      "source": "corpus",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 5,
+      "score": 1.6938,
+      "reasons": [
+        "multiple competing accepted candidates",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 75,
+        "template_confirmed": 8,
+        "rejected": 68,
+        "final_detections": 7,
+        "percentage_classified": 0,
+        "percentage_unknown": 7
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 7.0,
+        "candidates": 75.0,
+        "rejected": 68.0,
+        "near_thresh_reject": 3.0,
+        "stage_disagree": 18.0,
+        "rare_background": 3.675,
+        "rare_scale": 1.0
+      }
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Forge Assistant — App Sitemap</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font: 12px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         color: #23202a; margin: 0; }
+  h1 { font-size: 22px; margin: 0 0 2px; letter-spacing: .2px; }
+  .sub { color: #6a6473; font-size: 12px; margin: 0 0 14px; }
+  .legend { display: flex; gap: 16px; margin: 0 0 16px; font-size: 11px; color: #4a4552; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+         margin-right: 5px; vertical-align: middle; }
+  .user { background: #2f7d4f; } .dev { background: #b0741c; }
+  .system { background: #556; } .win { background: #7a3ea1; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { border: 1px solid #e2dde6; border-radius: 9px; padding: 11px 13px;
+          break-inside: avoid; background: #fff; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px;
+             margin: 0 0 9px; color: #86808f; display: flex; align-items: center; }
+  .card h2 .dot { width: 8px; height: 8px; }
+  .node { padding: 6px 0; border-top: 1px dotted #eae6ee; }
+  .node:first-of-type { border-top: 0; }
+  .node b { font-size: 12.5px; }
+  .node .p { color: #6a6473; font-size: 11px; margin-top: 1px; }
+  .opens { color: #7a3ea1; font-size: 10.5px; margin-top: 2px; }
+  .opens::before { content: "↳ opens "; color: #a98fc0; }
+  .full { grid-column: 1 / -1; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+  .chip { border: 1px solid #e2dde6; border-radius: 6px; padding: 3px 8px; font-size: 11px; }
+  .chip b { font-weight: 600; }
+  code { background: #f3f0f6; padding: 1px 5px; border-radius: 4px; font-size: 11px;
+         font-family: "SF Mono", Consolas, monospace; }
+  footer { margin-top: 14px; color: #948da0; font-size: 10px; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>Forge Assistant — App Sitemap</h1>
+  <p class="sub">Navigation map of the desktop app (<code>bap.gui.gui_main --forge</code>). The left
+     nav is split by audience: everyday <b>Play</b> actions vs <b>Developer</b> tools.</p>
+  <div class="legend">
+    <span><span class="dot user"></span>User / Play</span>
+    <span><span class="dot dev"></span>Developer</span>
+    <span><span class="dot system"></span>System</span>
+    <span><span class="dot win"></span>Opens a separate window</span>
+  </div>
+
+  <div class="cols">
+    <div class="card">
+      <h2><span class="dot system"></span>Overview</h2>
+      <div class="node"><b>Dashboard</b><div class="p">At-a-glance status of worlds, capture, and recent scans.</div></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="dot user"></span>Play &nbsp;·&nbsp; everyday user actions</h2>
+      <div class="node"><b>Worlds</b><div class="p">World Manager: add / edit / remove worlds; pick browser mode; Test Connection; Attach / Disconnect Chrome; Scan &amp; Reattach tabs.</div></div>
+      <div class="node"><b>Vision</b><div class="p">Test Scan Live World, Scan All Attached Worlds, Open Offline Screenshot.</div>
+        <div class="opens">Vision Debugger &nbsp;•&nbsp; Scan-All Summary</div></div>
+      <div class="node"><b>Review</b><div class="p">Label detections as ground truth (which badge is 20/40/60/80/100).</div>
+        <div class="opens">Review Mode</div></div>
+      <div class="node"><b>Datasets</b><div class="p">Open a dataset in Review; import a snapshot; refresh.</div>
+        <div class="opens">Review Mode</div></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="dot dev"></span>Developer &nbsp;·&nbsp; calibration &amp; diagnostics</h2>
+      <div class="node"><b>Validation</b><div class="p">Vision validation across worlds — TP/FP behaviour, UNKNOWN safety.</div></div>
+      <div class="node"><b>Performance</b><div class="p">Live performance panel (refreshes only while visible).</div></div>
+      <div class="node"><b>Reports</b><div class="p">Rendered engineering / milestone reports.</div></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="dot system"></span>System</h2>
+      <div class="node"><b>Settings</b><div class="p">Non-developer setup, mirroring the Tools menu: install browser, first-run setup, export diagnostics, open data folder.</div></div>
+    </div>
+
+    <div class="card full">
+      <h2><span class="dot system"></span>Menu bar</h2>
+      <div class="row">
+        <span class="chip"><b>Tools ▸</b> Live Data Collection…&nbsp; <span style="color:#7a3ea1">(window)</span></span>
+        <span class="chip"><b>Tools ▸</b> Install browser…</span>
+        <span class="chip"><b>Tools ▸</b> Export diagnostics…</span>
+        <span class="chip"><b>Tools ▸</b> Open data folder</span>
+        <span class="chip"><b>Tools ▸</b> Run first-run setup…</span>
+        <span class="chip"><b>Help ▸</b> About</span>
+      </div>
+    </div>
+
+    <div class="card full">
+      <h2><span class="dot win"></span>Separate windows</h2>
+      <div class="node"><b>Vision Debugger</b> <span class="p">— from Vision (Test Scan / Open Offline). OBSERVE-ONLY.</span>
+        <div class="p">UI-state indicator · annotated scan (resizable image / details splitter) · Save artifacts · Label in Review · Save Snapshot · <b>Cursor Preview</b> · <b>Open &amp; Verify</b> · <b>Open Province &amp; Observe State</b> · <b>Panel Click-Point Calibration</b>.</div></div>
+      <div class="node"><b>Review Mode</b> <span class="p">— label frames; keys 1-5 set 20/40/60/80/100, Delete removes a box, N = no badges, Enter saves.</span></div>
+      <div class="node"><b>Scan-All Summary</b> <span class="p">— multi-world scan results at a glance.</span></div>
+      <div class="node"><b>Live Data Collection</b> <span class="p">— Tools menu; read-only capture workbench (Start Session, Capture All Worlds, Validate Dataset).</span></div>
+    </div>
+
+    <div class="card full">
+      <h2><span class="dot dev"></span>Command-line tools (operator / dev)</h2>
+      <div class="row">
+        <span class="chip"><code>python -m bap.forge.collect [--export]</code> — summarise / export captured panel frames to <code>dataset/panels/</code></span>
+        <span class="chip"><code>python -m bap.forge.labeling &lt;frames_dir&gt;</code> — assisted badge labeller</span>
+        <span class="chip"><code>python -m bap.forge.detection.live_eval</code> — vision evaluation</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>Forge Assistant · observe-only · generated from the live GUI navigation. Windows in purple open outside the main window.</footer>
+</body>
+</html>

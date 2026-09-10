@@ -1,0 +1,20 @@
+{
+  "frame": "2026-08-18_13-00-01_B.png",
+  "md5": "865abb4d8aca36e1b393f892baffdb63",
+  "alias": "B",
+  "hostname": "cz2.forgeofempires.com",
+  "url": null,
+  "capture_w": 1920,
+  "capture_h": 869,
+  "viewport_w": null,
+  "viewport_h": null,
+  "dpr": null,
+  "zoom": null,
+  "browser_mode": "external_chrome",
+  "timestamp": "2026-08-18T13:00:01",
+  "session_id": "20260806_103342",
+  "source": "live_collection",
+  "detected": 2,
+  "classified": 0,
+  "unknown": 2
+}

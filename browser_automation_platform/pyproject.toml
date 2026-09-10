@@ -1,0 +1,91 @@
+[project]
+name = "browser-automation-platform"
+version = "0.1.0"
+description = "Generic, site-agnostic visual browser automation platform (ports & adapters)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["automation", "playwright", "browser", "vision", "hexagonal"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+]
+dependencies = [
+    "playwright>=1.44",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+bap = "bap.cli:main"
+bap-run = "bap.main:main"
+bap-gui = "bap.gui.gui_main:main"
+bap-forge-label = "bap.forge.labeling.__main__:main"
+bap-forge-review = "bap.gui.forge_review:main"
+bap-forge-collect = "bap.forge.collect:main"
+bap-gbg = "bap.forge.gbg_data.__main__:main"
+bap-gbg-live = "bap.forge.gbg_data.live:main"
+bap-forge-click = "bap.forge.action.cdp_click:main"
+bap-forge-autoplay = "bap.forge.action.autoplay:main"
+bap-forge-farm = "bap.forge.action.round_robin:main"
+bap-forge-calibrate = "bap.forge.action.calibrate:main"
+bap-forge-verify = "bap.forge.action.navigate:main"
+bap-forge-open = "bap.forge.action.open_targets:main"
+bap-forge-launch = "bap.forge.action.launcher:main"
+bap-forge-farmer = "bap.forge.app.farmer_gui:main"
+bap-forge-license = "bap.forge.licensing:main"
+
+[project.optional-dependencies]
+# Real vision analyzers (OCR + template matching).
+vision = [
+    "numpy>=1.26",
+    "Pillow>=10.0",
+    "opencv-python-headless>=4.9",
+    "pytesseract>=0.3.10",
+]
+# PySide6 monitoring GUI.
+gui = [
+    "PySide6>=6.6",
+]
+# Browser process memory/CPU in resource snapshots. Without it, page/context
+# counts still work; memory/cpu report None.
+monitoring = [
+    "psutil>=5.9",
+]
+# Plugin discovery is stdlib (importlib.metadata entry points) and needs no
+# runtime dependency — third-party analyzers/actions install as their own
+# packages and are found via the `bap.analyzers` / `bap.actions` groups. This
+# extra exists as an explicit, documented install target.
+plugins = []
+# Everything a headless production deployment needs (add [gui] for the desktop
+# monitor). Self-referencing extras are resolved by pip.
+production = [
+    "browser-automation-platform[vision,monitoring,plugins]",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-m 'not integration and not load and not stress'"
+markers = [
+    "integration: exercises a real Playwright browser; run with -m integration",
+    "load: multi-session load scenarios; run with -m load",
+    "stress: recovery/persistence stress scenarios; run with -m stress",
+]

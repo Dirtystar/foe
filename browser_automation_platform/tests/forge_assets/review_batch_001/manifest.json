@@ -1,0 +1,597 @@
+{
+  "corpus_frames": 18,
+  "clusters": 13,
+  "requested": 50,
+  "selected": 18,
+  "weights": {
+    "unknown_pct": 3.0,
+    "uncertain": 2.5,
+    "stage_disagree": 2.0,
+    "near_thresh_reject": 1.5,
+    "competing": 1.0,
+    "rejected": 0.6,
+    "candidates": 0.4,
+    "rare_background": 1.5,
+    "rare_scale": 2.0
+  },
+  "method": "read-only pipeline features -> min-max weighted info-gain, perceptual near-duplicate clustering, diversity-capped round-robin selection",
+  "note": "The committed screenshot corpus is smaller than the requested batch size; the batch contains every diversity-selected frame available. Re-run against a larger keep dataset to fill a full batch.",
+  "frames": [
+    {
+      "file": "F_20260712_231811_628314.png",
+      "source": "live_review",
+      "world": "F",
+      "resolution": "1600x900",
+      "cluster": 11,
+      "score": 10.2045,
+      "reasons": [
+        "uncertain classifier \u2014 similarity near the accept bar / close top-2 classes",
+        "unusual capture scale/resolution (under-represented)",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 87,
+        "template_confirmed": 2,
+        "rejected": 85,
+        "final_detections": 2,
+        "percentage_classified": 1,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 1.0,
+        "uncertain": 1.0,
+        "competing": 2.0,
+        "candidates": 87.0,
+        "rejected": 85.0,
+        "near_thresh_reject": 6.0,
+        "stage_disagree": 22.0,
+        "rare_background": 36.344,
+        "rare_scale": 3.0
+      }
+    },
+    {
+      "file": "frame_000183.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 2,
+      "score": 8.3204,
+      "reasons": [
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "uncertain classifier \u2014 similarity near the accept bar / close top-2 classes",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 64,
+        "template_confirmed": 10,
+        "rejected": 58,
+        "final_detections": 6,
+        "percentage_classified": 1,
+        "percentage_unknown": 5
+      },
+      "factors": {
+        "unknown_pct": 5.0,
+        "uncertain": 1.0,
+        "competing": 6.0,
+        "candidates": 64.0,
+        "rejected": 58.0,
+        "near_thresh_reject": 3.0,
+        "stage_disagree": 15.0,
+        "rare_background": 9.327,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000070.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 1,
+      "score": 5.8478,
+      "reasons": [
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "multiple competing accepted candidates",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 54,
+        "template_confirmed": 8,
+        "rejected": 47,
+        "final_detections": 7,
+        "percentage_classified": 1,
+        "percentage_unknown": 6
+      },
+      "factors": {
+        "unknown_pct": 6.0,
+        "uncertain": 0.0,
+        "competing": 7.0,
+        "candidates": 54.0,
+        "rejected": 47.0,
+        "near_thresh_reject": 3.0,
+        "stage_disagree": 12.0,
+        "rare_background": 3.774,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000596.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 8,
+      "score": 5.8443,
+      "reasons": [
+        "uncertain classifier \u2014 similarity near the accept bar / close top-2 classes",
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 31,
+        "template_confirmed": 4,
+        "rejected": 27,
+        "final_detections": 4,
+        "percentage_classified": 1,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 3.0,
+        "uncertain": 1.0,
+        "competing": 4.0,
+        "candidates": 31.0,
+        "rejected": 27.0,
+        "near_thresh_reject": 2.0,
+        "stage_disagree": 7.0,
+        "rare_background": 10.562,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000460.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 6,
+      "score": 5.6675,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 100,
+        "template_confirmed": 0,
+        "rejected": 100,
+        "final_detections": 0,
+        "percentage_classified": 0,
+        "percentage_unknown": 0
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 0.0,
+        "candidates": 100.0,
+        "rejected": 100.0,
+        "near_thresh_reject": 8.0,
+        "stage_disagree": 25.0,
+        "rare_background": 36.706,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "H_20260712_231142_650431.png",
+      "source": "live_review",
+      "world": "H",
+      "resolution": "1920x912",
+      "cluster": 12,
+      "score": 5.6358,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "high rejected-candidate count"
+      ],
+      "detector": {
+        "stage1_candidates": 96,
+        "template_confirmed": 2,
+        "rejected": 94,
+        "final_detections": 2,
+        "percentage_classified": 1,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 1.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 96.0,
+        "rejected": 94.0,
+        "near_thresh_reject": 10.0,
+        "stage_disagree": 24.0,
+        "rare_background": 0.0,
+        "rare_scale": 1.5
+      }
+    },
+    {
+      "file": "H_20260712_231606_382772.png",
+      "source": "live_review",
+      "world": "H",
+      "resolution": "1920x912",
+      "cluster": 12,
+      "score": 5.6358,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)",
+        "high rejected-candidate count"
+      ],
+      "detector": {
+        "stage1_candidates": 96,
+        "template_confirmed": 2,
+        "rejected": 94,
+        "final_detections": 2,
+        "percentage_classified": 1,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 1.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 96.0,
+        "rejected": 94.0,
+        "near_thresh_reject": 10.0,
+        "stage_disagree": 24.0,
+        "rare_background": 0.0,
+        "rare_scale": 1.5
+      }
+    },
+    {
+      "file": "frame_000565.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 8,
+      "score": 5.2256,
+      "reasons": [
+        "uncertain classifier \u2014 similarity near the accept bar / close top-2 classes",
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 20,
+        "template_confirmed": 4,
+        "rejected": 16,
+        "final_detections": 4,
+        "percentage_classified": 1,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 3.0,
+        "uncertain": 1.0,
+        "competing": 4.0,
+        "candidates": 20.0,
+        "rejected": 16.0,
+        "near_thresh_reject": 0.0,
+        "stage_disagree": 5.0,
+        "rare_background": 10.274,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000346.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 4,
+      "score": 4.0962,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 66,
+        "template_confirmed": 0,
+        "rejected": 66,
+        "final_detections": 0,
+        "percentage_classified": 0,
+        "percentage_unknown": 0
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 0.0,
+        "candidates": 66.0,
+        "rejected": 66.0,
+        "near_thresh_reject": 5.0,
+        "stage_disagree": 17.0,
+        "rare_background": 36.537,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000021.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 0,
+      "score": 3.6166,
+      "reasons": [
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "multiple competing accepted candidates",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 31,
+        "template_confirmed": 6,
+        "rejected": 26,
+        "final_detections": 5,
+        "percentage_classified": 1,
+        "percentage_unknown": 4
+      },
+      "factors": {
+        "unknown_pct": 4.0,
+        "uncertain": 0.0,
+        "competing": 5.0,
+        "candidates": 31.0,
+        "rejected": 26.0,
+        "near_thresh_reject": 2.0,
+        "stage_disagree": 7.0,
+        "rare_background": 1.463,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000466.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 6,
+      "score": 3.5717,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "high rejected-candidate count"
+      ],
+      "detector": {
+        "stage1_candidates": 64,
+        "template_confirmed": 0,
+        "rejected": 64,
+        "final_detections": 0,
+        "percentage_classified": 0,
+        "percentage_unknown": 0
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 0.0,
+        "candidates": 64.0,
+        "rejected": 64.0,
+        "near_thresh_reject": 2.0,
+        "stage_disagree": 16.0,
+        "rare_background": 37.517,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000302.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 3,
+      "score": 3.4473,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "unknown percentage(s) \u2014 detected badge the classifier could not read"
+      ],
+      "detector": {
+        "stage1_candidates": 61,
+        "template_confirmed": 4,
+        "rejected": 58,
+        "final_detections": 3,
+        "percentage_classified": 2,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 1.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 61.0,
+        "rejected": 58.0,
+        "near_thresh_reject": 2.0,
+        "stage_disagree": 16.0,
+        "rare_background": 12.543,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000654.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 10,
+      "score": 3.3084,
+      "reasons": [
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 14,
+        "template_confirmed": 4,
+        "rejected": 11,
+        "final_detections": 3,
+        "percentage_classified": 0,
+        "percentage_unknown": 3
+      },
+      "factors": {
+        "unknown_pct": 3.0,
+        "uncertain": 0.0,
+        "competing": 3.0,
+        "candidates": 14.0,
+        "rejected": 11.0,
+        "near_thresh_reject": 0.0,
+        "stage_disagree": 3.0,
+        "rare_background": 34.512,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000348.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 5,
+      "score": 2.8882,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "rare background \u2014 battle-map colour far from the corpus norm"
+      ],
+      "detector": {
+        "stage1_candidates": 54,
+        "template_confirmed": 1,
+        "rejected": 53,
+        "final_detections": 1,
+        "percentage_classified": 0,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 1.0,
+        "uncertain": 0.0,
+        "competing": 1.0,
+        "candidates": 54.0,
+        "rejected": 53.0,
+        "near_thresh_reject": 2.0,
+        "stage_disagree": 14.0,
+        "rare_background": 11.909,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000486.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 7,
+      "score": 1.974,
+      "reasons": [
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "near-threshold rejects \u2014 candidates just under the accept bar (possible FP/FN)"
+      ],
+      "detector": {
+        "stage1_candidates": 36,
+        "template_confirmed": 1,
+        "rejected": 35,
+        "final_detections": 1,
+        "percentage_classified": 0,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 1.0,
+        "uncertain": 0.0,
+        "competing": 1.0,
+        "candidates": 36.0,
+        "rejected": 35.0,
+        "near_thresh_reject": 2.0,
+        "stage_disagree": 9.0,
+        "rare_background": 5.542,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000536.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 7,
+      "score": 1.7404,
+      "reasons": [
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "multiple competing accepted candidates"
+      ],
+      "detector": {
+        "stage1_candidates": 34,
+        "template_confirmed": 2,
+        "rejected": 32,
+        "final_detections": 2,
+        "percentage_classified": 1,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 1.0,
+        "uncertain": 0.0,
+        "competing": 2.0,
+        "candidates": 34.0,
+        "rejected": 32.0,
+        "near_thresh_reject": 1.0,
+        "stage_disagree": 7.0,
+        "rare_background": 5.163,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000650.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 9,
+      "score": 1.7276,
+      "reasons": [
+        "unknown percentage(s) \u2014 detected badge the classifier could not read",
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects"
+      ],
+      "detector": {
+        "stage1_candidates": 35,
+        "template_confirmed": 3,
+        "rejected": 34,
+        "final_detections": 1,
+        "percentage_classified": 0,
+        "percentage_unknown": 1
+      },
+      "factors": {
+        "unknown_pct": 1.0,
+        "uncertain": 0.0,
+        "competing": 1.0,
+        "candidates": 35.0,
+        "rejected": 34.0,
+        "near_thresh_reject": 0.0,
+        "stage_disagree": 7.0,
+        "rare_background": 11.716,
+        "rare_scale": 1.0
+      }
+    },
+    {
+      "file": "frame_000687.png",
+      "source": "grading",
+      "world": null,
+      "resolution": "1920x1080",
+      "cluster": 9,
+      "score": 0.7013,
+      "reasons": [
+        "rare background \u2014 battle-map colour far from the corpus norm",
+        "detector-stage disagreement \u2014 colour prior fires but template rejects",
+        "high rejected-candidate count"
+      ],
+      "detector": {
+        "stage1_candidates": 16,
+        "template_confirmed": 0,
+        "rejected": 16,
+        "final_detections": 0,
+        "percentage_classified": 0,
+        "percentage_unknown": 0
+      },
+      "factors": {
+        "unknown_pct": 0.0,
+        "uncertain": 0.0,
+        "competing": 0.0,
+        "candidates": 16.0,
+        "rejected": 16.0,
+        "near_thresh_reject": 0.0,
+        "stage_disagree": 5.0,
+        "rare_background": 11.918,
+        "rare_scale": 1.0
+      }
+    }
+  ]
+}
