@@ -43,6 +43,19 @@ def _labels_for(cfg_labels, layout=None) -> LabelBook:
     return LabelBook.build(path=cfg_labels or None, layout=layout)
 
 
+def _layout_for(ap, map_data_arg) -> object | None:
+    """Bootstrap labels from a saved map asset instead of waiting to catch a live one.
+
+    Opt-in only (no bundled default): a stale asset from a past season would produce
+    confidently *wrong* codes, which is worse for the guild than the honest ``#<id>``
+    fallback — the same "stale beats silent" tradeoff ``AlertEngine`` already makes for
+    snapshot age. Prefer letting ``run``/``serve`` catch the live ``/map/data`` response.
+    """
+    if not map_data_arg:
+        return None
+    return parse_map_data(_read_json(ap, map_data_arg))
+
+
 # --------------------------------------------------------------------- preview
 
 def cmd_preview(args, ap) -> int:
@@ -148,8 +161,12 @@ def cmd_run(args, ap) -> int:  # pragma: no cover - needs a live browser
 
     cfg = AlertConfig.load(args.config)
     notifier = NullNotifier() if args.dry_run else build_notifier(cfg)
+    layout = _layout_for(ap, args.map_data)
     engine = AlertEngine(cfg, notifier, SentLog(cfg.state_file),
-                         _labels_for(cfg.labels_file))
+                         _labels_for(cfg.labels_file, layout))
+    if layout is not None:
+        print(f"labels bootstrapped from {args.map_data} — remove --map-data to rely on the "
+              f"live map instead if this season's map may differ.")
     print(f"FoE Alerting — world {cfg.world}, scope {cfg.scope}, batch "
           f"{cfg.trigger_lead_minutes:g}/{cfg.window_minutes:g} min, "
           f"via {getattr(notifier, 'name', '?')}"
@@ -200,7 +217,8 @@ def cmd_serve(args, ap) -> int:  # pragma: no cover - a long-running server
 
     cfg = AlertConfig.load(args.config)
     notifier = NullNotifier() if args.dry_run else build_notifier(cfg)
-    engine = AlertEngine(cfg, notifier, SentLog(cfg.state_file), _labels_for(cfg.labels_file))
+    layout = _layout_for(ap, args.map_data)
+    engine = AlertEngine(cfg, notifier, SentLog(cfg.state_file), _labels_for(cfg.labels_file, layout))
     receiver = SnapshotReceiver(engine)
     serve_relay(receiver, secret=secret_from_env(args.secret), port=args.port, host=args.host)
     print(f"FoE Alerting scheduler — world {cfg.world}, scope {cfg.scope}, "
@@ -278,6 +296,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true", help="decide everything, send nothing")
     p.add_argument("--refresh-minutes", type=float, default=0.0,
                    help="reload the tab this often when nothing else refreshes GBG")
+    p.add_argument("--map-data", default="",
+                   help="bootstrap labels from a saved map asset instead of waiting to see "
+                        "the live one (only use one you know matches this season's map)")
     p.add_argument("--verbose", action="store_true")
     p.set_defaults(func=cmd_run)
 
@@ -297,6 +318,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--host", default="0.0.0.0", help="bind address")
     p.add_argument("--secret", default="", help="shared secret (default: $ALERT_RELAY_SECRET)")
     p.add_argument("--dry-run", action="store_true", help="decide everything, send nothing")
+    p.add_argument("--map-data", default="",
+                   help="bootstrap labels from a saved map asset instead of waiting for a "
+                        "collector to forward the live one (only use one you know matches "
+                        "this season's map)")
     p.add_argument("--verbose", action="store_true")
     p.set_defaults(func=cmd_serve)
 

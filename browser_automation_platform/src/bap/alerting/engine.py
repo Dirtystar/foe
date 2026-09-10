@@ -54,6 +54,8 @@ class AlertEngine:
         """Adopt the static map asset once it goes past — it gives the auto grid labels."""
         if layout is not None:
             self.labels = self.labels.with_layout(layout)
+            logger.info("map layout captured: %d provinces (map id %r) — labels now computed",
+                       len(layout.flags), layout.map_id)
 
     @property
     def snapshot(self):
