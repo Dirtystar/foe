@@ -112,31 +112,19 @@ def zoom_out_city(page, steps: int = 10, pause_ms: int = 120):  # pragma: no cov
         print(f"[entrance] zoom-out failed: {exc}", flush=True)
 
 
-def pan_drag(page, x0, y0, x1, y1, steps: int = 20):  # pragma: no cover - live
-    """Drag the city so the world point under (x0, y0) moves to (x1, y1). In FoE a mouse
-    down-move-up pans (a click without movement selects), so this re-centres the entrance
-    without opening anything. Used to put the entrance at the viewport centre before zooming in
-    (FoE zooms toward the centre), so it grows there into a big, reliably clickable target."""
-    try:
-        page.mouse.move(x0, y0)
-        page.wait_for_timeout(80)
-        page.mouse.down()
-        page.wait_for_timeout(120)
-        page.mouse.move(x1, y1, steps=steps)
-        page.wait_for_timeout(120)
-        page.mouse.up()
-        page.wait_for_timeout(300)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[entrance] pan failed: {exc}", flush=True)
+def zoom_in_center(page, steps: int = 1, pause_ms: int = 150):  # pragma: no cover - live
+    """Zoom the city IN via mouse wheel over the viewport centre.
 
-
-def zoom_in_toward(page, x, y, steps: int = 4, pause_ms: int = 150):  # pragma: no cover - live
-    """Zoom in a few steps toward CSS point (x, y). FoE zooms toward the cursor, so the entrance
-    stays roughly under (x, y) and grows into a big, reliably clickable target — the fix for the
-    tiny footprint at full zoom-out where a few-pixel miss selected a neighbour."""
+    Confirmed live (MCP capture): FoE's city wheel-zoom anchors on the viewport **centre**,
+    not the cursor — panning/dragging the entrance under the mouse first, or zooming "toward"
+    a point, does nothing extra; centring the mouse (like :func:`zoom_out_city` already does)
+    is the whole trick. The practical consequence: a target that isn't already near the centre
+    *moves* on screen as this zooms in, so its click point must be found again by vision after
+    each call — never assumed from a fixed offset (see ``_entrance_click_cycle``)."""
     try:
-        page.mouse.move(x, y)
-        page.wait_for_timeout(80)
+        w = page.evaluate("() => window.innerWidth") or 1000
+        h = page.evaluate("() => window.innerHeight") or 700
+        page.mouse.move(w // 2, h // 2)
         for _ in range(steps):
             page.mouse.wheel(0, -300)         # wheel up = zoom in
             page.wait_for_timeout(pause_ms)

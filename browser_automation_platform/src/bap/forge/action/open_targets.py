@@ -107,33 +107,6 @@ def _centre_button(vw, vh, off):
     return (round(vw / 2) + off[0], round(vh / 2) + off[1])
 
 
-def _fit_window(page, target_w=1500, max_ok=1600):  # pragma: no cover - live
-    """Force a clickable-size viewport for the GBG entrance. A too-wide viewport renders the whole
-    city — and the tiny entrance — at once (scale < ~0.26) so the click won't register. Physically
-    resizing the window is unreliable (OS/DPR clamps it), so instead override the CSS viewport via
-    CDP ``Emulation.setDeviceMetricsOverride`` (per tab): innerWidth → ~1500 and deviceScaleFactor
-    → 1 (screenshots then map 1:1 to clicks). No window is physically resized."""
-    try:
-        vw = page.evaluate("() => window.innerWidth") or 0
-        vh = int(page.evaluate("() => window.innerHeight") or 900)
-    except Exception:
-        return
-    if not vw or vw <= max_ok:
-        return
-    try:
-        cdp = page.context.new_cdp_session(page)
-        cdp.send("Emulation.setDeviceMetricsOverride",
-                 {"width": target_w, "height": vh, "deviceScaleFactor": 1, "mobile": False,
-                  "screenWidth": target_w, "screenHeight": vh})
-        page.wait_for_timeout(900)
-        nvw = page.evaluate("() => window.innerWidth")
-        print(f"[window] viewport override {vw}→{nvw}px wide (dpr 1) so the entrance is clickable.",
-              flush=True)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[window] couldn't set viewport ({exc}) — narrow the window to ~1500px manually.",
-              flush=True)
-
-
 def _hover_click(page, x, y):  # pragma: no cover - live
     """Click (x, y) the way the FoE canvas needs it: a real mousemove trajectory to set the
     engine's hovered-target state, then press-hold-release. Plain CDP clicks do NOT register."""
@@ -215,15 +188,63 @@ def _entrance_point(page, gbg_pos, *, tag=""):  # pragma: no cover - live
 # Sweeping picks the first zoom where vision sees the entrance — the biggest clickable size.
 _ZOOM_SWEEP = (3, 5, 7, 9)
 # Entrance opens when it renders at ~this template scale or bigger (entered at 0.27, failed at
-# 0.21). Below it the tile is too small in the dense plaza to click reliably.
+# 0.21). Below it the tile is too small in the dense plaza to click reliably — informational only
+# now (see _entrance_click_cycle): rather than depend on the window being narrow enough to clear
+# this, we zoom IN from the located point until it does.
 _MIN_CLICK_SCALE = 0.26
+# Cumulative wheel-up ticks to try, smallest first (center-anchored — see zoom_in_center). 3 was
+# confirmed live to open GBG on the first try from full zoom-out; the rest are headroom for a
+# window where the entrance needs to grow further before it registers a click.
+_ZOOM_IN_TICKS = (3, 4, 5, 6, 7)
+_VERIFY_WAIT_S = 3
+
+
+def _entrance_click_cycle(page, reader, *, tag="", zoom_ticks=_ZOOM_IN_TICKS,
+                          verify_wait=_VERIFY_WAIT_S):  # pragma: no cover - live
+    """MCP-confirmed, window-size-independent entry: from the current (fully zoomed-out) view,
+    ZOOM IN a few ticks → RE-LOCATE the entrance by vision → CLICK → VERIFY getBattleground
+    fired; on a miss, zoom in one more tick and repeat. Zooming in is what makes a too-small
+    entrance (the wide-window failure) big enough to register a click — but because FoE's
+    wheel-zoom anchors on the viewport **centre**, not the cursor (confirmed live), the
+    entrance's screen position shifts unpredictably with each zoom, so it must be re-located by
+    vision every time rather than assumed from a fixed offset. Returns True once getBattleground
+    fires (via ``reader.snapshot``)."""
+    from bap.forge.action.gbg_entrance import locate_entrance, zoom_in_center
+
+    done = 0
+    for ticks in zoom_ticks:
+        zoom_in_center(page, ticks - done)
+        done = ticks
+        page.wait_for_timeout(500)                          # let the zoom settle before the shot
+        dbg = f"entrance_{tag}_z{ticks}.png" if tag else None
+        found = locate_entrance(page, debug_path=dbg)
+        if found is None:
+            print(f"[enter] entrance lost after zooming in {ticks} tick(s) — giving up this "
+                  "cycle (will reload and widen the view).", flush=True)
+            return False
+        ex, ey, scale = found
+        _hover_click(page, ex, ey)                          # ONE precise click on the statue —
+        # the plaza is a dense cluster, so a cluster-click hits neighbours (Great Building,
+        # Guild-Raids/settlement portals). Precision, not spread, is what opens GBG.
+        print(f"[enter] clicked GBG entrance ({ex},{ey}) at zoom-in {ticks} (scale {scale:.2f}); "
+              f"verifying…", flush=True)
+        deadline = time.time() + verify_wait
+        while reader.snapshot is None and time.time() < deadline:
+            page.wait_for_timeout(300)
+        if reader.snapshot is not None:
+            return True
+        print(f"[enter] no getBattleground within {verify_wait}s — zooming in one more tick.",
+              flush=True)
+    return False
 
 
 def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragma: no cover - live
     """Self-healing: guarantee we're on the GBG map with a fresh getBattleground. getBattleground
     only fires on GBG entry, so each try reloads to the city, zooms out by an increasing amount,
-    vision-locates the entrance, and clicks it — clicking at the *least* zoomed-out level where
-    it's visible keeps the target big enough to open. Retries; returns the fresh snapshot or None."""
+    vision-locates the entrance, then zooms back IN + re-locates + clicks + verifies
+    (:func:`_entrance_click_cycle`) — window-size independent, so it no longer depends on the
+    browser being narrow enough for the entrance to render clickable at full zoom-out. Retries;
+    returns the fresh snapshot or None."""
     for attempt in range(1, tries + 1):
         if reader.snapshot is not None:
             page.wait_for_timeout(800)
@@ -252,28 +273,24 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
             pass
         (ex, ey), how, scale = _entrance_point(page, gbg_pos, tag=tag)   # vision, else fallback
         if how == "vision":
-            # Confirmed empirically: the entrance opens when it renders at scale ≳0.26 (entered
-            # at 0.27) but NOT at min zoom (0.21) — too small a tile in a dense plaza. On a wide
-            # window the whole big city only fits at min zoom, so the entrance never gets big
-            # enough. Warn clearly (it's a window-size issue, not our logic) but still try.
             if scale is not None and scale < _MIN_CLICK_SCALE:
-                print(f"[enter] ⚠ entrance renders at scale {scale:.2f} < {_MIN_CLICK_SCALE} — "
-                      "likely too small to open at this window size. A ~1536px-wide window (or "
-                      "the app's fixed window) shows it big enough. Trying anyway…", flush=True)
-            _hover_click(page, ex, ey)                      # ONE precise click on the statue —
-            # the plaza is a dense cluster, so a cluster-click hits neighbours (Great Building,
-            # Guild-Raids/settlement portals). Precision, not spread, is what opens GBG.
+                print(f"[enter] entrance located at scale {scale:.2f} < {_MIN_CLICK_SCALE} — "
+                      "too small to click yet; zooming in and re-locating…", flush=True)
+            if _entrance_click_cycle(page, reader, tag=tag):
+                page.wait_for_timeout(800)
+                return reader.snapshot
+            continue                                        # cycle exhausted → reload, more zoom-out
         elif attempt >= tries:
             _hover_click(page, ex, ey)                      # last resort: the fixed fallback coord
+            print(f"[enter] clicked GBG entrance ({ex},{ey}) [{how}]; waiting for "
+                  f"getBattleground (try {attempt}/{tries})…", flush=True)
+            deadline = time.time() + per_wait
+            while reader.snapshot is None and time.time() < deadline:
+                page.wait_for_timeout(1000)
         else:
             print(f"[enter] entrance not in view at zoom {steps} — more zoom-out next try.",
                   flush=True)
             continue                                        # don't waste the wait; widen the view
-        print(f"[enter] clicked GBG entrance ({ex},{ey}) [{how}]; waiting for "
-              f"getBattleground (try {attempt}/{tries})…", flush=True)
-        deadline = time.time() + per_wait
-        while reader.snapshot is None and time.time() < deadline:
-            page.wait_for_timeout(1000)
     return reader.snapshot
 
 
@@ -500,8 +517,9 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
         except Exception:
             pass
         # NOTE: auto-sizing the viewport via CDP (window resize / Emulation override) proved
-        # unreliable on a live attached Chrome, so the deterministic fix is the launcher's
-        # fixed-size window (--window-size 1536). _fit_window kept for reference, not called.
+        # unreliable on a live attached Chrome. GBG entry no longer depends on window width at
+        # all — _enter_gbg zooms in + re-locates until the entrance is big enough to click
+        # (_entrance_click_cycle) — so no viewport fix-up is needed here any more.
 
         if grid_only:
             # Just label the current screen — for reading a canvas button's coordinate.
