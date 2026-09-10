@@ -294,6 +294,31 @@ def _enter_gbg(page, reader, gbg_pos, *, tries=4, per_wait=15, tag=""):  # pragm
     return reader.snapshot
 
 
+def _wait_for_manual_entry(page, reader, *, timeout=300, tag=""):  # pragma: no cover - live
+    """BACKLOG replacement for :func:`_enter_gbg`: the operator opens/refreshes Guild
+    Battlegrounds by hand on this tab (login, entrance click, self-healing after a stuck
+    session — all manual for now); this just waits, passively, for the ``getBattleground``
+    that click produces. No reload, no vision, no click — the response listener is already
+    attached (see ``run_open``), so whatever the operator does next on THIS tab is what we see.
+    Returns the fresh snapshot, or None on timeout."""
+    label = f" ({tag})" if tag else ""
+    print(f"[enter] waiting up to {timeout}s for you to open/refresh Guild Battlegrounds on "
+          f"this tab{label}…", flush=True)
+    deadline = time.time() + timeout
+    last_nudge = time.time()
+    while reader.snapshot is None and time.time() < deadline:
+        page.wait_for_timeout(1000)
+        if time.time() - last_nudge >= 30:
+            left = int(deadline - time.time())
+            print(f"[enter] still waiting{label} — {left}s left. Open/refresh GBG on this tab "
+                  "to continue.", flush=True)
+            last_nudge = time.time()
+    if reader.snapshot is None:
+        print(f"[enter] timed out waiting for GBG data{label} — nothing came in on /game/json.",
+              flush=True)
+    return reader.snapshot
+
+
 def _run_fight_loop(page, clicker, reader, latest, autobattle, *, repeat, limit,
                     inter_ms, reload_every, stall_stop=12, safety=None,
                     day_room=None, province_cap=None):  # pragma: no cover - live
@@ -498,6 +523,7 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
              watch=0, reload_first=False, enter_gbg=False, gbg_pos=(1390, 250),
              farm=False, pcts=None, skip=None, find_gbg=False, utok=None, autobattle=None,
              native_calib=False, safety_level=_safety.DEFAULT_LEVEL, close_margin=0,
+             manual_entry=False, enter_timeout=300,
              connect=None):  # pragma: no cover - live
     skip = skip if skip is not None else set()             # provinceIds that never reach a fight
     from bap.forge.action.calibrate import _fetch_map_layout
@@ -637,18 +663,25 @@ def run_open(endpoint, world, *, tab=None, tab_index=None, n=5, store="gbg_calib
                     return 0
 
         if enter_gbg or farm:
-            print(f"[enter] opening GBG — vision-locating the entrance (fallback {gbg_pos})…",
-                  flush=True)
-            bg = _enter_gbg(page, reader, gbg_pos, tag=str(world))
+            if manual_entry:
+                bg = _wait_for_manual_entry(page, reader, timeout=enter_timeout, tag=str(world))
+            else:
+                print(f"[enter] opening GBG — vision-locating the entrance (fallback {gbg_pos})…",
+                      flush=True)
+                bg = _enter_gbg(page, reader, gbg_pos, tag=str(world))
             if bg is None:
                 shot = f"gbg_entered_{world}.png"
                 try:
                     page.screenshot(path=shot)
                 except Exception:
                     pass
-                print(f"[enter] no getBattleground — vision didn't find the entrance and the "
-                      f"fallback missed. SEND {shot} and entrance_{world}.png "
-                      "(the vision debug frame).", flush=True)
+                if manual_entry:
+                    print(f"[enter] no getBattleground came in on this tab. SEND {shot}.",
+                          flush=True)
+                else:
+                    print(f"[enter] no getBattleground — vision didn't find the entrance and the "
+                          f"fallback missed. SEND {shot} and entrance_{world}.png "
+                          "(the vision debug frame).", flush=True)
                 return 0
             ref = bg.server_time or int(time.time())
             names0 = page.evaluate(_JS_NAMES) or {}
@@ -1208,6 +1241,13 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
     ap.add_argument("--close-margin", type=int, default=0, dest="close_margin",
                     help="'leave for commander': stop N fights before a province our guild is "
                          "taking would close (0 = off). Reads native conquestProgress")
+    ap.add_argument("--manual-entry", action="store_true", dest="manual_entry",
+                    help="BACKLOG for auto-entry/self-healing: don't vision-click the GBG "
+                         "entrance at all — you open/refresh GBG on the tab by hand, this just "
+                         "waits (passively) for the getBattleground that produces, then fights")
+    ap.add_argument("--enter-timeout", type=int, default=300, dest="enter_timeout",
+                    help="with --manual-entry: seconds to wait for you to open/refresh GBG "
+                         "on the tab before giving up this pass (default 300)")
     args = ap.parse_args(argv)
 
     if args.worlds:                                        # PARALLEL farming: one process per world
@@ -1248,6 +1288,8 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                 cmd += ["--pcts", ",".join(str(x) for x in w["pcts"])]
             if args.native_calib:
                 cmd += ["--native-calib"]
+            if args.manual_entry:
+                cmd += ["--manual-entry", "--enter-timeout", str(args.enter_timeout)]
             cmd += ["--safety", str(w.get("safety", args.safety))]   # per-world override
             cmd += ["--close-margin", str(w.get("close_margin", args.close_margin))]
             print(f"[parallel] → {w['world']}", flush=True)
@@ -1281,6 +1323,7 @@ def main(argv=None) -> int:  # pragma: no cover - CLI wiring
                         gbg_pos=(args.gbg_x, args.gbg_y), farm=args.farm, pcts=pcts, skip=_skip,
                         find_gbg=args.find_gbg, native_calib=args.native_calib,
                         safety_level=args.safety, close_margin=args.close_margin,
+                        manual_entry=args.manual_entry, enter_timeout=args.enter_timeout,
                         utok=((args.ux, args.uy) if args.ux and args.uy else None),
                         autobattle=((args.abx, args.aby) if args.abx and args.aby else None))
 
