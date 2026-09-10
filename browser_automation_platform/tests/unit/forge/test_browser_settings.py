@@ -58,3 +58,5 @@ def test_windows_launch_command_uses_configured_port_and_isolated_profile():
     assert "--remote-debugging-port=9250" in cmd
     assert "--user-data-dir=" in cmd
     assert "chrome.exe" in cmd
+    # Without this, Chrome (~111+) silently refuses the CDP WebSocket the app controls it over.
+    assert "--remote-allow-origins=*" in cmd

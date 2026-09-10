@@ -52,6 +52,11 @@ def run_launch(profile=DEFAULT_PROFILE, window=DEFAULT_WINDOW, port=DEFAULT_PORT
     args = [
         exe,
         f"--remote-debugging-port={port}",
+        # Chrome (~111+) rejects a DevTools WebSocket connection whose Origin header isn't on
+        # an allow-list — harmless for `curl .../json/list` (plain HTTP), but it silently hangs
+        # or fails Playwright's connect_over_cdp, which controls the browser over that socket.
+        # We spawn Chrome ourselves (not via Playwright), so this has to be requested explicitly.
+        "--remote-allow-origins=*",
         f"--user-data-dir={prof}",
         f"--window-size={w},{h}",
         "--window-position=0,0",

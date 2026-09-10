@@ -108,8 +108,11 @@ def windows_launch_command(settings: BrowserSettings, *, profile_dir: str | None
     anti_throttle = ("--disable-background-timer-throttling "
                      "--disable-backgrounding-occluded-windows "
                      "--disable-renderer-backgrounding")
-    return (f'"{chrome}" --remote-debugging-port={port} --user-data-dir="{profile}" '
-            f'{anti_throttle}')
+    # Chrome (~111+) rejects a DevTools WebSocket connection whose Origin header isn't on an
+    # allow-list — harmless for a plain HTTP check like /json/list, but it silently hangs or
+    # fails the app's CDP connection, which controls the browser over that socket.
+    return (f'"{chrome}" --remote-debugging-port={port} --remote-allow-origins=* '
+            f'--user-data-dir="{profile}" {anti_throttle}')
 
 
 __all__ = [
