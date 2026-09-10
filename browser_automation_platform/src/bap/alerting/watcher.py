@@ -23,6 +23,14 @@ logger = logging.getLogger("bap.alerting.watcher")
 
 _DATA_URLS = ("/game/json", "/map/data")
 
+#: Chrome's own default remote-debugging address. Kept as a local constant rather than
+#: imported from the farmer's ``bap.forge.browser_settings`` — that module is a persisted
+#: operator-settings dataclass with its own JSON file and schema, not a place a read-only
+#: subproject with "shares no code path with the farmer" as a design rule should reach into
+#: for one string. (It also isn't in the hand-out bundle's module list, so importing it broke
+#: `bap-alert run` for anyone running from that ZIP without an explicit ``--cdp``.)
+DEFAULT_CDP_ENDPOINT = "http://127.0.0.1:9222"
+
 
 def make_handler(reader: LiveGbgReader, engine: AlertEngine):
     """Playwright ``response`` handler: parse game data, hand new snapshots to the engine.
@@ -66,11 +74,7 @@ def run_watch(cfg, engine: AlertEngine | None, *, connect=None, endpoint: str = 
     reader = LiveGbgReader()
     if handler is None:
         handler = make_handler(reader, engine)
-    endpoint = endpoint or cfg.cdp
-    if not endpoint:
-        from bap.forge.browser_settings import DEFAULT_CDP_ENDPOINT
-
-        endpoint = DEFAULT_CDP_ENDPOINT
+    endpoint = endpoint or cfg.cdp or DEFAULT_CDP_ENDPOINT
 
     def _go(browser) -> int:
         page = _select_world_page(browser, cfg.tab_match)
@@ -104,4 +108,4 @@ def run_watch(cfg, engine: AlertEngine | None, *, connect=None, endpoint: str = 
         return _go(browser)
 
 
-__all__ = ["make_handler", "run_watch"]
+__all__ = ["DEFAULT_CDP_ENDPOINT", "make_handler", "run_watch"]
