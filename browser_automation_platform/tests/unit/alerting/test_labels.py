@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from bap.alerting.labels import LabelBook, auto_labels, load_label_file
 from bap.forge.gbg_data.map_layout import MapLayout
@@ -78,3 +79,59 @@ def test_with_layout_keeps_overrides(tmp_path):
     path.write_text(json.dumps({"1": "A1X"}), encoding="utf-8")
     book = LabelBook.build(path=path).with_layout(_layout({1: (0, 0), 2: (100, 100)}))
     assert book.label(1) == "A1X" and book.label(2) != "#2"
+
+
+# ----------------------------------------------------------------- hex rings
+
+def _waterfall():
+    """The live 61-province map: a centred hexagon, 1+6+12+18+24."""
+    from bap.forge.gbg_data.map_layout import parse_map_data
+
+    path = Path("dataset/api_samples/map_data.waterfall_archipelago.sample.json")
+    return parse_map_data(json.loads(path.read_text(encoding="utf-8")))
+
+
+def test_a_real_map_decomposes_into_exact_hex_rings():
+    """The naming scheme is positional — number = ring, letter = sector — and that only works
+    if the map really is a centred hexagon. On the live map every one of the 24 (ring, sector)
+    cells holds exactly as many provinces as the ring index says it should."""
+    from collections import Counter
+
+    from bap.alerting.labels import hex_cells
+
+    cells = hex_cells(_waterfall())
+    assert Counter(r for r, _, _ in cells.values()) == {0: 1, 1: 6, 2: 12, 3: 18, 4: 24}
+    per_cell = Counter((r, s) for r, s, _ in cells.values() if r)
+    assert all(per_cell[(r, s)] == r for r in range(1, 5) for s in range(6))
+
+
+def test_a_map_that_is_not_a_hexagon_is_left_alone():
+    from bap.alerting.labels import hex_cells
+
+    assert hex_cells(_layout({i: (i * 10, i * 7) for i in range(5)})) == {}
+    assert hex_cells(None) == {}
+
+
+def test_ring_labels_are_unique_and_shaped_like_the_game_says_them():
+    import re
+
+    from bap.alerting.labels import ring_labels
+
+    labels = ring_labels(_waterfall())
+    assert len(labels) == 60                      # every province but the centre
+    assert len(set(labels.values())) == 60
+    assert all(re.fullmatch(r"[A-F][2-5][A-D]", v) for v in labels.values())
+
+
+def test_fitting_recovers_the_settings_from_a_handful_of_known_labels():
+    """A dozen labels read off the map pin the scheme down — which is the difference between
+    typing sixty names and typing none."""
+    from bap.alerting.labels import fit_ring_labels, ring_labels
+
+    layout = _waterfall()
+    truth = ring_labels(layout, ring_base=0, sector_origin=3, clockwise=True)
+    known = {pid: truth[pid] for pid in sorted(truth)[:12]}
+    labels, settings, hits, total = fit_ring_labels(layout, known)
+    assert (hits, total) == (12, 12)
+    assert settings == {"ring_base": 0, "sector_origin": 3, "clockwise": True}
+    assert labels == truth
