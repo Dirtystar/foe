@@ -150,6 +150,20 @@ class UiState:
 
     # ------------------------------------------------------------------- labels
 
+    def map_view(self) -> dict:
+        """The flag positions, so the panel can draw the map instead of asking someone to
+        match sixty numbers to sixty flags by eye. Empty when no map asset has been seen."""
+        layout = self._layout
+        flags = dict(getattr(layout, "flags", None) or {})
+        if not flags:
+            return {"flags": [], "width": 0, "height": 0, "map_id": ""}
+        return {
+            "flags": [{"id": pid, "x": x, "y": y} for pid, (x, y) in sorted(flags.items())],
+            "width": getattr(layout, "width", 0) or 0,
+            "height": getattr(layout, "height", 0) or 0,
+            "map_id": getattr(layout, "map_id", "") or "",
+        }
+
     def label_rows(self) -> list[dict]:
         """One row per province the map asset knows about: the generated grid position and
         whatever the guild has named it."""
@@ -349,6 +363,7 @@ class _Handler(BaseHTTPRequestHandler):
                       "chat_id": st.creds.get("chat_id", ""),
                       "has_token": bool(st.creds.get("api_token"))},
             "labels": st.label_rows(),
+            "map": st.map_view(),
             "config_path": str(st.config_path),
             "log": st.log.tail(60),
         }
@@ -405,6 +420,17 @@ PAGE = """<!doctype html>
  .msg{white-space:pre-wrap}
  .hint{font-size:12px;color:var(--dim);margin-top:8px}
  .hint code{color:var(--acc)}
+ #mapwrap{position:relative;margin:0 0 14px;background:#0e1014;border:1px solid var(--line);
+          border-radius:6px;padding:10px}
+ #map{display:block;width:100%;height:auto}
+ #map .flag{cursor:pointer}
+ #map .dot{fill:#3a4048;stroke:#565e6b;stroke-width:6}
+ #map .flag.named .dot{fill:var(--acc);stroke:#8fc4ee}
+ #map .flag.sel .dot{stroke:#fff;stroke-width:12}
+ #map .flag:hover .dot{stroke:#fff}
+ #map text{fill:var(--ink);font:600 34px ui-monospace,Menlo,Consolas,monospace;
+           text-anchor:middle;pointer-events:none}
+ #map .flag.named text{fill:#0d1116}
  .lrow{display:flex;gap:8px;margin-bottom:6px;align-items:center}
  .lrow select{width:170px;font-family:ui-monospace,Menlo,Consolas,monospace}
  .lrow input{flex:1}
@@ -452,6 +478,8 @@ PAGE = """<!doctype html>
   <div class="hint">Pojmenuj jen ty provincie, které gilda opravdu řeší — nepojmenované se
     ohlásí vygenerovanou pozicí v mřížce (v závorce u čísla). Přidávej si řádky podle
     potřeby; se scope <code>labeled</code> se hlásí právě jen ty pojmenované.</div>
+  <div id="mapwrap"><svg id="map"></svg></div>
+  <div class="hint" id="maphint" style="margin-top:-6px"></div>
   <div id="labels"></div>
   <div class="bar"><button onclick="addLabelRow()">+ Přidat</button>
     <button class="primary" onclick="saveLabels()">Uložit labely</button>
@@ -577,6 +605,57 @@ function addLabelRow() {
   $("labels").appendChild(labelRow(firstUnusedProvince(), ""));
 }
 
+// Sixty numbers against sixty flags is not a job for the eye. The map asset gives the real
+// flag coordinates, so draw them: the constellation matches what the game shows, and clicking
+// a flag jumps straight to naming it.
+function drawMap() {
+  const m = ST.map, svg = $("map"), wrap = $("mapwrap");
+  if (!m || !m.flags.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "";
+  const named = new Map(ST.labels.filter(r => r.name).map(r => [r.id, r.name]));
+  const xs = m.flags.map(f => f.x), ys = m.flags.map(f => f.y);
+  const pad = 70;
+  const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad;
+  const y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+  svg.setAttribute("viewBox", `${x0} ${y0} ${x1 - x0} ${y1 - y0}`);
+  svg.innerHTML = m.flags.map(f => {
+    const name = named.get(f.id);
+    const text = name || f.id;
+    const cls = "flag" + (name ? " named" : "");
+    return `<g class="${cls}" data-id="${f.id}">` +
+           `<circle class="dot" cx="${f.x}" cy="${f.y}" r="46"></circle>` +
+           `<text x="${f.x}" y="${f.y + 12}">${String(text).slice(0, 4)}</text>` +
+           `<title>provincie #${f.id}${name ? " — " + name : ""}</title></g>`;
+  }).join("");
+  svg.querySelectorAll(".flag").forEach(g => {
+    g.onclick = () => focusProvince(+g.dataset.id);
+  });
+  const n = named.size;
+  const word = n === 1 ? "pojmenovaná" : (n >= 2 && n <= 4 ? "pojmenované" : "pojmenovaných");
+  $("maphint").textContent =
+    `${m.flags.length} provincií${m.map_id ? " · mapa " + m.map_id : ""} · ` +
+    `${n} ${word} — klikni na vlaječku a napiš, jak jí říkáte`;
+}
+
+// Clicking a flag should land the cursor in the right box, whether that row exists yet or not.
+function focusProvince(pid) {
+  const rows = [...document.querySelectorAll(".lrow")];
+  let row = rows.find(r => +r.querySelector("select").value === pid);
+  if (!row) {
+    // Reuse an untouched row rather than leaving a trail of empty ones behind.
+    row = rows.find(r => !r.querySelector("input").value.trim());
+    if (row) row.querySelector("select").value = pid;
+    else $("labels").appendChild(row = labelRow(pid, ""));
+  }
+  document.querySelectorAll(".flag").forEach(g => g.classList.remove("sel"));
+  const dot = document.querySelector(`.flag[data-id="${pid}"]`);
+  if (dot) dot.classList.add("sel");
+  const input = row.querySelector("input");
+  input.focus();
+  input.select();
+  row.scrollIntoView({block: "nearest"});
+}
+
 function drawLabels() {
   const box = $("labels");
   box.innerHTML = "";
@@ -587,6 +666,7 @@ function drawLabels() {
   const named = ST.labels.filter(r => r.name);
   if (named.length) named.forEach(r => box.appendChild(labelRow(r.id, r.name)));
   else addLabelRow();                       // a fresh setup starts with one empty row
+  drawMap();
 }
 
 async function saveLabels() {

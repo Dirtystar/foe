@@ -76,7 +76,7 @@ even after batching.
    Obrana, tak jsou ty provincie rozdělené — nevím jaký je v tom pattern", so he cannot settle
    it either. The farmer's `gbg_data/model.py` annotates the same field as "attack vs
    negotiate" — a different reading. Only the live map decides. Prompt is ready in
-   `docs/FOE_ALERTING.md` §10.
+   `docs/FOE_ALERTING.md` §10 (parts C1/C2).
 2. **Where the scheduler runs.** The split is built; no host is chosen or paid for,
    so nothing is deployed. Budget is ~$10/month and the owner will not buy a machine.
 
@@ -105,7 +105,7 @@ even after batching.
 | `engine.py` | snapshot in → messages out (no browser) |
 | `watcher.py` | the only browser glue: CDP, one tab, listen |
 | `relay.py` | the collector/scheduler split: forward snapshots, receive them, auth |
-| `webui.py` | `bap-alert ui` — the local control panel (format, labels, credentials, log) |
+| `webui.py` | `bap-alert ui` — the control panel: format, labels **on a clickable flag map**, credentials, log |
 
 Launchers `foe-alerting.sh` / `foe-alerting.bat` start the panel with no install step (the
 alerter has zero third-party imports — verified, not assumed). **The `.bat` has never been
@@ -152,10 +152,12 @@ against the captured payload.
 
 ## Next steps
 
-1. **Live confirmation** — GBG reopens ~2026-09-11. Run the §10 prompt in
-   `docs/FOE_ALERTING.md` and bring the findings back. It settles `side_rule`, the `[20%]`
-   source, `lockedUntil`, and the map/id range. Don't test blind.
-2. **Labels** — fill `province_labels.cz8.json` from the live map, switch `scope` to `labeled`.
+1. **Live capture** — GBG is open. Run the §10 prompt (Chrome MCP, read-only) and bring back
+   the two JSON payloads plus the answers. Part A2 (the `map/data` asset) is the one that
+   unblocks everything: without this season's flag coordinates there is no province mapping,
+   and the bundled sample is a *different map from a different world*. Don't test blind.
+2. **Labels** — drop the new map asset in, then name provinces by clicking flags on the panel's
+   map (`webui.drawMap`), and switch `scope` to `labeled`.
 3. **Green API** — the owner creates the instance and links a phone (use a spare number, not
    the main one). Then `bap-alert check --send "test"`. Free Developer tier: unlimited
    messages, but only **3 chats per calendar month** and 1 instance — the group is one chat, so

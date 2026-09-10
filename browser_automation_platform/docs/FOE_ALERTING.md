@@ -338,47 +338,81 @@ are gitignored.
 
 ---
 
-## 10. The live verification prompt
+## 10. The live capture prompt
 
-GBG reopens around 2026-09-11. Paste the block below to an AI that has Chrome MCP access, with
-GBG open on the watched world. It is **read-only**: it observes traffic and the screen, sends
-nothing to the game, clicks nothing, and never touches the `setSignal` write endpoint.
+For an AI with **Chrome MCP** access, with GBG open on the watched world. It collects the
+mapping data (§4) and settles the open questions (§8) in one pass. It is **read-only**:
+it observes traffic and the screen, sends nothing to the game, clicks nothing inside it, and
+never touches the `setSignal` write endpoint.
+
+Parts A and E are the ones that matter — without the map asset there is no province mapping at
+all. Everything else is a bonus that can come later.
 
 ```text
-You have Chrome MCP access to a browser where Forge of Empires is open on Guild
-Battlegrounds. This is a READ-ONLY observation task.
+You have Chrome MCP access to a browser with Forge of Empires open on Guild
+Battlegrounds. This is a READ-ONLY observation task on a live game.
 
-Hard rules:
-- Do not click anything in the game. Do not send any request to the game.
-- Do not call any endpoint that writes (in particular anything named setSignal).
+HARD RULES
+- Do not click anything inside the game. Do not send any request to the game.
+- Never call setSignal or any other endpoint that writes.
 - Only read what the page already shows and what the network already delivered.
+- If something would need a click in the game to answer, skip it and say so.
 
-Capture the most recent GuildBattlegroundService.getBattleground response body from the
-network log. Then answer these four questions, quoting the raw JSON you relied on.
+PART A — the two payloads. This is the important part.
+A1. From the network log, take the most recent
+    GuildBattlegroundService.getBattleground response and paste its "responseData"
+    object verbatim, complete, in a ```json block.
+A2. Find the static map asset request — the URL looks like .../map/data/<mapId>.
+    Paste its whole body verbatim in a second ```json block. It should contain
+    "size", "bgTextures" and "provinces" with an "id" and a "flag" {x, y} each.
+A3. Report both request URLs, but STRIP any session token from them (anything like
+    ?h=... ). Do not paste cookies or headers.
 
-1) COLOUR RULE. Pick 6 provinces that are visible on the map: 3 whose JSON has
-   "isAttackBattleType": true, and 3 where the key is absent. For each, report what the
-   GAME shows on that province — is it marked/treated as one the guild attacks, or one it
-   defends? Say explicitly whether "isAttackBattleType" lines up with attack-vs-defence,
-   or with something else (for example fighting vs negotiating). If it lines up with
-   nothing visible, say that.
+PART B — pictures of the map.
+B1. One screenshot of the whole battleground map at default zoom, all provinces visible.
+B2. Two or three close-ups of different corners, close enough that individual province
+    flags are clearly distinguishable.
+B3. Before sending: check that no player name, avatar, chat, message list or friends
+    list is visible anywhere in the images, and crop it out if it is. Guild names are
+    fine. Do not include any screenshot you are unsure about.
 
-2) OWNERSHIP CROSS-CHECK. For those same 6, report "ownerId" and the response's
-   "currentParticipantId", and whether the province belongs to our guild. The question
-   being tested: is the attack/defence split independent of who owns the province?
+PART C — four things only a live map can settle.
+C1. COLOUR RULE. Pick 6 provinces visible on the map: 3 whose JSON has
+    "isAttackBattleType": true, and 3 where that key is absent. For each, report what
+    the GAME shows — is it one the guild attacks, or one it defends? State plainly
+    whether "isAttackBattleType" lines up with attack-vs-defence, with something else
+    (fighting vs negotiating, say), or with nothing visible.
+C2. OWNERSHIP CROSS-CHECK. For those same 6, report "ownerId" and the response's
+    "currentParticipantId". The question: is the attack/defence split independent of
+    who owns the province?
+C3. ATTRITION BADGE. For 4 provinces that have "gainAttritionChance", report the JSON
+    number and the percentage the game displays on that province. Do they match? Also
+    check 2 provinces our own guild owns: the key should be absent — report what, if
+    anything, the game shows there instead.
+C4. LOCK TIME. Pick one province we do NOT own whose "lockedUntil" is a few minutes
+    out. Convert it to local time, watch that province, and report what happens at
+    that minute — is "opens at / becomes attackable" the right description?
 
-3) ATTRITION BADGE. For 4 provinces that have "gainAttritionChance", report the number in
-   the JSON and the percentage the game displays on that province. Do they match? Also
-   check 2 provinces we own: the key should be absent, and report what (if anything) the
-   game shows there instead.
+PART D — does the game name provinces at all?
+D1. Inspect a few provinces (hover, side panel, and the page DOM around a flag).
+    Does the game display ANY name, code, letter or label for a province anywhere?
+D2. If yes: say exactly where it appears, and give three examples with their province
+    ids. If no: say so plainly.
+This decides whether province naming can ever be read from the game or has to stay a
+hand-written list.
 
-4) LOCK TIME. Pick one province we do NOT own with a "lockedUntil" a few minutes out.
-   Convert it to local time, then watch that province. Report what happens at that minute
-   and whether "opens at / becomes attackable" is the right description.
+PART E — map identity.
+E1. The map id, from the asset URL and from the body if present.
+E2. How many provinces there are, and the lowest and highest province id.
+E3. The "bgTextures" asset names (they usually carry the map name).
 
-Also report: the map id, the total number of provinces, and the lowest and highest
-province id, so the labels file can be checked against this season's map.
+OUTPUT
+Put the two ```json blocks first, then short answers to A3 and C–E. Attach the
+screenshots. Where something could not be determined, say so instead of guessing.
 ```
 
-Then bring the answers back. #1 decides `side_rule`; #3 confirms the `[20%]` source; #4
-confirms the schedule itself; the map id and id range confirm the labels file.
+What each part is for: **A2 + E** make the province mapping possible at all — the flag
+coordinates are what the panel draws and what the 4×4 grid labels are derived from. **A1**
+confirms the province ids match this season's map. **B** turns the panel's flag map into
+something you can read next to the game. **C1** decides `side_rule`; **C3** confirms the
+`[20%]` source; **C4** confirms the schedule. **D** decides whether §4 stays manual forever.
