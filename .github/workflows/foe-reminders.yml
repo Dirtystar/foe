@@ -17,7 +17,12 @@ name: FoE Alerting - weekly reminders
 on:
   schedule:
     - cron: "0,30 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test_message:
+        description: "Send this exact text as a one-off test instead of the normal check (leave empty for a normal run)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -28,7 +33,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Send a one-off test message
+        if: github.event.inputs.test_message != ''
+        working-directory: browser_automation_platform
+        env:
+          PYTHONPATH: src
+          GREEN_API_ID_INSTANCE: ${{ secrets.GREEN_API_ID_INSTANCE }}
+          GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
+          GREEN_API_CHAT_ID: ${{ secrets.GREEN_API_CHAT_ID }}
+        run: |
+          python3 -m bap.alerting check \
+            --config ops/reminders/alerting.remind.json \
+            --send "${{ github.event.inputs.test_message }}"
+
       - name: Check for a due reminder and send it
+        if: github.event.inputs.test_message == ''
         working-directory: browser_automation_platform
         env:
           PYTHONPATH: src
