@@ -30,6 +30,11 @@ from pathlib import Path
 
 BASE_URL = "https://support.innogames.com"
 
+#: Both watched pages are explicitly titled "BETA Events" / "Beta Announcements" — this is
+#: BETA content, not a live-server announcement, so every posted message says so rather than
+#: implying the change is live now.
+BETA_DISCLAIMER = "⚠️ Z BETA serveru — na live to dorazí až s odstupem a může se lišit."
+
 _ENTRY_RE = re.compile(
     r'href="(?P<href>/kb/[^"]+/(?P<id>\d+)/[^"]+)"[^>]*>\s*<span>(?P<title>[^<]+)</span>',
     re.S)
@@ -150,11 +155,11 @@ def check_page(page_key: str, url: str, state: NewsState, notifier, *,
         text = f"📰 {title_cs}"
         if perex:
             text += f"\n{translate_to_czech(perex, opener=opener)}"
-        text += f"\n{item.url}"
+        text += f"\n{item.url}\n{BETA_DISCLAIMER}"
         notifier.send(text)
     state.set_seen(page_key, [i.id for i in items])
     return new_items
 
 
-__all__ = ["BASE_URL", "NewsItem", "NewsState", "fetch_list", "fetch_perex",
+__all__ = ["BASE_URL", "BETA_DISCLAIMER", "NewsItem", "NewsState", "fetch_list", "fetch_perex",
            "translate_to_czech", "load_pages", "check_page"]

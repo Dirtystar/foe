@@ -6,6 +6,7 @@ import io
 import json
 
 from bap.alerting.newswatch import (
+    BETA_DISCLAIMER,
     NewsState,
     check_page,
     fetch_list,
@@ -148,6 +149,7 @@ def test_check_page_posts_only_genuinely_new_ids(tmp_path, monkeypatch):
     assert len(notifier.sent) == 1
     assert "Winter Event 2026: Mechanics" in notifier.sent[0]
     assert "The Winter Event returns with new mechanics." in notifier.sent[0]
+    assert BETA_DISCLAIMER in notifier.sent[0]
     assert state.seen_ids("events") == {"6983", "7000"}
 
 
