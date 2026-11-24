@@ -5,7 +5,9 @@ name: FoE Alerting - weekly reminders
 # notifier. See browser_automation_platform/ops/reminders/ for the message/page definitions
 # and browser_automation_platform/src/bap/alerting/{reminders,newswatch}.py for the logic.
 #
-# Runs every 30 minutes. `bap-alert remind --once` decides whether a reminder is due;
+# Two schedules: reminders need the 30-min cadence to catch the right day/time slot;
+# newswatch only needs to run once a day (events/news come out roughly 2x/14 days, not
+# worth checking every 30 min). `bap-alert remind --once` decides whether a reminder is due;
 # `bap-alert newswatch --once` checks the two KB pages for new articles not seen before and
 # posts them (translated to Czech, best-effort). Both persist their dedup/seen state back via
 # a commit below, which is what makes the dedup survive between runs.
@@ -17,7 +19,8 @@ name: FoE Alerting - weekly reminders
 # pass with nothing due AND no other commits, re-enable it manually under Actions.
 on:
   schedule:
-    - cron: "0,30 * * * *"
+    - cron: "0,30 * * * *"   # reminders — every 30 min
+    - cron: "0 7 * * *"      # newswatch — once a day, ~8:00 CET / 9:00 CEST
   workflow_dispatch:
     inputs:
       preview_news_url:
@@ -94,7 +97,10 @@ jobs:
             --send "${{ github.event.inputs.test_message }}"
 
       - name: Check for a due reminder and send it
-        if: github.event.inputs.preview_news_url == '' && github.event.inputs.find_chat == '' && github.event.inputs.test_message == ''
+        if: >-
+          github.event.inputs.preview_news_url == '' && github.event.inputs.find_chat == '' &&
+          github.event.inputs.test_message == '' &&
+          (github.event_name != 'schedule' || github.event.schedule == '0,30 * * * *')
         working-directory: browser_automation_platform
         env:
           PYTHONPATH: src
@@ -109,7 +115,10 @@ jobs:
             --once
 
       - name: Check InnoGames KB pages for new articles
-        if: github.event.inputs.preview_news_url == '' && github.event.inputs.find_chat == '' && github.event.inputs.test_message == ''
+        if: >-
+          github.event.inputs.preview_news_url == '' && github.event.inputs.find_chat == '' &&
+          github.event.inputs.test_message == '' &&
+          (github.event_name != 'schedule' || github.event.schedule == '0 7 * * *')
         working-directory: browser_automation_platform
         env:
           PYTHONPATH: src
