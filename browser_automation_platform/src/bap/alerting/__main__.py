@@ -127,6 +127,32 @@ def cmd_labels(args, ap) -> int:
 
 def cmd_check(args, ap) -> int:
     cfg = AlertConfig.load(args.config)
+
+    if args.find_chat:
+        g = cfg.green_api
+        missing = [n for n, v in (("id_instance", g.id_instance), ("api_token", g.api_token))
+                  if not v]
+        if missing:
+            print(f"green-api not configured: missing {', '.join(missing)} "
+                  f"(set GREEN_API_ID_INSTANCE / GREEN_API_TOKEN)")
+            return 1
+        api = GreenApiNotifier(g.id_instance, g.api_token, "", base_url=g.base_url)
+        try:
+            chats = api.get_chats()
+        except Exception as exc:                        # noqa: BLE001
+            print(f"could not list chats: {exc}")
+            return 1
+        groups = [c for c in chats if str(c.get("id", "")).endswith("@g.us")]
+        needle = args.find_chat.lower()
+        hits = [c for c in groups if needle in str(c.get("name", "")).lower()]
+        if not hits:
+            print(f"no group name contains {args.find_chat!r} "
+                  f"({len(groups)} group chat(s) visible to this instance in total)")
+            return 1
+        for c in hits:
+            print(f"{c.get('name')!r} -> {c.get('id')}")
+        return 0
+
     print(f"world={cfg.world}  scope={cfg.scope}  "
           f"batch={cfg.trigger_lead_minutes:g} min lead / {cfg.window_minutes:g} min window  "
           f"side={cfg.side_rule}  notifier={cfg.notifier}")
@@ -329,6 +355,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("check", help="verify config + gateway, optionally send a test message")
     p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
     p.add_argument("--send", default="", help="send this text to the configured chat")
+    p.add_argument("--find-chat", default="",
+                   help="list WhatsApp group chats (name + id) whose name contains this text "
+                        "— to find a chat_id without needing chat_id configured yet")
     p.set_defaults(func=cmd_check)
 
     p = sub.add_parser("run", help="watch the world's tab and post openings as they come due")

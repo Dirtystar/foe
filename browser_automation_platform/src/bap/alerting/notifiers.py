@@ -116,6 +116,15 @@ class GreenApiNotifier:
         with open_fn(req, timeout=15.0) as resp:
             return json.loads(resp.read().decode("utf-8", "replace") or "{}")
 
+    def get_chats(self) -> list[dict]:
+        """``getChats`` — every chat (groups and individual contacts) the linked phone sees.
+        Doesn't need ``chat_id`` at all; used by ``bap-alert check --find-chat`` to discover
+        it — a group's id is otherwise not shown anywhere in the Green API console itself."""
+        req = urllib.request.Request(self._url("getChats"))
+        open_fn = self._opener or urllib.request.urlopen
+        with open_fn(req, timeout=15.0) as resp:
+            return json.loads(resp.read().decode("utf-8", "replace") or "[]")
+
 
 class WebhookNotifier:
     """POST ``{"text": …}`` to any URL — a bridge, a relay, or a test server."""

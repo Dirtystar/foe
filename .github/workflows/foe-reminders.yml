@@ -19,6 +19,10 @@ on:
     - cron: "0,30 * * * *"
   workflow_dispatch:
     inputs:
+      find_chat:
+        description: "Find a WhatsApp group's chat_id: type a snippet of its real name here (takes priority over test_message below)"
+        required: false
+        default: ""
       test_message:
         description: "Send this exact text as a one-off test instead of the normal check (leave empty for a normal run)"
         required: false
@@ -33,8 +37,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Find a chat_id by group name
+        if: github.event.inputs.find_chat != ''
+        working-directory: browser_automation_platform
+        env:
+          PYTHONPATH: src
+          GREEN_API_ID_INSTANCE: ${{ secrets.GREEN_API_ID_INSTANCE }}
+          GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
+        run: |
+          python3 -m bap.alerting check \
+            --config ops/reminders/alerting.remind.json \
+            --find-chat "${{ github.event.inputs.find_chat }}"
+
       - name: Send a one-off test message
-        if: github.event.inputs.test_message != ''
+        if: github.event.inputs.find_chat == '' && github.event.inputs.test_message != ''
         working-directory: browser_automation_platform
         env:
           PYTHONPATH: src
@@ -47,7 +63,7 @@ jobs:
             --send "${{ github.event.inputs.test_message }}"
 
       - name: Check for a due reminder and send it
-        if: github.event.inputs.test_message == ''
+        if: github.event.inputs.find_chat == '' && github.event.inputs.test_message == ''
         working-directory: browser_automation_platform
         env:
           PYTHONPATH: src
