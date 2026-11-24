@@ -325,9 +325,13 @@ def cmd_newswatch(args, ap) -> int:
 
     def _check_once() -> None:
         for page in pages:
+            before = len(notifier.sent) if hasattr(notifier, "sent") else None
             new_items = check_page(page["key"], page["url"], state, notifier)
-            for item in new_items:
+            texts = notifier.sent[before:] if before is not None else [None] * len(new_items)
+            for item, text in zip(new_items, texts):
                 print(f"[{time.strftime('%H:%M:%S')}] posted: {item.title}", flush=True)
+                if text is not None:
+                    print(f"--- message text ---\n{text}\n---------------------", flush=True)
 
     if args.once:
         _check_once()
