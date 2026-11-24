@@ -76,6 +76,12 @@ def test_green_api_state():
     assert api.state()["stateInstance"] == "authorized"
 
 
+def test_green_api_get_chats():
+    chats = [{"id": "12036@g.us", "name": "Guild"}, {"id": "420777@c.us", "name": "Someone"}]
+    api = GreenApiNotifier("1", "t", "", opener=FakeOpener(chats))
+    assert api.get_chats() == chats
+
+
 def test_webhook_posts_text():
     opener = FakeOpener({})
     assert WebhookNotifier("https://hook.test/x", opener=opener).send("hi") is True
