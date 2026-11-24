@@ -4,6 +4,7 @@
     bap-alert labels  dataset/api_samples/map_data.*.sample.json --write province_labels.cz8.json
     bap-alert check   --config alerting.json --send "test"
     bap-alert run     --config alerting.json [--dry-run]
+    bap-alert remind  --config alerting.json --reminders reminders.json [--dry-run]
 
 ``preview`` and ``labels`` work entirely from saved JSON — no game, no browser — which is how
 the message format and the province naming get settled before anything is posted to a group.
@@ -241,6 +242,39 @@ def cmd_serve(args, ap) -> int:  # pragma: no cover - a long-running server
 
 # --------------------------------------------------------------------------- ui
 
+def cmd_remind(args, ap) -> int:
+    """Send static weekly reminders to the same chat — no game, no browser involved."""
+    from bap.alerting.clock import prague_time
+    from bap.alerting.reminders import ReminderState, due_now, load_reminders
+
+    cfg = AlertConfig.load(args.config)
+    try:
+        reminders = load_reminders(args.reminders)
+    except ValueError as exc:
+        ap.error(str(exc))
+    if not reminders:
+        print(f"no reminders configured in {args.reminders} — nothing to do.")
+        return 0
+    notifier = NullNotifier() if args.dry_run else build_notifier(cfg)
+    state = ReminderState(args.state)
+    print(f"FoE reminders — {len(reminders)} configured, via {getattr(notifier, 'name', '?')}"
+          f"{'  [dry run]' if args.dry_run else ''}")
+    print("Ctrl-C to stop.")
+    try:
+        while True:
+            now = time.time()
+            today = prague_time(now).strftime("%Y-%m-%d")
+            for r in due_now(reminders, state, now=now):
+                ok = notifier.send(r.text)
+                state.mark_sent(r.id, today)
+                print(f"[{time.strftime('%H:%M:%S')}] {'sent' if ok else 'FAILED'}: {r.id}",
+                      flush=True)
+            time.sleep(args.poll_seconds)
+    except KeyboardInterrupt:
+        print()
+    return 0
+
+
 def cmd_ui(args, ap) -> int:
     """The local control panel: message format, labels, credentials, log."""
     from bap.alerting.webui import LogBuffer, UiState, serve
@@ -324,6 +358,14 @@ def build_parser() -> argparse.ArgumentParser:
                         "this season's map)")
     p.add_argument("--verbose", action="store_true")
     p.set_defaults(func=cmd_serve)
+
+    p = sub.add_parser("remind", help="send static weekly reminders to the same chat (no game)")
+    p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
+    p.add_argument("--reminders", default="reminders.json", help="weekly reminders JSON")
+    p.add_argument("--state", default="reminder_state.json", help="dedup state file")
+    p.add_argument("--dry-run", action="store_true", help="decide everything, send nothing")
+    p.add_argument("--poll-seconds", type=float, default=30.0)
+    p.set_defaults(func=cmd_remind)
 
     p = sub.add_parser("ui", help="local control panel: format, labels, credentials, log")
     p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
