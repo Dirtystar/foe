@@ -1,0 +1,7 @@
+{
+  "_comment": "InnoGames support/KB pages watched for new entries by `bap-alert newswatch` (see .github/workflows/foe-reminders.yml). The very first check of a page only records its current articles as 'already seen' and posts nothing — only articles that appear after that trigger a WhatsApp message.",
+  "pages": [
+    {"key": "events", "url": "https://support.innogames.com/kb/ForgeOfEmpires/en_DK/articles/392"},
+    {"key": "news", "url": "https://support.innogames.com/kb/ForgeOfEmpires/en_DK/articles/264"}
+  ]
+}

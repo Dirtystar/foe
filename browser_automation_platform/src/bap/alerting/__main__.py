@@ -5,6 +5,7 @@
     bap-alert check   --config alerting.json --send "test"
     bap-alert run     --config alerting.json [--dry-run]
     bap-alert remind  --config alerting.json --reminders reminders.json [--dry-run]
+    bap-alert newswatch --config alerting.json --pages news_pages.json [--dry-run]
 
 ``preview`` and ``labels`` work entirely from saved JSON — no game, no browser — which is how
 the message format and the province naming get settled before anything is posted to a group.
@@ -308,6 +309,39 @@ def cmd_remind(args, ap) -> int:
     return 0
 
 
+def cmd_newswatch(args, ap) -> int:
+    """Post new InnoGames KB entries (events, announcements) to the same chat — no game."""
+    from bap.alerting.newswatch import NewsState, check_page, load_pages
+
+    cfg = AlertConfig.load(args.config)
+    pages = load_pages(args.pages)
+    if not pages:
+        print(f"no pages configured in {args.pages} — nothing to do.")
+        return 0
+    notifier = NullNotifier() if args.dry_run else build_notifier(cfg)
+    state = NewsState(args.state)
+    print(f"FoE newswatch — {len(pages)} page(s) configured, via "
+          f"{getattr(notifier, 'name', '?')}{'  [dry run]' if args.dry_run else ''}")
+
+    def _check_once() -> None:
+        for page in pages:
+            new_items = check_page(page["key"], page["url"], state, notifier)
+            for item in new_items:
+                print(f"[{time.strftime('%H:%M:%S')}] posted: {item.title}", flush=True)
+
+    if args.once:
+        _check_once()
+        return 0
+    print("Ctrl-C to stop.")
+    try:
+        while True:
+            _check_once()
+            time.sleep(args.poll_seconds)
+    except KeyboardInterrupt:
+        print()
+    return 0
+
+
 def cmd_ui(args, ap) -> int:
     """The local control panel: message format, labels, credentials, log."""
     from bap.alerting.webui import LogBuffer, UiState, serve
@@ -405,6 +439,17 @@ def build_parser() -> argparse.ArgumentParser:
                    help="check once and exit, instead of looping (for an external scheduler, "
                         "e.g. a scheduled CI job)")
     p.set_defaults(func=cmd_remind)
+
+    p = sub.add_parser("newswatch", help="post new InnoGames KB entries to the same chat (no game)")
+    p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
+    p.add_argument("--pages", default="news_pages.json", help="watched KB pages JSON")
+    p.add_argument("--state", default="news_state.json", help="seen-ids state file")
+    p.add_argument("--dry-run", action="store_true", help="decide everything, send nothing")
+    p.add_argument("--poll-seconds", type=float, default=1800.0)
+    p.add_argument("--once", action="store_true",
+                   help="check once and exit, instead of looping (for an external scheduler, "
+                        "e.g. a scheduled CI job)")
+    p.set_defaults(func=cmd_newswatch)
 
     p = sub.add_parser("ui", help="local control panel: format, labels, credentials, log")
     p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
