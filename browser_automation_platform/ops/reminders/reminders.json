@@ -1,0 +1,26 @@
+{
+  "_comment": "Static weekly WhatsApp reminders, sent by the `foe-reminders` GitHub Actions workflow (see .github/workflows/foe-reminders.yml) — independent of any guild officer's PC. anchor_date is the first occurrence (Prague-local); every_days is the repeat interval (7 = weekly, 14 = every two weeks). Edit text/anchor_date/every_days freely; the <...> placeholder in ki-tuesday's text is a Google Sheet link that still needs filling in.",
+  "reminders": [
+    {
+      "id": "ce-tuesday",
+      "anchor_date": "2026-11-24",
+      "every_days": 7,
+      "time": "08:00",
+      "text": "Dnes zacalo CE, prosim dokoncete vsichni 80/80 urovni, moc to pomuze cechu"
+    },
+    {
+      "id": "ki-biweekly",
+      "anchor_date": "2026-11-25",
+      "every_days": 14,
+      "time": "20:00",
+      "text": "Zitra nam zacina KI, nezapomente povznes budovy, navod pro bojovniky i darce najdete zde... <odkaz na google sheet>"
+    },
+    {
+      "id": "cb-biweekly",
+      "anchor_date": "2026-12-02",
+      "every_days": 14,
+      "time": "20:00",
+      "text": "Zitra nam zacina CB, sraz na znackach v 8:00 a nakopeme jim zadky"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+name: FoE Alerting - weekly reminders
+
+# Static WhatsApp reminders for the cz8 guild, independent of any officer's own PC — no
+# browser, no game session, just a stdlib Python script and the Green API notifier.
+# See browser_automation_platform/ops/reminders/ for the message definitions and
+# browser_automation_platform/src/bap/alerting/reminders.py for the matching logic.
+#
+# Runs every 30 minutes; `bap-alert remind --once` decides on each run whether anything is
+# actually due and sends at most once per reminder per day (ops/reminders/reminder_state.json,
+# committed back below, is what makes that dedup survive between runs).
+#
+# Needs three repository secrets: GREEN_API_ID_INSTANCE, GREEN_API_TOKEN, GREEN_API_CHAT_ID.
+#
+# GitHub disables a scheduled workflow after 60 days with no commits to the repo at all — the
+# state commit below (whenever a reminder actually sends) counts as activity, but if 60 days
+# pass with no reminder due AND no other commits, re-enable it manually under Actions.
+on:
+  schedule:
+    - cron: "0,30 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for a due reminder and send it
+        working-directory: browser_automation_platform
+        env:
+          PYTHONPATH: src
+          GREEN_API_ID_INSTANCE: ${{ secrets.GREEN_API_ID_INSTANCE }}
+          GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
+          GREEN_API_CHAT_ID: ${{ secrets.GREEN_API_CHAT_ID }}
+        run: |
+          python3 -m bap.alerting remind \
+            --config ops/reminders/alerting.remind.json \
+            --reminders ops/reminders/reminders.json \
+            --state ops/reminders/reminder_state.json \
+            --once
+
+      - name: Persist dedup state if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add browser_automation_platform/ops/reminders/reminder_state.json
+          git diff --cached --quiet || git commit -m "reminders: record sent state"
+          git diff --cached --quiet || git push

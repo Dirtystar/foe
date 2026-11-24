@@ -259,16 +259,23 @@ def cmd_remind(args, ap) -> int:
     state = ReminderState(args.state)
     print(f"FoE reminders — {len(reminders)} configured, via {getattr(notifier, 'name', '?')}"
           f"{'  [dry run]' if args.dry_run else ''}")
+
+    def _check_once() -> None:
+        now = time.time()
+        today = prague_time(now).strftime("%Y-%m-%d")
+        for r in due_now(reminders, state, now=now):
+            ok = notifier.send(r.text)
+            state.mark_sent(r.id, today)
+            print(f"[{time.strftime('%H:%M:%S')}] {'sent' if ok else 'FAILED'}: {r.id}",
+                  flush=True)
+
+    if args.once:
+        _check_once()           # one pass and exit — for a scheduler that invokes this itself
+        return 0
     print("Ctrl-C to stop.")
     try:
         while True:
-            now = time.time()
-            today = prague_time(now).strftime("%Y-%m-%d")
-            for r in due_now(reminders, state, now=now):
-                ok = notifier.send(r.text)
-                state.mark_sent(r.id, today)
-                print(f"[{time.strftime('%H:%M:%S')}] {'sent' if ok else 'FAILED'}: {r.id}",
-                      flush=True)
+            _check_once()
             time.sleep(args.poll_seconds)
     except KeyboardInterrupt:
         print()
@@ -365,6 +372,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--state", default="reminder_state.json", help="dedup state file")
     p.add_argument("--dry-run", action="store_true", help="decide everything, send nothing")
     p.add_argument("--poll-seconds", type=float, default=30.0)
+    p.add_argument("--once", action="store_true",
+                   help="check once and exit, instead of looping (for an external scheduler, "
+                        "e.g. a scheduled CI job)")
     p.set_defaults(func=cmd_remind)
 
     p = sub.add_parser("ui", help="local control panel: format, labels, credentials, log")

@@ -1,0 +1,4 @@
+{
+  "_comment": "Config for `bap-alert remind` only — not the GBG alerter's alerting.json. The only thing that matters here is which notifier to use; the Green API credentials themselves come from GREEN_API_ID_INSTANCE / GREEN_API_TOKEN / GREEN_API_CHAT_ID (set as GitHub Actions secrets, never committed).",
+  "notifier": "green_api"
+}
