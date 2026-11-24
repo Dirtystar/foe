@@ -20,6 +20,10 @@ on:
     - cron: "0,30 * * * *"
   workflow_dispatch:
     inputs:
+      preview_news_url:
+        description: "(nothing sent to WhatsApp) preview the composed message for this one KB article URL — takes priority over everything below"
+        required: false
+        default: ""
       find_chat:
         description: "Find a WhatsApp group's chat_id: type a snippet of its real name here (takes priority over test_message below)"
         required: false
@@ -38,8 +42,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Preview a news message (nothing sent to WhatsApp)
+        if: github.event.inputs.preview_news_url != ''
+        working-directory: browser_automation_platform
+        env:
+          PYTHONPATH: src
+        run: |
+          python3 - "${{ github.event.inputs.preview_news_url }}" <<'PYEOF'
+          import sys, re, urllib.request
+          from bap.alerting.newswatch import fetch_perex, translate_to_czech
+
+          url = sys.argv[1]
+          req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+          body = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
+          m = re.search(r"<title>([^<]+)</title>", body)
+          title = m.group(1).split(" - ")[0].strip() if m else "?"
+          perex = fetch_perex(url)
+          title_cs = translate_to_czech(title)
+          text = f"\U0001F4F0 {title_cs}"
+          if perex:
+              text += f"\n{translate_to_czech(perex)}"
+          text += f"\n{url}"
+          print("--- preview message (not sent) ---")
+          print(text)
+          print("-----------------------------------")
+          PYEOF
+
       - name: Find a chat_id by group name
-        if: github.event.inputs.find_chat != ''
+        if: github.event.inputs.preview_news_url == '' && github.event.inputs.find_chat != ''
         working-directory: browser_automation_platform
         env:
           PYTHONPATH: src
@@ -64,7 +94,7 @@ jobs:
             --send "${{ github.event.inputs.test_message }}"
 
       - name: Check for a due reminder and send it
-        if: github.event.inputs.find_chat == '' && github.event.inputs.test_message == ''
+        if: github.event.inputs.preview_news_url == '' && github.event.inputs.find_chat == '' && github.event.inputs.test_message == ''
         working-directory: browser_automation_platform
         env:
           PYTHONPATH: src
@@ -79,7 +109,7 @@ jobs:
             --once
 
       - name: Check InnoGames KB pages for new articles
-        if: github.event.inputs.find_chat == '' && github.event.inputs.test_message == ''
+        if: github.event.inputs.preview_news_url == '' && github.event.inputs.find_chat == '' && github.event.inputs.test_message == ''
         working-directory: browser_automation_platform
         env:
           PYTHONPATH: src
