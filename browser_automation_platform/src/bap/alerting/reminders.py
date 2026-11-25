@@ -89,13 +89,19 @@ def local_date(now: float) -> str:
 
 
 def due_now(reminders: list[Reminder], state: ReminderState, *, now: float,
-           window_minutes: int = 35) -> list[Reminder]:
+           window_minutes: int = 300) -> list[Reminder]:
     """Reminders due at ``now`` (Prague-local) and not yet sent today.
 
-    ``window_minutes`` tolerates the caller not polling on the exact minute — the default
-    covers a 30-minute poll with margin. Widening it is safe: the per-day dedup in ``state``
-    (not the window) is what stops a second poll inside the same window from double-sending,
-    so long as ``state`` is persisted between calls.
+    ``window_minutes`` tolerates the caller not polling on the exact minute. Widening it is
+    safe: the per-day dedup in ``state`` (not the window) is what stops a second poll inside
+    the same window from double-sending, so long as ``state`` is persisted between calls — the
+    only cost of a wide window is a reminder arriving late on a day its poller was, rather than
+    being silently skipped for the rest of that cycle. The default is generous (5 h) because an
+    external scheduler's actual polling cadence can run far looser than configured — observed
+    live, a GitHub Actions `schedule` trigger meant to fire every 30 min instead landed multiple
+    hours apart, which with the old ~35-min window missed a reminder outright. It can still miss
+    one that's due late in the day if the next poll lands after local midnight, since "due today"
+    resets then; shrink the window instead if sending late is worse than not sending.
     """
     local = prague_time(now)
     today = local_date(now)
